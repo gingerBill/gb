@@ -5,7 +5,7 @@ gb single-file public domain libraries for C &amp; C++
 
 library         | latest version | category | description
 ----------------|----------------|----------|-------------
-**gb_string.h** |           0.90 | strings  | A better string library for C & C++
+**gb_string.h** |           0.91 | strings  | A better string library for C & C++
 
 ## FAQ
 
