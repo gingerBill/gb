@@ -1,7 +1,8 @@
-// gb_string.h - v0.90 - public domain string library - no warranty implied; use at your own risk
+// gb_string.h - v0.91 - public domain string library - no warranty implied; use at your own risk
 // A Simple Dynamic Strings Library for C and C++
 //
 // Version History:
+//     0.91 - Remove `char* cstr` from String_Header
 //     0.90 - Initial Version
 //
 // LICENSE
@@ -235,7 +236,6 @@ struct gb_String_Header
 {
 	gb_usize len;
 	gb_usize cap;
-	char*  cstr;
 };
 
 #define GB_STRING_HEADER(s) ((struct gb_String_Header*)((s) - sizeof(struct gb_String_Header)))
