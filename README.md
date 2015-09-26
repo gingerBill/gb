@@ -16,3 +16,7 @@ These libraries are in the public domain. You can do anything you want with them
 ### If I wrap an gb library in a new library, does the new library have to be public domain?
 
 No.
+
+### Is this in the style of the [stb libraries](https://github.com/nothings/stb)?
+
+Yes. I think these libraries are brilliant and use many of these on a daily basis.
