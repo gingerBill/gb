@@ -1,7 +1,8 @@
-// gb_ini.h - v0.90 - public domain ini file loader library - no warranty implied; use at your own risk
+// gb_ini.h - v0.91 - public domain ini file loader library - no warranty implied; use at your own risk
 // A Simple Ini File Loader Library for C and C++
 //
 // Version History:
+//     0.91 - Add extern "C" if compiling as C++
 //     0.90 - Initial Version
 //
 // LICENSE
@@ -22,7 +23,7 @@
 //     #include ...
 //     #define GB_INI_IMPLEMENTATION
 //     #include "gb_ini.h"
-////
+//
 //     If you prefer to use C++, you can use all the same functions in a
 //     namespace instead, do this:
 //         #define GB_INI_CPP
@@ -40,7 +41,7 @@
 # This is also
 
 name=gb_ini.h
-version = 090
+version = 01337 # Look mum, a comment!
 
 [license]
 name = Public Domain
@@ -101,7 +102,7 @@ int main(int argc, char** argv)
 	}
 
 	printf("Name    : %s\n", lib.name);    // Name    : gb_init.h
-	printf("Version : %d\n", lib.version); // Version : 90
+	printf("Version : %d\n", lib.version); // Version : 1337
 	printf("License : %s\n", lib.license); // License : Public Domain
 	printf("Author  : %s\n", lib.author);  // Author  : Ginger Bill
 
@@ -179,15 +180,15 @@ int main(int argc, char** argv)
 #define GB_INI_INCLUDE_GB_INI_H
 
 #ifndef GB_INI_MAX_LINE_LENGTH
-#define GB_INI_MAX_LINE_LENGTH 128
+#define GB_INI_MAX_LINE_LENGTH 1024
 #endif
 
 #ifndef GB_INI_MAX_SECTION_LENGTH
-#define GB_INI_MAX_SECTION_LENGTH 100
+#define GB_INI_MAX_SECTION_LENGTH 256
 #endif
 
 #ifndef GB_INI_MAX_NAME_LENGTH
-#define GB_INI_MAX_NAME_LENGTH 100
+#define GB_INI_MAX_NAME_LENGTH 256
 #endif
 
 #ifndef GB_INI_CHECK_FOR_UTF8_BOM
@@ -206,6 +207,10 @@ int main(int argc, char** argv)
 #endif
 
 #include <stdio.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 enum
 {
@@ -245,6 +250,10 @@ gb_ini_error_string(const struct gb_Ini_Error err)
 {
 	return GB_ERROR_STRINGS[err.type];
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #ifdef GB_INI_IMPLEMENTATION
 #include <ctype.h>

@@ -1,7 +1,8 @@
-// gb_string.h - v0.91 - public domain string library - no warranty implied; use at your own risk
+// gb_string.h - v0.92 - public domain string library - no warranty implied; use at your own risk
 // A Simple Dynamic Strings Library for C and C++
 //
 // Version History:
+//     0.92 - Add extern "C" if compiling as C++
 //     0.91 - Remove `char* cstr` from String_Header
 //     0.90 - Initial Version
 //
@@ -207,6 +208,10 @@ void string_test()
 
 #include <string.h> // Needed for memcpy and cstring functions
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef char* gb_String;
 
 typedef signed int gb_bool;
@@ -264,6 +269,11 @@ gb_usize gb_string_allocation_size(const gb_String str);
 gb_bool gb_strings_are_equal(const gb_String lhs, const gb_String rhs);
 
 gb_String gb_trim_string(gb_String str, const char* cut_set);
+
+
+#ifdef __cplusplus
+}
+#endif
 
 #ifdef GB_STRING_IMPLEMENTATION
 static void gb_set_string_length(gb_String str, gb_usize len)
