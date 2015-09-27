@@ -1,7 +1,8 @@
-// gb.hpp - v0.01 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.02 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 //
 // Version History:
+//     0.02 - Hash Table
 //     0.01 - Initial Version
 //
 // LICENSE
@@ -140,7 +141,7 @@ using b32 = s32;
 
 // NOTE(bill): (std::)size_t is not used not because it's a bad concept but on
 // the platforms that I will be using:
-// sizeof(size_t) == sizeof(usize) == sizeof(ssize)
+// sizeof(size_t) == sizeof(usize) == sizeof(s64)
 // NOTE(bill): This also allows for a signed version of size_t which is similar
 // to ptrdiff_t
 // NOTE(bill): If (u)intptr is a better fit, please use that.
@@ -149,7 +150,7 @@ using b32 = s32;
 using ssize = s64;
 using usize = u64;
 #elif defined(GB_ARCH_32_BIT)
-using ssize = s32;
+using usize = s32;
 using usize = u32;
 #else
 #error Unknown architecture bit size
@@ -264,8 +265,8 @@ struct Allocator
 
 	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT) = 0;
 	virtual void  dealloc(void* ptr) = 0;
-	virtual ssize allocated_size(const void* ptr) = 0;
-	virtual ssize total_allocated() = 0;
+	virtual s64 allocated_size(const void* ptr) = 0;
+	virtual s64 total_allocated() = 0;
 
 private:
 	// Delete copying
@@ -306,12 +307,12 @@ struct Heap_Allocator : Allocator
 {
 	struct Header
 	{
-		ssize size;
+		s64 size;
 	};
 
-	Mutex mutex = Mutex{};
-	ssize total_allocated_count = 0;
-	ssize allocation_count      = 0;
+	Mutex mutex               = Mutex{};
+	s64 total_allocated_count = 0;
+	s64 allocation_count      = 0;
 
 	Heap_Allocator() = default;
 
@@ -319,22 +320,24 @@ struct Heap_Allocator : Allocator
 
 	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT);
 	virtual void  dealloc(void* ptr);
-	virtual ssize allocated_size(const void* ptr);
-	virtual ssize total_allocated();
+	virtual s64 allocated_size(const void* ptr);
+	virtual s64 total_allocated();
+
+	Header* get_header_ptr(const void* ptr);
 };
 
 
 struct Arena_Allocator : Allocator
 {
-	ssize base_size;
-	u8*   base;
-	ssize total_allocated_count;
-	ssize temp_count;
+	s64 base_size             = 0;
+	u8* base                  = nullptr;
+	s64 total_allocated_count = 0;
+	s64 temp_count            = 0;
 
 	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT);
 	virtual void  dealloc(void* ptr);
-	virtual ssize allocated_size(const void* ptr);
-	virtual ssize total_allocated();
+	virtual s64 allocated_size(const void* ptr);
+	virtual s64 total_allocated();
 
 	virtual usize get_alignment_offset(usize align = GB_DEFAULT_ALIGNMENT);
 	virtual usize get_remaining_space(usize align = GB_DEFAULT_ALIGNMENT);
@@ -353,7 +356,7 @@ init_arena_allocator(Arena_Allocator& arena, void* base, usize base_size)
 struct Temporary_Arena_Memory
 {
 	Arena_Allocator* arena;
-	ssize original_count;
+	s64              original_count;
 
 	explicit Temporary_Arena_Memory(Arena_Allocator& arena_)
 	: arena(&arena_)
@@ -384,10 +387,12 @@ template <typename T>
 struct Array
 {
 	Allocator* allocator;
-	ssize count;
-	ssize allocation;
-	T*    data;
+	s64        count;
+	s64        allocation;
+	T*         data;
 
+	Array() = default;
+	explicit Array(Allocator& a, usize count = 0);
 	virtual ~Array() { if (allocator) dealloc(*allocator, data); }
 
 	const T& operator[](usize index) const { return data[index]; }
@@ -414,119 +419,69 @@ template <typename T> void reserve_array(Array<T>& a, usize allocation);
 template <typename T> void set_array_allocation(Array<T>& a, usize allocation);
 template <typename T> void grow_array(Array<T>& a, usize min_allocation = 0);
 
+////////////////////////////////
+/// Hash Table               ///
+////////////////////////////////
 
 template <typename T>
-inline Array<T>
-make_array(Allocator& allocator, usize count)
+struct Hash_Table
 {
-	Array<T> array = {};
-	array.allocator = &allocator;
-	if (count > 0)
+	struct Entry
 	{
-		array.data = alloc_array<T>(allocator, count);
-		if (array.data)
-		{
-			array.count = array.allocation = count;
-		}
-	}
+		u64 key;
+		s64 next;
+		T   value;
+	};
 
-	return array;
+	Array<s64>   hashes;
+	Array<Entry> data;
+
+	Hash_Table() = default;
+	explicit Hash_Table(Allocator& a);
+	~Hash_Table() = default;
+};
+
+template <typename T>
+Hash_Table<T>::Hash_Table(Allocator& a)
+{
+	hashes = make_array<s64>(a);
+	data = make_array<typename Hash_Table<T>::Entry>(a);
 }
 
 template <typename T>
-inline void
-dealloc_array(Array<T>& array)
+inline Hash_Table<T>
+make_hash_table(Allocator& a)
 {
-	if (array.allocator)
-		dealloc(*array.allocator, array.data);
+	Hash_Table<T> h = {};
+	h.hashes = make_array<s64>(a);
+	h.data   = make_array<typename Hash_Table<T>::Entry>(a);
+	return h;
 }
 
-template <typename T>
-inline void
-append_array(Array<T>& a, const T& item)
-{
-	if (a.allocation < a.count + 1)
-		grow_array(a);
-	a.data[a.count++] = item;
-}
+template <typename T> bool hash_table_has(const Hash_Table<T>& h, u64 key);
 
-template <typename T>
-inline void
-append_array(Array<T>& a, const T* items, usize count)
-{
-	if (a.allocation <= a.count + count)
-		grow_array(a, a.count + count);
+template <typename T> const T& hash_table_get(const Hash_Table<T>& h, u64 key, const T& default_value);
+template <typename T> void hash_table_set(Hash_Table<T>& h, u64 key, const T& value);
 
-	memcpy(&a.data[a.count], items, count * sizeof(T));
-	a.count += count;
-}
+template <typename T> void remove_from_hash_table(Hash_Table<T>& h, u64 key);
+template <typename T> void reserve_hash_table(Hash_Table<T>& h, usize capacity);
+template <typename T> void clear_hash_table(Hash_Table<T>& h);
 
-template <typename T>
-inline void
-pop_back_array(Array<T>& a)
-{
-	GB_ASSERT(a.count > 0);
+// Iterators (in random order)
+template <typename T> const typename Hash_Table<T>::Entry* begin(const Hash_Table<T>& h);
+template <typename T> const typename Hash_Table<T>::Entry* end(const Hash_Table<T>& h);
 
-	a.count--;
-}
+// Mutli_Hash_Table
+template <typename T> void get_multiple_from_hash_table(const Hash_Table<T>& h, u64 key, Array<T>& items);
+template <typename T> usize multiple_count_from_hash_table(const Hash_Table<T>& h, u64 key);
 
-template <typename T>
-inline void
-clear_array(Array<T>& a)
-{
-	resize_array(a, 0);
-}
-
-template <typename T>
-inline void
-resize_array(Array<T>& a, usize count)
-{
-	if (a.allocation < (ssize)count)
-		grow_array(a, count);
-	a.count = count;
-}
-
-template <typename T>
-inline void
-reserve_array(Array<T>& a, usize allocation)
-{
-	if (a.allocation < (ssize)allocation)
-		set_array_allocation(a, allocation);
-}
-
-template <typename T>
-inline void
-set_array_allocation(Array<T>& a, usize allocation)
-{
-	if ((ssize)allocation == a.allocation)
-		return;
-
-	if ((ssize)allocation < a.count)
-		resize_array(a, allocation);
-
-	T* data = nullptr;
-	if (allocation > 0)
-	{
-		data = alloc_array<T>(*a.allocator, allocation);
-		memcpy(data, a.data, a.count * sizeof(T));
-	}
-	dealloc(*a.allocator, a.data);
-	a.data = data;
-	a.allocation = allocation;
-}
-
-template <typename T>
-inline void
-grow_array(Array<T>& a, usize min_allocation)
-{
-	usize allocation = 2 * a.allocation + 2;
-	if (allocation < min_allocation)
-		allocation = min_allocation;
-	set_array_allocation(a, allocation);
-}
+template <typename T> const typename Hash_Table<T>::Entry* find_first_in_hash_table(const Hash_Table<T>& h, u64 key);
+template <typename T> const typename Hash_Table<T>::Entry* find_next_in_hash_table(const Hash_Table<T>& h, const typename Hash_Table<T>::Entry* e);
 
 
-
+template <typename T> void insert_into_hash_table(Hash_Table<T>& h, u64 key, const T& value);
+template <typename T> void remove_entry_from_hash_table(Hash_Table<T>& h, const typename Hash_Table<T>::Entry* e);
+template <typename T> void remove_all_from_hash_table(Hash_Table<T>& h, u64 key);
 
 ////////////////////////////////
 /// Math Types               ///
@@ -564,7 +519,7 @@ struct Vector4
 		struct { f32 x, y, z, w; };
 		struct { Vector2 xy, zw; };
 		Vector3 xyz;
-		f32 data[4];
+		f32     data[4];
 	};
 
 	inline const f32& operator[](usize index) const { return data[index]; }
@@ -577,7 +532,7 @@ struct Quaternion
 	{
 		struct { f32 x, y, z, w; };
 		Vector3 xyz;
-		f32 data[4];
+		f32     data[4];
 	};
 };
 
@@ -777,6 +732,17 @@ s16 abs(s16 x);
 s32 abs(s32 x);
 s64 abs(s64 x);
 
+s32 min(s32 a, s32 b);
+s64 min(s64 a, s64 b);
+f32 min(f32 a, f32 b);
+
+s32 max(s32 a, s32 b);
+s64 max(s64 a, s64 b);
+f32 max(f32 a, f32 b);
+
+s32 clamp(s32 x, s32 min, s32 max);
+s64 clamp(s64 x, s64 min, s64 max);
+f32 clamp(f32 x, f32 min, f32 max);
 
 // Vector2 functions
 f32 dot(const Vector2& a, const Vector2& b);
@@ -959,6 +925,498 @@ gb__assert_handler(bool condition, const char* condition_str,
 namespace gb
 {
 ////////////////////////////////
+/// Array                    ///
+////////////////////////////////
+
+template <typename T>
+inline Array<T>::Array(Allocator& a, usize count_)
+{
+	allocator = &a;
+	count = 0;
+	allocation = 0;
+	data = nullptr;
+	if (count > 0)
+	{
+		data = alloc_array<T>(a, count_);
+		if (data)
+			count = allocation = count_;
+	}
+}
+
+
+
+template <typename T>
+inline Array<T>
+make_array(Allocator& allocator, usize count)
+{
+	Array<T> array = {};
+	array.allocator = &allocator;
+	array.count = 0;
+	array.allocation = 0;
+	array.data = nullptr;
+	if (count > 0)
+	{
+		array.data = alloc_array<T>(allocator, count);
+		if (array.data)
+			array.count = array.allocation = count;
+	}
+
+	return array;
+}
+
+template <typename T>
+inline void
+dealloc_array(Array<T>& array)
+{
+	if (array.allocator)
+		dealloc(*array.allocator, array.data);
+}
+
+template <typename T>
+inline void
+append_array(Array<T>& a, const T& item)
+{
+	if (a.allocation < a.count + 1)
+		grow_array(a);
+	a.data[a.count++] = item;
+}
+
+template <typename T>
+inline void
+append_array(Array<T>& a, const T* items, usize count)
+{
+	if (a.allocation <= a.count + count)
+		grow_array(a, a.count + count);
+
+	memcpy(&a.data[a.count], items, count * sizeof(T));
+	a.count += count;
+}
+
+template <typename T>
+inline void
+pop_back_array(Array<T>& a)
+{
+	GB_ASSERT(a.count > 0);
+
+	a.count--;
+}
+
+template <typename T>
+inline void
+clear_array(Array<T>& a)
+{
+	resize_array(a, 0);
+}
+
+template <typename T>
+inline void
+resize_array(Array<T>& a, usize count)
+{
+	if (a.allocation < (s64)count)
+		grow_array(a, count);
+	a.count = count;
+}
+
+template <typename T>
+inline void
+reserve_array(Array<T>& a, usize allocation)
+{
+	if (a.allocation < (s64)allocation)
+		set_array_allocation(a, allocation);
+}
+
+template <typename T>
+inline void
+set_array_allocation(Array<T>& a, usize allocation)
+{
+	if ((s64)allocation == a.allocation)
+		return;
+
+	if ((s64)allocation < a.count)
+		resize_array(a, allocation);
+
+	T* data = nullptr;
+	if (allocation > 0)
+	{
+		data = alloc_array<T>(*a.allocator, allocation);
+		memcpy(data, a.data, a.count * sizeof(T));
+	}
+	dealloc(*a.allocator, a.data);
+	a.data = data;
+	a.allocation = allocation;
+}
+
+template <typename T>
+inline void
+grow_array(Array<T>& a, usize min_allocation)
+{
+	usize allocation = 2 * a.allocation + 2;
+	if (allocation < min_allocation)
+		allocation = min_allocation;
+	set_array_allocation(a, allocation);
+}
+
+////////////////////////////////
+/// Hash Table               ///
+////////////////////////////////
+
+
+
+
+namespace impl
+{
+struct Find_Result
+{
+	s64 hash_index;
+	s64 data_prev;
+	s64 data_index;
+};
+
+template <typename T>
+usize
+add_hash_table_entry(Hash_Table<T>& h, u64 key)
+{
+	typename Hash_Table<T>::Entry e;
+	e.key  = key;
+	e.next = -1;
+	usize e_index = h.data.count;
+	append_array(h.data, e);
+
+	return e_index;
+}
+
+template <typename T>
+void
+erase_from_hash_table(Hash_Table<T>& h, const Find_Result& fr)
+{
+	if (fr.data_prev < 0)
+		h.hashes[fr.hash_index] = h.data[fr.data_index].next;
+	else
+		h.data[fr.data_prev].next = g.data[fr.data_index].next;
+
+	pop_back_array(h.data); // updated array count
+
+	if (fr.data_index == h.data.count)
+		return;
+
+	h.data[fr.data_index] = h.data[h.data.count];
+
+	auto last = find_result_in_hash_table(h, h.data[fr.data_index].key);
+
+	if (last.data_prev < 0)
+		h.hashes[last.hash_index] = fr.data_index;
+	else
+		h.data[last.data_index].next = fr.data_index;
+}
+
+template <typename T>
+Find_Result
+find_result_in_hash_table(const Hash_Table<T>& h, u64 key)
+{
+	Find_Result fr;
+	fr.hash_index = -1;
+	fr.data_prev  = -1;
+	fr.data_index = -1;
+
+	if (h.hashes.count == 0)
+		return fr;
+
+	fr.hash_index = key % h.hashes.count;
+	fr.data_index = h.hashes[fr.hash_index];
+	while (fr.data_index >= 0)
+	{
+		if (h.data[fr.data_index].key == key)
+			return fr;
+		fr.data_prev  = fr.data_index;
+		fr.data_index = h.data[fr.data_index].next;
+	}
+
+	return fr;
+}
+
+
+template <typename T>
+Find_Result
+find_result_in_hash_table(const Hash_Table<T>& h, const typename Hash_Table<T>::Entry* e)
+{
+	Find_Result fr;
+	fr.hash_index = -1;
+	fr.data_prev  = -1;
+	fr.data_index = -1;
+
+	if (h.hashes.count == 0 || !e)
+		return fr;
+
+	fr.hash_index = key % h.hashes.count;
+	fr.data_index = h.hashes[fr.hash_index];
+	while (fr.data_index >= 0)
+	{
+		if (&h.data[fr.data_index] == e)
+			return fr;
+		fr.data_prev  = fr.data_index;
+		fr.data_index = h.data[fr.data_index].next;
+	}
+
+	return fr;
+}
+
+template <typename T>
+s64 make_entry_in_hash_table(Hash_Table<T>& h, u64 key)
+{
+	const Find_Result fr = impl::find_result_in_hash_table(h, key);
+	const s64 index    = impl::add_hash_table_entry(h, key);
+
+	if (fr.data_prev < 0)
+		h.hashes[fr.hash_index] = index;
+	else
+		h.data[fr.data_prev].next = index;
+
+	h.data[index].next = fr.data_index;
+
+	return index;
+}
+
+template <typename T>
+void
+find_and_erase_entry_from_hash_table(Hash_Table<T>& h, u64 key)
+{
+	const Find_Result fr = impl::find_result_in_hash_table(h, key);
+	if (fr.data_index >= 0)
+		erase_from_hash_table(h, fr);
+}
+
+template <typename T>
+s64
+find_entry_or_fail_in_hash_table(const Hash_Table<T>& h, u64 key)
+{
+	return find_result_in_hash_table(h, key).data_index;
+}
+
+template <typename T>
+s64
+find_or_make_entry_in_hash_table(Hash_Table<T>& h, u64 key)
+{
+	const auto fr = find_result_in_hash_table(h, key);
+	if (fr.data_index >= 0)
+		return fr.data_index;
+
+	s64 index = add_hash_table_entry(h, key);
+	if (fr.data_prev < 0)
+		h.hashes[fr.hash_index] = index;
+	else
+		h.data[fr.data_prev].next = index;
+
+	return index;
+}
+
+template <typename T>
+void
+rehash_hash_table(Hash_Table<T>& h, usize new_capacity)
+{
+	auto nh = make_hash_table<T>(*h.hashes.allocator);
+	resize_array(nh.hashes, new_capacity);
+	const usize old_count = h.data.count;
+	reserve_array(nh.data, old_count);
+
+	for (usize i = 0; i < new_capacity; i++)
+		nh.hashes[i] = -1;
+
+	for (usize i = 0; i < old_count; i++)
+	{
+		auto& e = h.data[i];
+		insert_into_hash_table(nh, e.key, e.value);
+	}
+
+	auto empty = make_hash_table<T>(*h.hashes.allocator);
+	h.~Hash_Table<T>();
+
+	memcpy(&h,  &nh,    sizeof(Hash_Table<T>));
+	memcpy(&nh, &empty, sizeof(Hash_Table<T>));
+}
+
+template <typename T>
+void
+grow_hash_table(Hash_Table<T>& h)
+{
+	const usize new_capacity = 2 * h.data.count + 2;
+	rehash_hash_table(h, new_capacity);
+}
+
+template <typename T>
+bool
+is_hash_table_full(Hash_Table<T>& h)
+{
+	// Make sure that there is enough space
+	const f32 maximum_load_coefficient = 0.75f;
+	return h.data.count >= maximum_load_coefficient * h.hashes.count;
+}
+
+
+} // namespace impl
+
+
+
+template <typename T>
+inline bool
+hash_table_has(const Hash_Table<T>& h, u64 key)
+{
+	return imple::find_entry_or_fail_in_hash_table(h, key) >= 0;
+}
+
+template <typename T>
+inline const T&
+hash_table_get(const Hash_Table<T>& h, u64 key, const T& default_value)
+{
+	const s64 index = impl::find_entry_or_fail_in_hash_table(h, key);
+
+	if (index < 0)
+		return default_value;
+	return h.data[index].value;
+}
+
+template <typename T>
+inline void
+hash_table_set(Hash_Table<T>& h, u64 key, const T& value)
+{
+	if (h.hashes.count == 0)
+		impl::grow_hash_table(h);
+
+	const s64 index = impl::find_or_make_entry_in_hash_table(h, key);
+	h.data[index].value = value;
+	if (impl::is_hash_table_full(h))
+		impl::grow_hash_table(h);
+}
+
+template <typename T>
+inline void
+remove_from_hash_table(Hash_Table<T>& h, u64 key)
+{
+	impl::find_and_erase_entry_from_hash_table(h, key);
+}
+
+template <typename T>
+inline void
+reserve_hash_table(Hash_Table<T>& h, usize capacity)
+{
+	impl:;rehash_hash_table(h, capacity);
+}
+
+template <typename T>
+inline void
+clear_hash_table(Hash_Table<T>& h)
+{
+	clear_array(h.hashes);
+	clear_array(h.data);
+}
+
+template <typename T>
+inline const typename Hash_Table<T>::Entry*
+begin(const Hash_Table<T>& h)
+{
+	return begin(h.data);
+}
+
+template <typename T>
+inline const typename Hash_Table<T>::Entry*
+end(const Hash_Table<T>& h)
+{
+	return end(h.data);
+}
+
+
+// Mutli_Hash_Table
+template <typename T>
+inline void
+get_multiple_from_hash_table(const Hash_Table<T>& h, u64 key, Array<T>& items)
+{
+	auto e = find_first_in_hash_table(h, key);
+	while (e)
+	{
+		append_array(items, e->value);
+		e = find_next_in_hash_table(h, e);
+	}
+}
+
+template <typename T>
+inline usize
+multiple_count_from_hash_table(const Hash_Table<T>& h, u64 key)
+{
+	usize count = 0;
+	auto e = find_first_in_hash_table(h, key);
+	while (e)
+	{
+		count++
+		e + find_next_in_hash_table(h, e);
+	}
+
+	return count;
+}
+
+
+template <typename T>
+inline const typename Hash_Table<T>::Entry*
+find_first_in_hash_table(const Hash_Table<T>& h, u64 key)
+{
+	const s64 index = impl::find_first_in_hash_table(h, key);
+	if (index < 0)
+		return nullptr;
+	return &h.data[index];
+}
+
+template <typename T>
+const typename Hash_Table<T>::Entry*
+find_next_in_hash_table(const Hash_Table<T>& h, const typename Hash_Table<T>::Entry* e)
+{
+	if (!e)
+		return nullptr;
+
+	auto index = e->next;
+	while (index >= 0)
+	{
+		if (h.data[index].ley == e->key)
+			return &h.data[index];
+		index = h.data[index].next;
+	}
+
+	return nullptr;
+}
+
+
+template <typename T>
+inline void
+insert_into_hash_table(Hash_Table<T>& h, u64 key, const T& value)
+{
+	if (h.hashes.count == 0)
+		impl::grow_hash_table(h);
+
+	auto next = impl::make_entry_in_hash_table(h, key);
+	h.data[next].value = value;
+
+	if (impl::is_hash_table_full(h))
+		impl::grow_hash_table(h);
+}
+
+template <typename T>
+inline void
+remove_entry_from_hash_table(Hash_Table<T>& h, const typename Hash_Table<T>::Entry* e)
+{
+	const auto fr = impl:;find_result_in_hash_table(h, e);
+	if (fr.data_index >= 0)
+		impl::erase_from_hash_table(h, fr);
+}
+
+template <typename T>
+inline void
+remove_all_from_hash_table(Hash_Table<T>& h, u64 key)
+{
+	while (hash_table_has(h, key))
+		remove(h, key);
+}
+
+
+
+
+////////////////////////////////
 /// Memory                   ///
 ////////////////////////////////
 
@@ -1023,7 +1481,7 @@ Heap_Allocator::alloc(usize size, usize align)
 	defer(unlock_mutex(mutex));
 
 	const usize total = size + align + sizeof(Header);
-	Header* h = (Header*)malloc(total);
+	Header* h = (Header*)::malloc(total);
 	h->size   = total;
 
 	void* data = align_forward(h + 1, align);
@@ -1048,39 +1506,41 @@ Heap_Allocator::dealloc(void* ptr)
 	lock_mutex(mutex);
 	defer(unlock_mutex(mutex));
 
-	const usize* data = ((usize*)ptr) - 1;
 
-	while (*data == GB_HEAP_ALLOCATOR_HEADER_PAD_VALUE)
-		data--;
-
-	Header* h = (Header*)data;
+	Header* h = get_header_ptr(ptr);
 
 	total_allocated_count -= h->size;
 	allocation_count--;
 
-	free(h);
+	::free(h);
 }
 
-ssize
+s64
 Heap_Allocator::allocated_size(const void* ptr)
 {
 	lock_mutex(mutex);
 	defer(unlock_mutex(mutex));
 
-	const usize* data = (usize*)ptr - 1;
-
-	while (*data == GB_HEAP_ALLOCATOR_HEADER_PAD_VALUE)
-		data--;
-
-	return ((Header*)ptr)->size;
+	return get_header_ptr(ptr)->size;
 }
 
-ssize
+s64
 Heap_Allocator::total_allocated()
 {
 	return total_allocated_count;
 }
 
+Heap_Allocator::Header*
+Heap_Allocator::get_header_ptr(const void* ptr)
+{
+	const usize* data = (usize*)ptr;
+	data--;
+
+	while (*data == GB_HEAP_ALLOCATOR_HEADER_PAD_VALUE)
+		data--;
+
+	return (Heap_Allocator::Header*)data;
+}
 
 void* Arena_Allocator::alloc(usize size_init, usize align)
 {
@@ -1098,12 +1558,12 @@ void* Arena_Allocator::alloc(usize size_init, usize align)
 	return ptr;
 }
 
-ssize Arena_Allocator::allocated_size(const void* ptr)
+s64 Arena_Allocator::allocated_size(const void* ptr)
 {
 	return -1;
 }
 
-ssize Arena_Allocator::total_allocated()
+s64 Arena_Allocator::total_allocated()
 {
 	return total_allocated_count;
 }
@@ -1129,8 +1589,6 @@ void Arena_Allocator::check()
 {
 	GB_ASSERT(temp_count == 0);
 }
-
-
 
 
 ////////////////////////////////
@@ -2242,9 +2700,6 @@ look_at_quaternion(const Vector3& eye, const Vector3& center, const Vector3& up)
 	// TODO(bill): Implement using just quaternions
 	return matrix4_to_quaternion(look_at_matrix4(eye, center, up));
 }
-
-
-
 
 } // namespace math
 } // namespace gb
