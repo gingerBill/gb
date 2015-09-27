@@ -5,7 +5,8 @@ gb single-file public domain libraries for C &amp; C++
 
 library         | latest version | category | description
 ----------------|----------------|----------|-------------
-**gb_string.h** |           0.91 | strings  | A better string library for C & C++
+**gb_string.h** |           0.92 | strings  | A better string library for C & C++
+**gb_ini.h**    |           0.91 | misc     | A simple ini file loader library for C & C++
 
 ## FAQ
 
