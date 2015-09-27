@@ -154,7 +154,7 @@ static GB_INI_HANDLER(test_ini_handler)
 int main(int argc, char** argv)
 {
 	Library lib = {};
-	
+
 	using namespace gb;
 
 	Ini_Error err = ini_parse("test.ini", &test_ini_handler, &lib);
@@ -255,6 +255,51 @@ gb_ini_error_string(const struct gb_Ini_Error err)
 }
 #endif
 
+#ifdef GB_INI_CPP
+#if !defined(__cplusplus)
+#error You need to compile as C++ for the C++ version of gb_ini.h to work
+#endif
+
+namespace gb
+{
+typedef gb_Ini_Error   Ini_Error;
+typedef gb_Ini_Handler Ini_Handler;
+
+// Just a copy but with the GB_ prefix stripped
+enum
+{
+	INI_ERROR_NONE = 0,
+
+	INI_ERROR_FILE_ERROR,
+	INI_ERROR_MISSING_SECTION_BRACKET,
+	INI_ERROR_ASSIGNMENT_MISSING,
+	INI_ERROR_HANDLER_ERROR,
+
+	// No need for enum count
+};
+
+Ini_Error
+ini_parse(const char* filename, Ini_Handler* handler_func, void* data)
+{
+	return gb_ini_parse(filename, handler_func, data);
+}
+
+Ini_Error
+ini_parse(FILE* file, Ini_Handler* handler_func, void* data)
+{
+	return gb_ini_parse_file(file, handler_func, data);
+}
+
+const char*
+ini_error_string(const Ini_Error err)
+{
+	return GB_ERROR_STRINGS[err.type];
+}
+
+} // namespace gb
+#endif // GB_INI_CPP
+#endif // GB_INI_INCLUDE_GB_INI_H
+
 #ifdef GB_INI_IMPLEMENTATION
 #include <ctype.h>
 #include <string.h>
@@ -351,7 +396,7 @@ gb_ini_parse_file(FILE* file, gb_Ini_Handler* handler_func, void* data)
 		{
 			start += 3;
 		}
-#endif 
+#endif
 
 		start = gb__left_whitespace_skip(gb__right_whitespace_strip(start));
 
@@ -413,48 +458,3 @@ gb_ini_parse_file(FILE* file, gb_Ini_Handler* handler_func, void* data)
 }
 
 #endif // GB_INI_IMPLEMENTATION
-
-#ifdef GB_INI_CPP
-#if !defined(__cplusplus)
-#error You need to compile as C++ for the C++ version of gb_ini.h to work
-#endif
-
-namespace gb
-{
-typedef gb_Ini_Error   Ini_Error;
-typedef gb_Ini_Handler Ini_Handler;
-
-// Just a copy but with the GB_ prefix stripped
-enum
-{
-	INI_ERROR_NONE = 0,
-
-	INI_ERROR_FILE_ERROR,
-	INI_ERROR_MISSING_SECTION_BRACKET,
-	INI_ERROR_ASSIGNMENT_MISSING,
-	INI_ERROR_HANDLER_ERROR,
-
-	// No need for enum count
-};
-
-Ini_Error
-ini_parse(const char* filename, Ini_Handler* handler_func, void* data)
-{
-	return gb_ini_parse(filename, handler_func, data);
-}
-
-Ini_Error
-ini_parse(FILE* file, Ini_Handler* handler_func, void* data)
-{
-	return gb_ini_parse_file(file, handler_func, data);
-}
-
-const char*
-ini_error_string(const Ini_Error err)
-{
-	return GB_ERROR_STRINGS[err.type];
-}
-
-} // namespace gb
-#endif // GB_INI_CPP
-#endif // GB_INI_INCLUDE_GB_INI_H
