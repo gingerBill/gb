@@ -1,7 +1,8 @@
-// gb.hpp - v0.05 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.06 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 //
 // Version History:
+//     0.06 - Os spec ideas
 //     0.05 - Transform Type and Quaternion Functions
 //     0.04 - String
 //     0.03 - Hash Functions
@@ -36,6 +37,7 @@
 //     - Array
 //     - Hash_Table
 //     - Hash Functions
+//    [- Os] (Not Yet Implemented)
 //     - Math Types
 //         - Vector(2,3,4)
 //         - Quaternion
@@ -116,11 +118,12 @@
 #define GB_IS_POWER_OF_TWO(x) ((x) != 0) && !((x) & ((x) - 1))
 
 
+#include <stdarg.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdarg.h>
 
 #ifdef GB_SYSTEM_WINDOWS
 #include <windows.h>
@@ -268,7 +271,7 @@ defer_fn(Fn&& fn) { return Defer<Fn>(forward<Fn>(fn)); }
 // NOTE(bill): These macros are in the global namespace thus, defer can be treated without a gb:: prefix
 #define GB_DEFER_1(x, y) x##y
 #define GB_DEFER_2(x, y) GB_DEFER_1(x, y)
-#define GB_DEFER_3(x)    GB_DEFER_2(GB_DEFER_2(x, __COUNTER__), __LINE__)
+#define GB_DEFER_3(x)    GB_DEFER_2(GB_DEFER_2(GB_DEFER_2(x, __COUNTER__), _), __LINE__)
 #define defer(code) auto GB_DEFER_3(_defer_) = gb::impl::defer_fn([&](){code;})
 
 namespace gb
@@ -327,32 +330,19 @@ private:
 	Allocator& operator=(const Allocator&) = delete;
 };
 
-inline void*
-alloc(Allocator& a, usize size, usize align = GB_DEFAULT_ALIGNMENT)
-{
-	return a.alloc(size, align);
-}
+inline void* alloc(Allocator& a, usize size, usize align = GB_DEFAULT_ALIGNMENT) { return a.alloc(size, align); }
 
-inline void
-dealloc(Allocator& a, void* ptr)
-{
-	return a.dealloc(ptr);
-}
+inline void dealloc(Allocator& a, void* ptr) { return a.dealloc(ptr); }
 
 template <typename T>
-inline T*
-alloc_struct(Allocator& a)
-{
-	return static_cast<T*>a.alloc(sizeof(T), alignof(T));
-}
+inline T* alloc_struct(Allocator& a) { return static_cast<T*>a.alloc(sizeof(T), alignof(T)); }
 
 
 template <typename T>
-inline T*
-alloc_array(Allocator& a, usize count)
-{
-	return static_cast<T*>(alloc(a, count * sizeof(T), alignof(T)));
-}
+inline T* alloc_array(Allocator& a, usize count) { return static_cast<T*>(alloc(a, count * sizeof(T), alignof(T))); }
+
+template <typename T, usize count>
+inline T* alloc_array(Allocator& a) { return static_cast<T*>(alloc(a, count * sizeof(T), alignof(T))); }
 
 #define GB_HEAP_ALLOCATOR_HEADER_PAD_VALUE (usize)(-1)
 
@@ -1060,9 +1050,9 @@ remove_all_from_hash_table(Hash_Table<T>& h, u64 key)
 
 namespace hash
 {
-u32 adler32(const void* key, usize num_bytes);
+u32 adler32(const void* key, u32 num_bytes);
 
-u32 crc32(const void* key, usize num_bytes);
+u32 crc32(const void* key, u32 num_bytes);
 u64 crc64(const void* key, usize num_bytes);
 
 // TODO(bill): Complete hashing functions
@@ -1074,6 +1064,113 @@ u64 crc64(const void* key, usize num_bytes);
 u32 murmur32(const void* key, u32 num_bytes, u32 seed = 0x9747b28c);
 u64 murmur64(const void* key, usize num_bytes, u64 seed = 0x9747b28c);
 } // namespace hash
+
+////////////////////////////////
+/// Os                       ///
+////////////////////////////////
+
+namespace os
+{
+#if 0
+// TODO(bill) NOTE(bill): How should I do error handling?
+// Because C++ cannot return multiple variables (ignoring tuples),
+// the Golang way is not possible
+// e.g. auto file, err = os::open_file("whatever.ext");
+// Also this is ugly :
+// File* file; Error* err;
+// tie(file, err) = os::open_file("whatever.ext");
+
+// TODO(bill): Move to gb:: ? e.g. make error handling type?
+struct Error
+{
+	const char* text;
+};
+
+struct File
+{
+	// TODO(bill): Implement File type
+	// Os Specific Crap Here
+};
+
+const Error ERR_INVALID    = Error{"invalid argument"};
+const Error ERR_PERMISSION = Error{"permission denied"};
+const Error ERR_EXIST      = Error{"file already exists"};
+const Error ERR_NOT_EXIST  = Error{"file already exists"};
+
+
+// Os Functions
+
+Error* chdir(const char* dir);
+Error* chmod(const char* name, u32 mode);
+Error* mkdir(const char* name, u32 perm);
+Error* mkdir_all(const char* name, u32 perm);
+
+Error* remove(const char* name);
+Error* remove_all(const char* name);
+
+Error* rename(const char* old_path, const char* new_path);
+
+void clear_env();
+void exit(int code);
+
+int get_egid();
+int get_euid();
+int get_gid();
+int get_page_size();
+int get_ppid();
+int get_uid();
+
+Error* get_wd(const char* buffer, usize buffer_len);
+Error* hostname(const char* buffer, usize buffer_len);
+
+bool is_path_separator(char c);
+
+Error* lchown(const char* name, int uid, int gid);
+
+Error* link(const char* old_name, const char* new_name);
+Error* read_link(const char* name, const char* buffer, usize buffer_len);
+Error* symlink(const char* old_name, const char* new_name);
+
+void temp_dir(const char* buffer, usize buffer_len);
+
+Error* truncate(const char* name, s64 size);
+
+
+
+// File functions
+
+// TODO(bill): Create enums?
+#define O_RDONLY 00
+#define O_WRONLY 01
+#define O_RDWR   02
+
+File new_file(uintptr fd, const char* name);
+Error* create_file(File& file, const char* name);
+Error* open_file(File& file, const char* filename, int flag = O_RDONLY, u32 perm = 0);
+Error* close_file(File& file);
+
+bool is_file_open(File& file);
+
+bool get_line(File& file, const char* buffer, usize buffer_len);
+
+Error* read_file(File& file, const void* buffer, usize num_bytes);
+Error* read_file_at(File& file, const void* buffer, usize num_bytes, s64 offset);
+
+Error* write_to_file(File& file, const void* buffer, usize num_bytes);
+Error* write_to_file_at(File& file, const void* buffer, usize num_bytes, s64 offset);
+
+Error* seek_file(File& file, s64 offset, s64 whence);
+Error* sync_file(File& file);
+Error* truncate_file(File& file);
+
+Error* chdir_of_file(File& file);
+Error* chmod_of_file(File& file, u32 mode);
+Error* chown_of_file(File& file, int uid, int gid);
+
+void name_of_file(File& file, const char* buffer, usize buffer_len);
+#endif
+} // namespace os
+
 
 ////////////////////////////////
 /// Time                     ///
@@ -1952,7 +2049,7 @@ void trim_string(String& str, const char* cut_set)
 
 namespace hash
 {
-u32 adler32(const void* key, usize num_bytes)
+u32 adler32(const void* key, u32 num_bytes)
 {
 	const u32 MOD_ADLER = 65521;
 
@@ -1960,7 +2057,7 @@ u32 adler32(const void* key, usize num_bytes)
 	u32 b = 0;
 
 	const u8* bytes = (const u8*)key;
-	for (usize i = 0; i < num_bytes; i++)
+	for (u32 i = 0; i < num_bytes; i++)
 	{
 		a = (a + bytes[i]) % MOD_ADLER;
 		b = (b + a) % MOD_ADLER;
@@ -2104,11 +2201,11 @@ global const u64 GB_CRC64_TABLE[256] = {
 };
 
 
-u32 crc32(const void* key, usize num_bytes)
+u32 crc32(const void* key, u32 num_bytes)
 {
 	u32 result = (u32)~0;
 	u8* c = (u8*)key;
-	for (usize remaining = num_bytes; remaining--; c++)
+	for (u32 remaining = num_bytes; remaining--; c++)
 		result = (result >> 8) ^ (GB_CRC32_TABLE[(result ^ *c) & 0xff]);
 
 	return ~result;
