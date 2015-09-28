@@ -1,7 +1,8 @@
-// gb.hpp - v0.04 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.05 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 //
 // Version History:
+//     0.05 - Transform Type and Quaternion Functions
 //     0.04 - String
 //     0.03 - Hash Functions
 //     0.02 - Hash Table
@@ -128,7 +129,7 @@
 #endif
 
 #ifndef NDEBUG
-#define GB_ASSERT(x, ...) ((void)(gb__assert_handler((x), #x, __FILE__, __LINE__, ##__VA_ARGS__)))
+#define GB_ASSERT(x, ...) ((void)(::gb__assert_handler((x), #x, __FILE__, __LINE__, ##__VA_ARGS__)))
 #else
 #define GB_ASSERT(x, ...) ((void)sizeof(x))
 #endif
@@ -1206,6 +1207,13 @@ struct Euler_Angles
 	f32 roll;
 };
 
+struct Transform
+{
+	Vector3    position    = Vector3{0, 0, 0};
+	Quaternion orientation = Quaternion{0, 0, 0, 1};
+	Vector3    scale       = Vector3{0, 0, 0};
+};
+
 ////////////////////////////////
 /// Math Type Op Overloads   ///
 ////////////////////////////////
@@ -1291,6 +1299,8 @@ Quaternion operator*(f32 s, const Quaternion& a);
 
 Quaternion operator/(const Quaternion& a, f32 s);
 
+Vector3 operator*(const Quaternion& a, const Vector3& v); // Rotate v by a
+
 // Matrix4 Operators
 bool operator==(const Matrix4& a, const Matrix4& b);
 bool operator!=(const Matrix4& a, const Matrix4& b);
@@ -1308,6 +1318,14 @@ Matrix4 operator/(const Matrix4& a, f32 scalar);
 Matrix4& operator+=(Matrix4& a, const Matrix4& b);
 Matrix4& operator-=(Matrix4& a, const Matrix4& b);
 Matrix4& operator*=(Matrix4& a, const Matrix4& b);
+
+// Transform Operators
+// World = Parent * Local
+Transform operator*(const Transform& ps, const Transform& ls);
+Transform& operator*=(Transform& ps, const Transform& ls);
+// Local = World / Parent
+Transform operator/(const Transform& ws, const Transform& ps);
+Transform& operator/=(Transform& ws, const Transform& ps);
 
 //////////////////////////////////
 /// Math Functions & Constants ///
@@ -1389,6 +1407,8 @@ s32 clamp(s32 x, s32 min, s32 max);
 s64 clamp(s64 x, s64 min, s64 max);
 f32 clamp(f32 x, f32 min, f32 max);
 
+f32 lerp(f32 x, f32 y, f32 t);
+
 // Vector2 functions
 f32 dot(const Vector2& a, const Vector2& b);
 f32 cross(const Vector2& a, const Vector2& b);
@@ -1425,8 +1445,6 @@ Quaternion normalize(const Quaternion& a);
 Quaternion conjugate(const Quaternion& a);
 Quaternion inverse(const Quaternion& a);
 
-Vector3 operator*(const Quaternion& a, const Vector3& v); // Rotate v by a
-
 f32 quaternion_angle(const Quaternion& a);
 Vector3 quaternion_axis(const Quaternion& a);
 Quaternion axis_angle(const Vector3& axis, f32 radians);
@@ -1440,6 +1458,17 @@ Quaternion euler_angles_to_quaternion(const Euler_Angles& e,
                                       const Vector3& x_axis = {1, 0, 0},
                                       const Vector3& y_axis = {0, 1, 0},
                                       const Vector3& z_axis = {0, 0, 1});
+
+// Spherical Linear Interpolation
+Quaternion slerp(const Quaternion& x, const Quaternion& y, f32 t);
+
+// Shoemake's Quaternion Curves
+// Sqherical Cubic Interpolation
+inline Quaternion squad(const Quaternion& p,
+                        const Quaternion& a,
+                        const Quaternion& b,
+                        const Quaternion& q,
+                        f32 t);
 
 // Matrix4 functions
 Matrix4 transpose(const Matrix4& m);
@@ -1466,6 +1495,10 @@ look_at_matrix4(const Vector3& eye, const Vector3& center, const Vector3& up = {
 Quaternion
 look_at_quaternion(const Vector3& eye, const Vector3& center, const Vector3& up = {0, 1, 0});
 
+// Transform Functions
+Vector3 transform_point(const Transform& transform, const Vector3& point);
+Transform inverse(const Transform& t);
+Matrix4 transform_to_matrix4(const Transform& t);
 
 } // namespace math
 } // namespace gb
@@ -1820,7 +1853,7 @@ void append_string(String& str, const void* other, String_Size other_len)
 namespace impl
 {
 // NOTE(bill): ptr _must_ be allocated with Allocator& a
-static inline void*
+internal inline void*
 string_realloc(Allocator& a, void* ptr, usize old_size, usize new_size)
 {
 	if (!ptr)
@@ -1936,7 +1969,7 @@ u32 adler32(const void* key, usize num_bytes)
 	return (b << 16) | a;
 }
 
-static const u32 GB_CRC32_TABLE[256] = {
+global const u32 GB_CRC32_TABLE[256] = {
 	0x00000000, 0x77073096, 0xee0e612c, 0x990951ba,
 	0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3,
 	0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988,
@@ -2003,7 +2036,7 @@ static const u32 GB_CRC32_TABLE[256] = {
 	0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d,
 };
 
-static const u64 GB_CRC64_TABLE[256] = {
+global const u64 GB_CRC64_TABLE[256] = {
 	0x0000000000000000ull, 0x42F0E1EBA9EA3693ull, 0x85E1C3D753D46D26ull, 0xC711223CFA3E5BB5ull,
 	0x493366450E42ECDFull, 0x0BC387AEA7A8DA4Cull, 0xCCD2A5925D9681F9ull, 0x8E224479F47CB76Aull,
 	0x9266CC8A1C85D9BEull, 0xD0962D61B56FEF2Dull, 0x17870F5D4F51B498ull, 0x5577EEB6E6BB820Bull,
@@ -2113,12 +2146,12 @@ u64 crc64(const void* key, usize num_bytes)
 
 u32 murmur32(const void* key, u32 num_bytes, u32 seed)
 {
-	static const u32 c1 = 0xcc9e2d51;
-	static const u32 c2 = 0x1b873593;
-	static const u32 r1 = 15;
-	static const u32 r2 = 13;
-	static const u32 m = 5;
-	static const u32 n = 0xe6546b64;
+	local_persist const u32 c1 = 0xcc9e2d51;
+	local_persist const u32 c2 = 0x1b873593;
+	local_persist const u32 r1 = 15;
+	local_persist const u32 r2 = 13;
+	local_persist const u32 m = 5;
+	local_persist const u32 n = 0xe6546b64;
 
 	u32 hash = seed;
 
@@ -2164,8 +2197,8 @@ u32 murmur32(const void* key, u32 num_bytes, u32 seed)
 #ifdef GB_ARCH_64_BIT
 u64 murmur64(const void* key, usize num_bytes, u64 seed)
 {
-	static const u64 m = 0xc6a4a7935bd1e995ULL;
-	static const s32 r = 47;
+	local_persist const u64 m = 0xc6a4a7935bd1e995ULL;
+	local_persist const s32 r = 47;
 
 	u64 h = seed ^ (num_bytes * m);
 
@@ -2207,8 +2240,8 @@ u64 murmur64(const void* key, usize num_bytes, u64 seed)
 #elif GB_ARCH_32_BIT
 u64 murmur64(const void* key, usize num_bytes, u64 seed)
 {
-	static const u32 m = 0x5bd1e995;
-	static const s32 r = 24;
+	local_persist const u32 m = 0x5bd1e995;
+	local_persist const s32 r = 24;
 
 	u32 h1 = u32(seed) ^ num_bytes;
 	u32 h2 = u32(seed >> 32);
@@ -2281,7 +2314,7 @@ u64 murmur64(const void* key, usize num_bytes, u64 seed)
 ////////////////////////////////
 #ifdef GB_SYSTEM_WINDOWS
 
-static LARGE_INTEGER
+internal LARGE_INTEGER
 win32_get_frequency()
 {
 	LARGE_INTEGER f;
@@ -2302,7 +2335,7 @@ Time time_now()
 
 	// Get the frequency of the performance counter
 	// It is constant across the program's lifetime
-	static LARGE_INTEGER s_frequency = win32_get_frequency();
+	internal LARGE_INTEGER s_frequency = win32_get_frequency();
 
 	// Get the current time
 	LARGE_INTEGER t;
@@ -2818,6 +2851,13 @@ Quaternion operator/(const Quaternion& a, f32 s)
 	return {a.x / s, a.y / s, a.z / s, a.w / s};
 }
 
+Vector3 operator*(const Quaternion& a, const Vector3& v) // Rotate v by q
+{
+	// return (q * Quaternion{v.x, v.y, v.z, 0} * math::conjugate(q)).xyz; // More Expensive
+	const Vector3 t = 2.0f * math::cross(a.xyz, v);
+	return (v + a.w * t + math::cross(a.xyz, t));
+}
+
 // Matrix4 Operators
 bool operator==(const Matrix4& a, const Matrix4& b)
 {
@@ -2911,6 +2951,46 @@ Matrix4& operator*=(Matrix4& a, const Matrix4& b)
 {
 	return (a = a * b);
 }
+
+// Transform Operators
+// World = Parent * Local
+Transform operator*(const Transform& ps, const Transform& ls)
+{
+	Transform ws;
+
+	ws.position    = ps.position + ps.orientation * (ps.scale * ls.position);
+	ws.orientation = ps.orientation * ls.orientation;
+	ws.scale       = ps.scale * (ps.orientation * ls.scale);
+
+	return ws;
+}
+
+Transform& operator*=(Transform& ps, const Transform& ls)
+{
+	return (ps = ps * ls);
+}
+
+// Local = World / Parent
+Transform operator/(const Transform& ws, const Transform& ps)
+{
+	Transform ls;
+
+	const Quaternion ps_conjugate = math::conjugate(ps.orientation);
+
+	ls.position    = (ps_conjugate * (ws.position - ps.position)) / ps.scale;
+	ls.orientation = ps_conjugate * ws.orientation;
+	ls.scale       = ps_conjugate * (ws.scale / ps.scale);
+
+	return ls;
+}
+
+Transform& operator/=(Transform& ws, const Transform& ps)
+{
+	return (ws = ws / ps);
+}
+
+
+
 
 ////////////////////////////////
 /// Math Functions           ///
@@ -3018,6 +3098,45 @@ inline s64 abs(s64 x)
 	u64 i = reinterpret_cast<const u64&>(x);
 	i &= 0x7FFFFFFFFFFFFFFFull;
 	return reinterpret_cast<const s64&>(i);
+}
+
+
+inline s32 min(s32 a, s32 b) { return a < b ? a : b; }
+inline s64 min(s64 a, s64 b) { return a < b ? a : b; }
+inline f32 min(f32 a, f32 b) { return a < b ? a : b; }
+
+inline s32 max(s32 a, s32 b) { return a > b ? a : b; }
+inline s64 max(s64 a, s64 b) { return a > b ? a : b; }
+inline f32 max(f32 a, f32 b) { return a > b ? a : b; }
+
+inline s32 clamp(s32 x, s32 min, s32 max)
+{
+	if (x < min)
+		return min;
+	if (x > max)
+		return max;
+	return x;
+}
+inline s64 clamp(s64 x, s64 min, s64 max)
+{
+	if (x < min)
+		return min;
+	if (x > max)
+		return max;
+	return x;
+}
+inline f32 clamp(f32 x, f32 min, f32 max)
+{
+	if (x < min)
+		return min;
+	if (x > max)
+		return max;
+	return x;
+}
+
+inline f32 lerp(f32 x, f32 y, f32 t)
+{
+	return x + (y-x)*t;
 }
 
 
@@ -3139,13 +3258,6 @@ Quaternion inverse(const Quaternion& a)
 	return math::conjugate(a) * m;
 }
 
-Vector3 operator*(const Quaternion& a, const Vector3& v) // Rotate v by q
-{
-	// return (q * Quaternion(v, 0) * conjugate(q)).xyz; // More Expensive
-	const Vector3 t = 2.0f * cross(a.xyz, v);
-	return (v + a.w * t + cross(a.xyz, t));
-}
-
 f32 quaternion_angle(const Quaternion& a)
 {
 	return 2.0f * math::acos(a.w);
@@ -3208,6 +3320,45 @@ Quaternion euler_angles_to_quaternion(const Euler_Angles& e,
 	Quaternion r = axis_angle(z_axis, e.roll);
 
 	return y * p * r;
+}
+
+
+// Spherical Linear Interpolation
+Quaternion slerp(const Quaternion& x, const Quaternion& y, f32 t)
+{
+	Quaternion z = y;
+
+	f32 cos_theta = dot(x, y);
+
+	if (cos_theta < 0.0f)
+	{
+		z = -y;
+		cos_theta = -cos_theta;
+	}
+
+	if (cos_theta > 1.0f)
+	{
+		return Quaternion{lerp(x.x, y.x, t),
+		                  lerp(x.y, y.y, t),
+		                  lerp(x.z, y.z, t),
+		                  lerp(x.w, y.w, t)};
+	}
+
+	f32 angle = math::acos(cos_theta);
+
+	Quaternion result = math::sin(1.0f - (t * angle)) * x + math::sin(t * angle) * z;
+	return result * (1.0f / math::sin(angle));
+}
+
+// Shoemake's Quaternion Curves
+// Sqherical Cubic Interpolation
+inline Quaternion squad(const Quaternion& p,
+                        const Quaternion& a,
+                        const Quaternion& b,
+                        const Quaternion& q,
+                        f32 t)
+{
+	return slerp(slerp(p, q, t), slerp(a, b, t), 2.0f * t * (1.0f - t));
 }
 
 
@@ -3588,12 +3739,39 @@ look_at_quaternion(const Vector3& eye, const Vector3& center, const Vector3& up)
 {
 	const f32 similar = 0.001f;
 
-	if (magnitude(center - eye) < similar)
+	if (math::magnitude(center - eye) < similar)
 		return QUATERNION_IDENTITY; // You cannot look at where you are!
 
 	// TODO(bill): Implement using just quaternions
 	return matrix4_to_quaternion(look_at_matrix4(eye, center, up));
 }
+
+// Transform Functions
+Vector3 transform_point(const Transform& transform, const Vector3& point)
+{
+	return (math::conjugate(transform.orientation) * (transform.position - point)) / transform.scale;
+}
+
+Transform inverse(const Transform& t)
+{
+	const Quaternion inv_orientation = math::conjugate(t.orientation);
+
+	Transform inv_transform;
+
+	inv_transform.position    = (inv_orientation * -t.position) / t.scale;
+	inv_transform.orientation = inv_orientation;
+	inv_transform.scale       = inv_orientation * (Vector3{1, 1, 1} / t.scale);
+
+	return inv_transform;
+}
+
+Matrix4 transform_to_matrix4(const Transform& t)
+{
+	return math::translate(t.position) *                //
+	       math::quaternion_to_matrix4(t.orientation) * //
+	       math::scale(t.scale);                        //
+}
+
 
 } // namespace math
 } // namespace gb
