@@ -16,6 +16,31 @@
 //     This library is highly experimental and features may not work as expected.
 //     This also means that many functions are not documented.
 //
+// CONTENT
+//
+//     - Common Macros
+//     - Assert
+//     - Types
+//     - C++11 Move Semantics
+//     - Defer
+//     - Memory
+//         - Functions
+//         - Allocator
+//         - Heap_Allocator
+//         - Arena_Allocator
+//         - Temporary_Arena_Memory
+//     - Array
+//     - Hash_Table
+//     - Math Types
+//         - Vector(2,3,4)
+//         - Quaternion
+//         - Matrix4
+//     - Math Operations
+//     - Math Functions & Constants
+//     - Math Type Functions
+//
+//
+//
 #ifndef GB_INCLUDE_GB_HPP
 #define GB_INCLUDE_GB_HPP
 
@@ -40,11 +65,11 @@
 ////////////////////////////////
 /// System OS                ///
 ////////////////////////////////
-#define WIN32_LEAN_AND_MEAN 1
-
 #if defined(_WIN32) || defined(_WIN64)
 #define GB_SYSTEM_WINDOWS
 #define NOMINMAX
+#define VC_EXTRALEAN
+#define WIN32_EXTRA_LEAN
 
 #elif defined(__APPLE__) && defined(__MACH__)
 #define GB_SYSTEM_OSX
@@ -178,14 +203,14 @@ template <typename T>
 inline T&&
 forward(typename Remove_Reference<T>::Type& t)
 {
-	return static_cast<T &&>(t);
+	return static_cast<T&&>(t);
 }
 
 template <typename T>
 inline T&&
 forward(typename Remove_Reference<T>::Type&& t)
 {
-	return static_cast<T &&>(t);
+	return static_cast<T&&>(t);
 }
 
 template <typename T>
@@ -215,6 +240,7 @@ defer_fn(Fn&& fn) { return Defer<Fn>(forward<Fn>(fn)); }
 } // namespace impl
 } // namespace gb
 
+// NOTE(bill): These macros are in the global namespace thus, defer can be treated without a gb:: prefix
 #define GB_DEFER_1(x, y) x##y
 #define GB_DEFER_2(x, y) GB_DEFER_1(x, y)
 #define GB_DEFER_3(x)    GB_DEFER_2(GB_DEFER_2(x, __COUNTER__), __LINE__)
@@ -242,7 +268,9 @@ void lock_mutex(Mutex& mutex);
 bool try_lock_mutex(Mutex& mutex);
 void unlock_mutex(Mutex& mutex);
 
+#ifndef GB_DEFAULT_ALIGNMENT
 #define GB_DEFAULT_ALIGNMENT 4
+#endif
 
 inline void*
 align_forward(void* ptr, usize align)
@@ -484,6 +512,542 @@ template <typename T> void remove_entry_from_hash_table(Hash_Table<T>& h, const 
 template <typename T> void remove_all_from_hash_table(Hash_Table<T>& h, u64 key);
 
 ////////////////////////////////
+/// Array                    ///
+////////////////////////////////
+template <typename T>
+inline Array<T>::Array(Allocator& a, usize count_)
+{
+	allocator = &a;
+	count = 0;
+	allocation = 0;
+	data = nullptr;
+	if (count > 0)
+	{
+		data = alloc_array<T>(a, count_);
+		if (data)
+			count = allocation = count_;
+	}
+}
+
+
+
+template <typename T>
+inline Array<T>
+make_array(Allocator& allocator, usize count)
+{
+	Array<T> array = {};
+	array.allocator = &allocator;
+	array.count = 0;
+	array.allocation = 0;
+	array.data = nullptr;
+	if (count > 0)
+	{
+		array.data = alloc_array<T>(allocator, count);
+		if (array.data)
+			array.count = array.allocation = count;
+	}
+
+	return array;
+}
+
+template <typename T>
+inline void
+dealloc_array(Array<T>& array)
+{
+	if (array.allocator)
+		dealloc(*array.allocator, array.data);
+}
+
+template <typename T>
+inline void
+append_array(Array<T>& a, const T& item)
+{
+	if (a.allocation < a.count + 1)
+		grow_array(a);
+	a.data[a.count++] = item;
+}
+
+template <typename T>
+inline void
+append_array(Array<T>& a, const T* items, usize count)
+{
+	if (a.allocation <= a.count + count)
+		grow_array(a, a.count + count);
+
+	memcpy(&a.data[a.count], items, count * sizeof(T));
+	a.count += count;
+}
+
+template <typename T>
+inline void
+pop_back_array(Array<T>& a)
+{
+	GB_ASSERT(a.count > 0);
+
+	a.count--;
+}
+
+template <typename T>
+inline void
+clear_array(Array<T>& a)
+{
+	resize_array(a, 0);
+}
+
+template <typename T>
+inline void
+resize_array(Array<T>& a, usize count)
+{
+	if (a.allocation < (s64)count)
+		grow_array(a, count);
+	a.count = count;
+}
+
+template <typename T>
+inline void
+reserve_array(Array<T>& a, usize allocation)
+{
+	if (a.allocation < (s64)allocation)
+		set_array_allocation(a, allocation);
+}
+
+template <typename T>
+inline void
+set_array_allocation(Array<T>& a, usize allocation)
+{
+	if ((s64)allocation == a.allocation)
+		return;
+
+	if ((s64)allocation < a.count)
+		resize_array(a, allocation);
+
+	T* data = nullptr;
+	if (allocation > 0)
+	{
+		data = alloc_array<T>(*a.allocator, allocation);
+		memcpy(data, a.data, a.count * sizeof(T));
+	}
+	dealloc(*a.allocator, a.data);
+	a.data = data;
+	a.allocation = allocation;
+}
+
+template <typename T>
+inline void
+grow_array(Array<T>& a, usize min_allocation)
+{
+	usize allocation = 2 * a.allocation + 2;
+	if (allocation < min_allocation)
+		allocation = min_allocation;
+	set_array_allocation(a, allocation);
+}
+
+////////////////////////////////
+/// Hash Table               ///
+////////////////////////////////
+namespace impl
+{
+struct Find_Result
+{
+	s64 hash_index;
+	s64 data_prev;
+	s64 data_index;
+};
+
+template <typename T>
+usize
+add_hash_table_entry(Hash_Table<T>& h, u64 key)
+{
+	typename Hash_Table<T>::Entry e;
+	e.key  = key;
+	e.next = -1;
+	usize e_index = h.data.count;
+	append_array(h.data, e);
+
+	return e_index;
+}
+
+template <typename T>
+void
+erase_from_hash_table(Hash_Table<T>& h, const Find_Result& fr)
+{
+	if (fr.data_prev < 0)
+		h.hashes[fr.hash_index] = h.data[fr.data_index].next;
+	else
+		h.data[fr.data_prev].next = g.data[fr.data_index].next;
+
+	pop_back_array(h.data); // updated array count
+
+	if (fr.data_index == h.data.count)
+		return;
+
+	h.data[fr.data_index] = h.data[h.data.count];
+
+	auto last = find_result_in_hash_table(h, h.data[fr.data_index].key);
+
+	if (last.data_prev < 0)
+		h.hashes[last.hash_index] = fr.data_index;
+	else
+		h.data[last.data_index].next = fr.data_index;
+}
+
+template <typename T>
+Find_Result
+find_result_in_hash_table(const Hash_Table<T>& h, u64 key)
+{
+	Find_Result fr;
+	fr.hash_index = -1;
+	fr.data_prev  = -1;
+	fr.data_index = -1;
+
+	if (h.hashes.count == 0)
+		return fr;
+
+	fr.hash_index = key % h.hashes.count;
+	fr.data_index = h.hashes[fr.hash_index];
+	while (fr.data_index >= 0)
+	{
+		if (h.data[fr.data_index].key == key)
+			return fr;
+		fr.data_prev  = fr.data_index;
+		fr.data_index = h.data[fr.data_index].next;
+	}
+
+	return fr;
+}
+
+
+template <typename T>
+Find_Result
+find_result_in_hash_table(const Hash_Table<T>& h, const typename Hash_Table<T>::Entry* e)
+{
+	Find_Result fr;
+	fr.hash_index = -1;
+	fr.data_prev  = -1;
+	fr.data_index = -1;
+
+	if (h.hashes.count == 0 || !e)
+		return fr;
+
+	fr.hash_index = key % h.hashes.count;
+	fr.data_index = h.hashes[fr.hash_index];
+	while (fr.data_index >= 0)
+	{
+		if (&h.data[fr.data_index] == e)
+			return fr;
+		fr.data_prev  = fr.data_index;
+		fr.data_index = h.data[fr.data_index].next;
+	}
+
+	return fr;
+}
+
+template <typename T>
+s64 make_entry_in_hash_table(Hash_Table<T>& h, u64 key)
+{
+	const Find_Result fr = impl::find_result_in_hash_table(h, key);
+	const s64 index    = impl::add_hash_table_entry(h, key);
+
+	if (fr.data_prev < 0)
+		h.hashes[fr.hash_index] = index;
+	else
+		h.data[fr.data_prev].next = index;
+
+	h.data[index].next = fr.data_index;
+
+	return index;
+}
+
+template <typename T>
+void
+find_and_erase_entry_from_hash_table(Hash_Table<T>& h, u64 key)
+{
+	const Find_Result fr = impl::find_result_in_hash_table(h, key);
+	if (fr.data_index >= 0)
+		erase_from_hash_table(h, fr);
+}
+
+template <typename T>
+s64
+find_entry_or_fail_in_hash_table(const Hash_Table<T>& h, u64 key)
+{
+	return find_result_in_hash_table(h, key).data_index;
+}
+
+template <typename T>
+s64
+find_or_make_entry_in_hash_table(Hash_Table<T>& h, u64 key)
+{
+	const auto fr = find_result_in_hash_table(h, key);
+	if (fr.data_index >= 0)
+		return fr.data_index;
+
+	s64 index = add_hash_table_entry(h, key);
+	if (fr.data_prev < 0)
+		h.hashes[fr.hash_index] = index;
+	else
+		h.data[fr.data_prev].next = index;
+
+	return index;
+}
+
+template <typename T>
+void
+rehash_hash_table(Hash_Table<T>& h, usize new_capacity)
+{
+	auto nh = make_hash_table<T>(*h.hashes.allocator);
+	resize_array(nh.hashes, new_capacity);
+	const usize old_count = h.data.count;
+	reserve_array(nh.data, old_count);
+
+	for (usize i = 0; i < new_capacity; i++)
+		nh.hashes[i] = -1;
+
+	for (usize i = 0; i < old_count; i++)
+	{
+		auto& e = h.data[i];
+		insert_into_hash_table(nh, e.key, e.value);
+	}
+
+	auto empty = make_hash_table<T>(*h.hashes.allocator);
+	h.~Hash_Table<T>();
+
+	memcpy(&h,  &nh,    sizeof(Hash_Table<T>));
+	memcpy(&nh, &empty, sizeof(Hash_Table<T>));
+}
+
+template <typename T>
+void
+grow_hash_table(Hash_Table<T>& h)
+{
+	const usize new_capacity = 2 * h.data.count + 2;
+	rehash_hash_table(h, new_capacity);
+}
+
+template <typename T>
+bool
+is_hash_table_full(Hash_Table<T>& h)
+{
+	// Make sure that there is enough space
+	const f32 maximum_load_coefficient = 0.75f;
+	return h.data.count >= maximum_load_coefficient * h.hashes.count;
+}
+} // namespace impl
+
+template <typename T>
+inline bool
+hash_table_has(const Hash_Table<T>& h, u64 key)
+{
+	return imple::find_entry_or_fail_in_hash_table(h, key) >= 0;
+}
+
+template <typename T>
+inline const T&
+hash_table_get(const Hash_Table<T>& h, u64 key, const T& default_value)
+{
+	const s64 index = impl::find_entry_or_fail_in_hash_table(h, key);
+
+	if (index < 0)
+		return default_value;
+	return h.data[index].value;
+}
+
+template <typename T>
+inline void
+hash_table_set(Hash_Table<T>& h, u64 key, const T& value)
+{
+	if (h.hashes.count == 0)
+		impl::grow_hash_table(h);
+
+	const s64 index = impl::find_or_make_entry_in_hash_table(h, key);
+	h.data[index].value = value;
+	if (impl::is_hash_table_full(h))
+		impl::grow_hash_table(h);
+}
+
+template <typename T>
+inline void
+remove_from_hash_table(Hash_Table<T>& h, u64 key)
+{
+	impl::find_and_erase_entry_from_hash_table(h, key);
+}
+
+template <typename T>
+inline void
+reserve_hash_table(Hash_Table<T>& h, usize capacity)
+{
+	impl:;rehash_hash_table(h, capacity);
+}
+
+template <typename T>
+inline void
+clear_hash_table(Hash_Table<T>& h)
+{
+	clear_array(h.hashes);
+	clear_array(h.data);
+}
+
+template <typename T>
+inline const typename Hash_Table<T>::Entry*
+begin(const Hash_Table<T>& h)
+{
+	return begin(h.data);
+}
+
+template <typename T>
+inline const typename Hash_Table<T>::Entry*
+end(const Hash_Table<T>& h)
+{
+	return end(h.data);
+}
+
+
+// Mutli_Hash_Table
+template <typename T>
+inline void
+get_multiple_from_hash_table(const Hash_Table<T>& h, u64 key, Array<T>& items)
+{
+	auto e = find_first_in_hash_table(h, key);
+	while (e)
+	{
+		append_array(items, e->value);
+		e = find_next_in_hash_table(h, e);
+	}
+}
+
+template <typename T>
+inline usize
+multiple_count_from_hash_table(const Hash_Table<T>& h, u64 key)
+{
+	usize count = 0;
+	auto e = find_first_in_hash_table(h, key);
+	while (e)
+	{
+		count++
+		e + find_next_in_hash_table(h, e);
+	}
+
+	return count;
+}
+
+
+template <typename T>
+inline const typename Hash_Table<T>::Entry*
+find_first_in_hash_table(const Hash_Table<T>& h, u64 key)
+{
+	const s64 index = impl::find_first_in_hash_table(h, key);
+	if (index < 0)
+		return nullptr;
+	return &h.data[index];
+}
+
+template <typename T>
+const typename Hash_Table<T>::Entry*
+find_next_in_hash_table(const Hash_Table<T>& h, const typename Hash_Table<T>::Entry* e)
+{
+	if (!e)
+		return nullptr;
+
+	auto index = e->next;
+	while (index >= 0)
+	{
+		if (h.data[index].ley == e->key)
+			return &h.data[index];
+		index = h.data[index].next;
+	}
+
+	return nullptr;
+}
+
+
+template <typename T>
+inline void
+insert_into_hash_table(Hash_Table<T>& h, u64 key, const T& value)
+{
+	if (h.hashes.count == 0)
+		impl::grow_hash_table(h);
+
+	auto next = impl::make_entry_in_hash_table(h, key);
+	h.data[next].value = value;
+
+	if (impl::is_hash_table_full(h))
+		impl::grow_hash_table(h);
+}
+
+template <typename T>
+inline void
+remove_entry_from_hash_table(Hash_Table<T>& h, const typename Hash_Table<T>::Entry* e)
+{
+	const auto fr = impl:;find_result_in_hash_table(h, e);
+	if (fr.data_index >= 0)
+		impl::erase_from_hash_table(h, fr);
+}
+
+template <typename T>
+inline void
+remove_all_from_hash_table(Hash_Table<T>& h, u64 key)
+{
+	while (hash_table_has(h, key))
+		remove(h, key);
+}
+
+////////////////////////////////
+/// Time                     ///
+////////////////////////////////
+
+struct Time
+{
+	s64 microseconds;
+};
+
+Time time_now();
+void time_sleep(Time time);
+
+Time seconds(f32 s);
+Time milliseconds(s32 ms);
+Time microseconds(s64 us);
+f32 time_as_seconds(Time t);
+s32 time_as_milliseconds(Time t);
+s64 time_as_microseconds(Time t);
+
+bool operator==(Time left, Time right);
+bool operator!=(Time left, Time right);
+
+bool operator<(Time left, Time right);
+bool operator>(Time left, Time right);
+
+bool operator<=(Time left, Time right);
+bool operator>=(Time left, Time right);
+
+Time operator-(Time right);
+
+Time operator+(Time left, Time right);
+Time operator-(Time left, Time right);
+
+Time& operator+=(Time& left, Time right);
+Time& operator-=(Time& left, Time right);
+
+Time operator*(Time left, f32 right);
+Time operator*(Time left, s64 right);
+Time operator*(f32 left, Time right);
+Time operator*(s64 left, Time right);
+
+Time& operator*=(Time& left, f32 right);
+Time& operator*=(Time& left, s64 right);
+
+Time operator/(Time left, f32 right);
+Time operator/(Time left, s64 right);
+
+Time& operator/=(Time& left, f32 right);
+Time& operator/=(Time& left, s64 right);
+
+f32 operator/(Time left, Time right);
+
+Time operator%(Time left, Time right);
+Time& operator%=(Time& left, Time right);
+
+
+////////////////////////////////
 /// Math Types               ///
 ////////////////////////////////
 
@@ -558,12 +1122,6 @@ struct Euler_Angles
 	f32 yaw;
 	f32 roll;
 };
-
-extern const Vector2    VECTOR2_ZERO;
-extern const Vector3    VECTOR3_ZERO;
-extern const Vector4    VECTOR4_ZERO;
-extern const Quaternion QUATERNION_IDENTITY;
-extern const Matrix4    MATRIX4_IDENTITY;
 
 ////////////////////////////////
 /// Math Type Op Overloads   ///
@@ -671,6 +1229,11 @@ Matrix4& operator*=(Matrix4& a, const Matrix4& b);
 //////////////////////////////////
 /// Math Functions & Constants ///
 //////////////////////////////////
+extern const Vector2    VECTOR2_ZERO;
+extern const Vector3    VECTOR3_ZERO;
+extern const Vector4    VECTOR4_ZERO;
+extern const Quaternion QUATERNION_IDENTITY;
+extern const Matrix4    MATRIX4_IDENTITY;
 
 namespace math
 {
@@ -684,7 +1247,6 @@ extern const f32 PI;
 extern const f32 TAU;
 extern const f32 SQRT_2;
 extern const f32 SQRT_3;
-
 
 // Power
 f32 sqrt(f32 x);
@@ -896,6 +1458,11 @@ look_at_quaternion(const Vector3& eye, const Vector3& center, const Vector3& up 
 #include <float.h>
 #include <math.h>
 #include <stdarg.h>
+#include <time.h>
+
+#ifdef GB_SYSTEM_WINDOWS
+#include <windows.h>
+#endif
 
 inline void
 gb__assert_handler(bool condition, const char* condition_str,
@@ -924,498 +1491,6 @@ gb__assert_handler(bool condition, const char* condition_str,
 
 namespace gb
 {
-////////////////////////////////
-/// Array                    ///
-////////////////////////////////
-
-template <typename T>
-inline Array<T>::Array(Allocator& a, usize count_)
-{
-	allocator = &a;
-	count = 0;
-	allocation = 0;
-	data = nullptr;
-	if (count > 0)
-	{
-		data = alloc_array<T>(a, count_);
-		if (data)
-			count = allocation = count_;
-	}
-}
-
-
-
-template <typename T>
-inline Array<T>
-make_array(Allocator& allocator, usize count)
-{
-	Array<T> array = {};
-	array.allocator = &allocator;
-	array.count = 0;
-	array.allocation = 0;
-	array.data = nullptr;
-	if (count > 0)
-	{
-		array.data = alloc_array<T>(allocator, count);
-		if (array.data)
-			array.count = array.allocation = count;
-	}
-
-	return array;
-}
-
-template <typename T>
-inline void
-dealloc_array(Array<T>& array)
-{
-	if (array.allocator)
-		dealloc(*array.allocator, array.data);
-}
-
-template <typename T>
-inline void
-append_array(Array<T>& a, const T& item)
-{
-	if (a.allocation < a.count + 1)
-		grow_array(a);
-	a.data[a.count++] = item;
-}
-
-template <typename T>
-inline void
-append_array(Array<T>& a, const T* items, usize count)
-{
-	if (a.allocation <= a.count + count)
-		grow_array(a, a.count + count);
-
-	memcpy(&a.data[a.count], items, count * sizeof(T));
-	a.count += count;
-}
-
-template <typename T>
-inline void
-pop_back_array(Array<T>& a)
-{
-	GB_ASSERT(a.count > 0);
-
-	a.count--;
-}
-
-template <typename T>
-inline void
-clear_array(Array<T>& a)
-{
-	resize_array(a, 0);
-}
-
-template <typename T>
-inline void
-resize_array(Array<T>& a, usize count)
-{
-	if (a.allocation < (s64)count)
-		grow_array(a, count);
-	a.count = count;
-}
-
-template <typename T>
-inline void
-reserve_array(Array<T>& a, usize allocation)
-{
-	if (a.allocation < (s64)allocation)
-		set_array_allocation(a, allocation);
-}
-
-template <typename T>
-inline void
-set_array_allocation(Array<T>& a, usize allocation)
-{
-	if ((s64)allocation == a.allocation)
-		return;
-
-	if ((s64)allocation < a.count)
-		resize_array(a, allocation);
-
-	T* data = nullptr;
-	if (allocation > 0)
-	{
-		data = alloc_array<T>(*a.allocator, allocation);
-		memcpy(data, a.data, a.count * sizeof(T));
-	}
-	dealloc(*a.allocator, a.data);
-	a.data = data;
-	a.allocation = allocation;
-}
-
-template <typename T>
-inline void
-grow_array(Array<T>& a, usize min_allocation)
-{
-	usize allocation = 2 * a.allocation + 2;
-	if (allocation < min_allocation)
-		allocation = min_allocation;
-	set_array_allocation(a, allocation);
-}
-
-////////////////////////////////
-/// Hash Table               ///
-////////////////////////////////
-
-
-
-
-namespace impl
-{
-struct Find_Result
-{
-	s64 hash_index;
-	s64 data_prev;
-	s64 data_index;
-};
-
-template <typename T>
-usize
-add_hash_table_entry(Hash_Table<T>& h, u64 key)
-{
-	typename Hash_Table<T>::Entry e;
-	e.key  = key;
-	e.next = -1;
-	usize e_index = h.data.count;
-	append_array(h.data, e);
-
-	return e_index;
-}
-
-template <typename T>
-void
-erase_from_hash_table(Hash_Table<T>& h, const Find_Result& fr)
-{
-	if (fr.data_prev < 0)
-		h.hashes[fr.hash_index] = h.data[fr.data_index].next;
-	else
-		h.data[fr.data_prev].next = g.data[fr.data_index].next;
-
-	pop_back_array(h.data); // updated array count
-
-	if (fr.data_index == h.data.count)
-		return;
-
-	h.data[fr.data_index] = h.data[h.data.count];
-
-	auto last = find_result_in_hash_table(h, h.data[fr.data_index].key);
-
-	if (last.data_prev < 0)
-		h.hashes[last.hash_index] = fr.data_index;
-	else
-		h.data[last.data_index].next = fr.data_index;
-}
-
-template <typename T>
-Find_Result
-find_result_in_hash_table(const Hash_Table<T>& h, u64 key)
-{
-	Find_Result fr;
-	fr.hash_index = -1;
-	fr.data_prev  = -1;
-	fr.data_index = -1;
-
-	if (h.hashes.count == 0)
-		return fr;
-
-	fr.hash_index = key % h.hashes.count;
-	fr.data_index = h.hashes[fr.hash_index];
-	while (fr.data_index >= 0)
-	{
-		if (h.data[fr.data_index].key == key)
-			return fr;
-		fr.data_prev  = fr.data_index;
-		fr.data_index = h.data[fr.data_index].next;
-	}
-
-	return fr;
-}
-
-
-template <typename T>
-Find_Result
-find_result_in_hash_table(const Hash_Table<T>& h, const typename Hash_Table<T>::Entry* e)
-{
-	Find_Result fr;
-	fr.hash_index = -1;
-	fr.data_prev  = -1;
-	fr.data_index = -1;
-
-	if (h.hashes.count == 0 || !e)
-		return fr;
-
-	fr.hash_index = key % h.hashes.count;
-	fr.data_index = h.hashes[fr.hash_index];
-	while (fr.data_index >= 0)
-	{
-		if (&h.data[fr.data_index] == e)
-			return fr;
-		fr.data_prev  = fr.data_index;
-		fr.data_index = h.data[fr.data_index].next;
-	}
-
-	return fr;
-}
-
-template <typename T>
-s64 make_entry_in_hash_table(Hash_Table<T>& h, u64 key)
-{
-	const Find_Result fr = impl::find_result_in_hash_table(h, key);
-	const s64 index    = impl::add_hash_table_entry(h, key);
-
-	if (fr.data_prev < 0)
-		h.hashes[fr.hash_index] = index;
-	else
-		h.data[fr.data_prev].next = index;
-
-	h.data[index].next = fr.data_index;
-
-	return index;
-}
-
-template <typename T>
-void
-find_and_erase_entry_from_hash_table(Hash_Table<T>& h, u64 key)
-{
-	const Find_Result fr = impl::find_result_in_hash_table(h, key);
-	if (fr.data_index >= 0)
-		erase_from_hash_table(h, fr);
-}
-
-template <typename T>
-s64
-find_entry_or_fail_in_hash_table(const Hash_Table<T>& h, u64 key)
-{
-	return find_result_in_hash_table(h, key).data_index;
-}
-
-template <typename T>
-s64
-find_or_make_entry_in_hash_table(Hash_Table<T>& h, u64 key)
-{
-	const auto fr = find_result_in_hash_table(h, key);
-	if (fr.data_index >= 0)
-		return fr.data_index;
-
-	s64 index = add_hash_table_entry(h, key);
-	if (fr.data_prev < 0)
-		h.hashes[fr.hash_index] = index;
-	else
-		h.data[fr.data_prev].next = index;
-
-	return index;
-}
-
-template <typename T>
-void
-rehash_hash_table(Hash_Table<T>& h, usize new_capacity)
-{
-	auto nh = make_hash_table<T>(*h.hashes.allocator);
-	resize_array(nh.hashes, new_capacity);
-	const usize old_count = h.data.count;
-	reserve_array(nh.data, old_count);
-
-	for (usize i = 0; i < new_capacity; i++)
-		nh.hashes[i] = -1;
-
-	for (usize i = 0; i < old_count; i++)
-	{
-		auto& e = h.data[i];
-		insert_into_hash_table(nh, e.key, e.value);
-	}
-
-	auto empty = make_hash_table<T>(*h.hashes.allocator);
-	h.~Hash_Table<T>();
-
-	memcpy(&h,  &nh,    sizeof(Hash_Table<T>));
-	memcpy(&nh, &empty, sizeof(Hash_Table<T>));
-}
-
-template <typename T>
-void
-grow_hash_table(Hash_Table<T>& h)
-{
-	const usize new_capacity = 2 * h.data.count + 2;
-	rehash_hash_table(h, new_capacity);
-}
-
-template <typename T>
-bool
-is_hash_table_full(Hash_Table<T>& h)
-{
-	// Make sure that there is enough space
-	const f32 maximum_load_coefficient = 0.75f;
-	return h.data.count >= maximum_load_coefficient * h.hashes.count;
-}
-
-
-} // namespace impl
-
-
-
-template <typename T>
-inline bool
-hash_table_has(const Hash_Table<T>& h, u64 key)
-{
-	return imple::find_entry_or_fail_in_hash_table(h, key) >= 0;
-}
-
-template <typename T>
-inline const T&
-hash_table_get(const Hash_Table<T>& h, u64 key, const T& default_value)
-{
-	const s64 index = impl::find_entry_or_fail_in_hash_table(h, key);
-
-	if (index < 0)
-		return default_value;
-	return h.data[index].value;
-}
-
-template <typename T>
-inline void
-hash_table_set(Hash_Table<T>& h, u64 key, const T& value)
-{
-	if (h.hashes.count == 0)
-		impl::grow_hash_table(h);
-
-	const s64 index = impl::find_or_make_entry_in_hash_table(h, key);
-	h.data[index].value = value;
-	if (impl::is_hash_table_full(h))
-		impl::grow_hash_table(h);
-}
-
-template <typename T>
-inline void
-remove_from_hash_table(Hash_Table<T>& h, u64 key)
-{
-	impl::find_and_erase_entry_from_hash_table(h, key);
-}
-
-template <typename T>
-inline void
-reserve_hash_table(Hash_Table<T>& h, usize capacity)
-{
-	impl:;rehash_hash_table(h, capacity);
-}
-
-template <typename T>
-inline void
-clear_hash_table(Hash_Table<T>& h)
-{
-	clear_array(h.hashes);
-	clear_array(h.data);
-}
-
-template <typename T>
-inline const typename Hash_Table<T>::Entry*
-begin(const Hash_Table<T>& h)
-{
-	return begin(h.data);
-}
-
-template <typename T>
-inline const typename Hash_Table<T>::Entry*
-end(const Hash_Table<T>& h)
-{
-	return end(h.data);
-}
-
-
-// Mutli_Hash_Table
-template <typename T>
-inline void
-get_multiple_from_hash_table(const Hash_Table<T>& h, u64 key, Array<T>& items)
-{
-	auto e = find_first_in_hash_table(h, key);
-	while (e)
-	{
-		append_array(items, e->value);
-		e = find_next_in_hash_table(h, e);
-	}
-}
-
-template <typename T>
-inline usize
-multiple_count_from_hash_table(const Hash_Table<T>& h, u64 key)
-{
-	usize count = 0;
-	auto e = find_first_in_hash_table(h, key);
-	while (e)
-	{
-		count++
-		e + find_next_in_hash_table(h, e);
-	}
-
-	return count;
-}
-
-
-template <typename T>
-inline const typename Hash_Table<T>::Entry*
-find_first_in_hash_table(const Hash_Table<T>& h, u64 key)
-{
-	const s64 index = impl::find_first_in_hash_table(h, key);
-	if (index < 0)
-		return nullptr;
-	return &h.data[index];
-}
-
-template <typename T>
-const typename Hash_Table<T>::Entry*
-find_next_in_hash_table(const Hash_Table<T>& h, const typename Hash_Table<T>::Entry* e)
-{
-	if (!e)
-		return nullptr;
-
-	auto index = e->next;
-	while (index >= 0)
-	{
-		if (h.data[index].ley == e->key)
-			return &h.data[index];
-		index = h.data[index].next;
-	}
-
-	return nullptr;
-}
-
-
-template <typename T>
-inline void
-insert_into_hash_table(Hash_Table<T>& h, u64 key, const T& value)
-{
-	if (h.hashes.count == 0)
-		impl::grow_hash_table(h);
-
-	auto next = impl::make_entry_in_hash_table(h, key);
-	h.data[next].value = value;
-
-	if (impl::is_hash_table_full(h))
-		impl::grow_hash_table(h);
-}
-
-template <typename T>
-inline void
-remove_entry_from_hash_table(Hash_Table<T>& h, const typename Hash_Table<T>::Entry* e)
-{
-	const auto fr = impl:;find_result_in_hash_table(h, e);
-	if (fr.data_index >= 0)
-		impl::erase_from_hash_table(h, fr);
-}
-
-template <typename T>
-inline void
-remove_all_from_hash_table(Hash_Table<T>& h, u64 key)
-{
-	while (hash_table_has(h, key))
-		remove(h, key);
-}
-
-
-
-
 ////////////////////////////////
 /// Memory                   ///
 ////////////////////////////////
@@ -1592,9 +1667,216 @@ void Arena_Allocator::check()
 
 
 ////////////////////////////////
+/// Time                     ///
+////////////////////////////////
+#ifdef GB_SYSTEM_WINDOWS
+
+static LARGE_INTEGER
+win32_get_frequency()
+{
+	LARGE_INTEGER f;
+	QueryPerformanceFrequency(&f);
+	return f;
+}
+
+Time time_now()
+{
+	// NOTE(bill): std::chrono does not have a good enough precision in MSVC12
+	// and below. This may have been fixed in MSVC14 but unsure as of yet.
+
+	// Force the following code to run on first core
+	// NOTE(bill): See
+	// http://msdn.microsoft.com/en-us/library/windows/desktop/ms644904(v=vs.85).aspx
+	HANDLE currentThread   = GetCurrentThread();
+	DWORD_PTR previousMask = SetThreadAffinityMask(currentThread, 1);
+
+	// Get the frequency of the performance counter
+	// It is constant across the program's lifetime
+	static LARGE_INTEGER s_frequency = win32_get_frequency();
+
+	// Get the current time
+	LARGE_INTEGER t;
+	QueryPerformanceCounter(&t);
+
+	// Restore the thread affinity
+	SetThreadAffinityMask(currentThread, previousMask);
+
+	return microseconds(1000000ll * t.QuadPart / s_frequency.QuadPart);
+}
+
+void time_sleep(Time t)
+{
+	if (t.microseconds <= 0)
+		return;
+
+	// Get the supported timer resolutions on this system
+	TIMECAPS tc;
+	timeGetDevCaps(&tc, sizeof(TIMECAPS));
+	// Set the timer resolution to the minimum for the Sleep call
+	timeBeginPeriod(tc.wPeriodMin);
+
+	// Wait...
+	::Sleep(time_as_milliseconds(t));
+
+	// Reset the timer resolution back to the system default
+	timeBeginPeriod(tc.wPeriodMin);
+}
+
+#else
+Time time_now()
+{
+	struct timespec spec;
+	clock_gettime(CLOCK_REALTIME, &spec);
+
+	return milliseconds((spec.tv_sec * 1000000ll) + (spec.tv_nsec * 1000ll));
+}
+
+void time_sleep(Time t)
+{
+	if (t.microseconds <= 0)
+		return;
+
+	struct timespec spec = {};
+	spec.tv_sec = static_cast<s64>(time_as_seconds(t));
+	spec.tv_nsec = 1000ll * (time_as_microseconds(t) % 1000000ll);
+
+	nanosleep(&spec, nullptr);
+}
+
+#endif
+
+Time seconds(f32 s)              { return {s * 1000000ll}; }
+Time milliseconds(s32 ms)        { return {ms * 1000l};    }
+Time microseconds(s64 us)        { return {us};            }
+f32 time_as_seconds(Time t)      { return t.microseconds / 1000000.0f; }
+s32 time_as_milliseconds(Time t) { return t.microseconds / 1000l;      }
+s64 time_as_microseconds(Time t) { return t.microseconds;              }
+
+bool operator==(Time left, Time right)
+{
+	return left.microseconds == right.microseconds;
+}
+
+bool operator!=(Time left, Time right)
+{
+	return !operator==(left, right);
+}
+
+
+bool operator<(Time left, Time right)
+{
+	return left.microseconds < right.microseconds;
+}
+
+bool operator>(Time left, Time right)
+{
+	return left.microseconds > right.microseconds;
+}
+
+bool operator<=(Time left, Time right)
+{
+	return left.microseconds <= right.microseconds;
+}
+
+bool operator>=(Time left, Time right)
+{
+	return left.microseconds >= right.microseconds;
+}
+
+Time operator-(Time right)
+{
+	return {-right.microseconds};
+}
+
+Time operator+(Time left, Time right)
+{
+	return {left.microseconds + right.microseconds};
+}
+
+Time operator-(Time left, Time right)
+{
+	return {left.microseconds - right.microseconds};
+}
+
+Time& operator+=(Time& left, Time right)
+{
+	return (left = left + right);
+}
+
+Time& operator-=(Time& left, Time right)
+{
+	return (left = left - right);
+}
+
+Time operator*(Time left, f32 right)
+{
+	return seconds(time_as_seconds(left) * right);
+}
+
+Time operator*(Time left, s64 right)
+{
+	return microseconds(time_as_microseconds(left) * right);
+}
+
+Time operator*(f32 left, Time right)
+{
+	return seconds(time_as_seconds(right) * left);
+}
+
+Time operator*(s64 left, Time right)
+{
+	return microseconds(time_as_microseconds(right) * left);
+}
+
+Time& operator*=(Time& left, f32 right)
+{
+	return (left = left * right);
+}
+
+Time& operator*=(Time& left, s64 right)
+{
+	return (left = left * right);
+}
+
+Time operator/(Time left, f32 right)
+{
+	return seconds(time_as_seconds(left) / right);
+}
+
+Time operator/(Time left, s64 right)
+{
+	return microseconds(time_as_microseconds(left) / right);
+
+}
+
+Time& operator/=(Time& left, f32 right)
+{
+	return (left = left / right);
+}
+
+Time& operator/=(Time& left, s64 right)
+{
+	return (left = left / right);
+}
+
+f32 operator/(Time left, Time right)
+{
+	return time_as_seconds(left) / time_as_seconds(right);
+}
+
+Time operator%(Time left, Time right)
+{
+	return microseconds(time_as_microseconds(left) % time_as_microseconds(right));
+}
+
+Time& operator%=(Time& left, Time right)
+{
+	return (left = left % right);
+}
+
+////////////////////////////////
 /// Math                     ///
 ////////////////////////////////
-
 
 const Vector2    VECTOR2_ZERO        = {0, 0};
 const Vector3    VECTOR3_ZERO        = {0, 0, 0};
@@ -2039,9 +2321,9 @@ const f32 SQRT_2     = 1.414213562f;
 const f32 SQRT_3     = 1.732050808f;
 
 // Power
-inline f32 sqrt(f32 x) { return ::sqrtf(x); }
+inline f32 sqrt(f32 x)       { return ::sqrtf(x);        }
 inline f32 pow(f32 x, f32 y) { return (f32)::powf(x, y); }
-inline f32 cbrt(f32 x) { return (f32)::cbrtf(x); }
+inline f32 cbrt(f32 x)       { return (f32)::cbrtf(x);   }
 
 inline f32 fast_inv_sqrt(f32 x)
 {
@@ -2064,9 +2346,9 @@ inline f32 sin(f32 radians) { return ::sinf(radians); }
 inline f32 cos(f32 radians) { return ::cosf(radians); }
 inline f32 tan(f32 radians) { return ::tanf(radians); }
 
-inline f32 asin(f32 x)         { return ::asinf(x); }
-inline f32 acos(f32 x)         { return ::acosf(x); }
-inline f32 atan(f32 x)         { return ::atanf(x); }
+inline f32 asin(f32 x)         { return ::asinf(x);     }
+inline f32 acos(f32 x)         { return ::acosf(x);     }
+inline f32 atan(f32 x)         { return ::atanf(x);     }
 inline f32 atan2(f32 y, f32 x) { return ::atan2f(y, x); }
 
 inline f32 radians(f32 degrees) { return TAU * degrees / 360.0f; }
@@ -2082,11 +2364,11 @@ inline f32 acosh(f32 x) { return ::acoshf(x); }
 inline f32 atanh(f32 x) { return ::atanhf(x); }
 
 // Rounding
-inline f32 ceil(f32 x)       { return ::ceilf(x); }
-inline f32 floor(f32 x)      { return ::floorf(x); }
+inline f32 ceil(f32 x)       { return ::ceilf(x);    }
+inline f32 floor(f32 x)      { return ::floorf(x);   }
 inline f32 mod(f32 x, f32 y) { return ::fmodf(x, y); }
-inline f32 truncate(f32 x)   { return ::truncf(x); }
-inline f32 round(f32 x)      { return ::roundf(x); }
+inline f32 truncate(f32 x)   { return ::truncf(x);   }
+inline f32 round(f32 x)      { return ::roundf(x);   }
 
 inline s32 sign(s32 x) { return x >= 0 ? +1 : -1; }
 inline s64 sign(s64 x) { return x >= 0 ? +1 : -1; }
@@ -2102,7 +2384,7 @@ inline f32 abs(f32 x)
 
 inline s8 abs(s8 x)
 {
-u8 i = reinterpret_cast<const u8&>(x);
+	u8 i = reinterpret_cast<const u8&>(x);
 	i &= 0x7Fu;
 	return reinterpret_cast<const s8&>(i);
 }
@@ -2465,15 +2747,15 @@ Matrix4 quaternion_to_matrix4(const Quaternion& q)
 	f32 wz = a.w * a.z;
 
 	mat[0][0] = 1.0f - 2.0f * (yy + zz);
-	mat[0][1] = 2.0f * (xy + wz);
-	mat[0][2] = 2.0f * (xz - wy);
+	mat[0][1] =        2.0f * (xy + wz);
+	mat[0][2] =        2.0f * (xz - wy);
 
-	mat[1][0] = 2.0f * (xy - wz);
+	mat[1][0] =        2.0f * (xy - wz);
 	mat[1][1] = 1.0f - 2.0f * (xx + zz);
-	mat[1][2] = 2.0f * (yz + wx);
+	mat[1][2] =        2.0f * (yz + wx);
 
-	mat[2][0] = 2.0f * (xz + wy);
-	mat[2][1] = 2.0f * (yz - wx);
+	mat[2][0] =        2.0f * (xz + wy);
+	mat[2][1] =        2.0f * (yz - wx);
 	mat[2][2] = 1.0f - 2.0f * (xx + yy);
 
 	return mat;
@@ -2491,17 +2773,17 @@ Quaternion matrix4_to_quaternion(const Matrix4& m)
 	if (four_x_squared_minus_1 > four_biggest_squared_minus_1)
 	{
 		four_biggest_squared_minus_1 = four_x_squared_minus_1;
-		biggestIndex             = 1;
+		biggestIndex = 1;
 	}
 	if (four_y_squared_minus_1 > four_biggest_squared_minus_1)
 	{
 		four_biggest_squared_minus_1 = four_y_squared_minus_1;
-		biggestIndex             = 2;
+		biggestIndex = 2;
 	}
 	if (four_z_squared_minus_1 > four_biggest_squared_minus_1)
 	{
 		four_biggest_squared_minus_1 = four_z_squared_minus_1;
-		biggestIndex             = 3;
+		biggestIndex = 3;
 	}
 
 	f32 biggestVal = math::sqrt(four_biggest_squared_minus_1 + 1.0f) * 0.5f;
@@ -2571,10 +2853,11 @@ Matrix4 rotate(const Vector3& v, f32 radians)
 	const Vector3 t    = (1.0f - c) * axis;
 
 	Matrix4 rot = MATRIX4_IDENTITY;
-	rot[0][0]   = c + t.x * axis.x;
-	rot[0][1]   = 0 + t.x * axis.y + s * axis.z;
-	rot[0][2]   = 0 + t.x * axis.z - s * axis.y;
-	rot[0][3]   = 0;
+
+	rot[0][0] = c + t.x * axis.x;
+	rot[0][1] = 0 + t.x * axis.y + s * axis.z;
+	rot[0][2] = 0 + t.x * axis.z - s * axis.y;
+	rot[0][3] = 0;
 
 	rot[1][0] = 0 + t.y * axis.x - s * axis.z;
 	rot[1][1] = c + t.y * axis.y;
@@ -2669,9 +2952,10 @@ look_at_matrix4(const Vector3& eye, const Vector3& center, const Vector3& up)
 	const Vector3 u = math::cross(s, f);
 
 	Matrix4 result = MATRIX4_IDENTITY;
-	result[0][0]   = +s.x;
-	result[1][0]   = +s.y;
-	result[2][0]   = +s.z;
+
+	result[0][0] = +s.x;
+	result[1][0] = +s.y;
+	result[2][0] = +s.z;
 
 	result[0][1] = +u.x;
 	result[1][1] = +u.y;
