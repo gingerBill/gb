@@ -1,7 +1,9 @@
-// gb.hpp - v0.02 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.04 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 //
 // Version History:
+//     0.04 - String
+//     0.03 - Hash Functions
 //     0.02 - Hash Table
 //     0.01 - Initial Version
 //
@@ -29,8 +31,10 @@
 //         - Heap_Allocator
 //         - Arena_Allocator
 //         - Temporary_Arena_Memory
+//     - String
 //     - Array
 //     - Hash_Table
+//     - Hash Functions
 //     - Math Types
 //         - Vector(2,3,4)
 //         - Quaternion
@@ -111,27 +115,47 @@
 #define GB_IS_POWER_OF_TWO(x) ((x) != 0) && !((x) & ((x) - 1))
 
 
-#ifndef NDEBUG
-#define GB_ASSERT(x, ...) ((void)(gb__assert_handler((x), #x, __FILE__, __LINE__, ##__VA_ARGS__)))
-#else
-#define GB_ASSERT(x, ...) ((void)sizeof(x))
-#endif
-
-extern "C" void
-gb__assert_handler(bool condition, const char* condition_str,
-                   const char* filename, size_t line,
-                   const char* error_text = nullptr, ...);
-
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 
 #ifdef GB_SYSTEM_WINDOWS
 #include <windows.h>
 #else
 #include <pthread.h>
 #endif
+
+#ifndef NDEBUG
+#define GB_ASSERT(x, ...) ((void)(gb__assert_handler((x), #x, __FILE__, __LINE__, ##__VA_ARGS__)))
+#else
+#define GB_ASSERT(x, ...) ((void)sizeof(x))
+#endif
+
+extern "C" inline void
+gb__assert_handler(bool condition, const char* condition_str,
+                   const char* filename, size_t line,
+                   const char* error_text = nullptr, ...)
+{
+	if (condition)
+		return;
+
+	fprintf(stderr, "ASSERT! %s(%d): %s", filename, line, condition_str);
+	if (error_text)
+	{
+		fprintf(stderr, " - ");
+
+		va_list args;
+		va_start(args, error_text);
+		vfprintf(stderr, error_text, args);
+		va_end(args);
+	}
+	fprintf(stderr, "\n");
+
+	abort();
+}
+
 
 namespace gb
 {
@@ -406,6 +430,44 @@ make_temporary_arena_memory(Arena_Allocator& arena)
 {
 	return Temporary_Arena_Memory{arena};
 }
+
+////////////////////////////////
+/// String                   ///
+////////////////////////////////
+using String = char*;
+using String_Size = u32;
+struct String_Header
+{
+	Allocator* allocator;
+	String_Size len;
+	String_Size cap;
+};
+
+inline String_Header* string_header(String str) { return (String_Header*)str - 1; }
+
+String make_string(Allocator& a, const char* str = "");
+String make_string(Allocator& a, const void* str, String_Size len);
+void   free_string(String& str);
+
+String duplicate_string(Allocator& a, const String str);
+
+String_Size string_length(const String str);
+String_Size string_capacity(const String str);
+String_Size string_available_space(const String str);
+
+void clear_string(String str);
+
+void append_string(String& str, const String other);
+void append_cstring(String& str, const char* other);
+void append_string(String& str, const void* other, String_Size len);
+
+void string_make_space_for(String& str, String_Size add_len);
+usize string_allocation_size(const String str);
+
+bool strings_are_equal(const String lhs, const String rhs);
+
+void trim_string(String& str, const char* cut_set);
+
 
 ////////////////////////////////
 /// Array                    ///
@@ -992,6 +1054,27 @@ remove_all_from_hash_table(Hash_Table<T>& h, u64 key)
 }
 
 ////////////////////////////////
+/// Hash                     ///
+////////////////////////////////
+
+namespace hash
+{
+u32 adler32(const void* key, usize num_bytes);
+
+u32 crc32(const void* key, usize num_bytes);
+u64 crc64(const void* key, usize num_bytes);
+
+// TODO(bill): Complete hashing functions
+// u32 fnv32(const void* key, usize num_bytes);
+// u64 fnv64(const void* key, usize num_bytes);
+// u32 fnv32a(const void* key, usize num_bytes);
+// u64 fnv64a(const void* key, usize num_bytes);
+
+u32 murmur32(const void* key, u32 num_bytes, u32 seed = 0x9747b28c);
+u64 murmur64(const void* key, usize num_bytes, u64 seed = 0x9747b28c);
+} // namespace hash
+
+////////////////////////////////
 /// Time                     ///
 ////////////////////////////////
 
@@ -1464,31 +1547,6 @@ look_at_quaternion(const Vector3& eye, const Vector3& center, const Vector3& up 
 #include <windows.h>
 #endif
 
-inline void
-gb__assert_handler(bool condition, const char* condition_str,
-                    const char* filename, size_t line,
-                    const char* error_text, ...)
-{
-	if (condition)
-		return;
-
-	fprintf(stderr, "ASSERT! %s(%d): %s", filename, line, condition_str);
-	if (error_text)
-	{
-		fprintf(stderr, " - ");
-
-		va_list args;
-		va_start(args, error_text);
-		vfprintf(stderr, error_text, args);
-		va_end(args);
-	}
-	fprintf(stderr, "\n");
-
-	*(int*)0 = 0; // TODO(bill): Use a better way to assert
-}
-
-
-
 namespace gb
 {
 ////////////////////////////////
@@ -1664,6 +1722,558 @@ void Arena_Allocator::check()
 {
 	GB_ASSERT(temp_count == 0);
 }
+
+////////////////////////////////
+/// String                   ///
+////////////////////////////////
+String make_string(Allocator& a, const char* str)
+{
+	return make_string(a, str, (String_Size)strlen(str));
+}
+
+String make_string(Allocator& a, const void* init_str, String_Size len)
+{
+	usize header_size = sizeof(String_Header);
+	void* ptr = alloc(a, header_size + len + 1);
+	if (!init_str)
+		memset(ptr, 0, header_size + len + 1);
+
+	if (ptr == nullptr)
+		return nullptr;
+
+	String str = (char*)ptr + header_size;
+	String_Header* header = string_header(str);
+	header->allocator = &a;
+	header->len = len;
+	header->cap = len;
+	if (len && init_str)
+		memcpy(str, init_str, len);
+	str[len] = '\0';
+
+	return str;
+}
+
+
+void free_string(String& str)
+{
+	if (str == nullptr)
+		return;
+	String_Header* h = string_header(str);
+	Allocator* a = h->allocator;
+	if (a) dealloc(*a, h);
+	str = nullptr;
+}
+
+String duplicate_string(Allocator& a, const String str)
+{
+	return make_string(a, str, string_length(str));
+}
+
+String_Size string_length(const String str)
+{
+	return string_header(str)->len;
+}
+
+String_Size string_capacity(const String str)
+{
+	return string_header(str)->cap;
+}
+
+String_Size string_available_space(const String str)
+{
+	String_Header* h = string_header(str);
+	if (h->cap > h->len)
+		return h->cap - h->len;
+	return 0;
+}
+
+void clear_string(String str)
+{
+	string_header(str)->len = 0;
+	str[0] = '\0';
+}
+
+void append_string(String& str, const String other)
+{
+	append_string(str, (const void*)other, string_length(other));
+}
+
+void append_cstring(String& str, const char* other)
+{
+	append_string(str, (const void*)other, (String_Size)strlen(other));
+}
+
+void append_string(String& str, const void* other, String_Size other_len)
+{
+	String_Size curr_len = string_length(str);
+
+	string_make_space_for(str, other_len);
+	if (str == nullptr)
+		return;
+
+	memcpy(str + curr_len, other, other_len);
+	str[curr_len + other_len] = '\0';
+	string_header(str)->len = curr_len + other_len;
+}
+
+
+namespace impl
+{
+// NOTE(bill): ptr _must_ be allocated with Allocator& a
+static inline void*
+string_realloc(Allocator& a, void* ptr, usize old_size, usize new_size)
+{
+	if (!ptr)
+		return alloc(a, new_size);
+
+	if (new_size < old_size)
+		new_size = old_size;
+
+	if (old_size == new_size)
+		return ptr;
+
+	void* new_ptr = alloc(a, new_size);
+	if (!new_ptr)
+		return nullptr;
+
+	memcpy(new_ptr, ptr, old_size);
+
+	dealloc(a, ptr);
+
+	return new_ptr;
+}
+} // namespace impl
+
+void string_make_space_for(String& str, String_Size add_len)
+{
+	String_Size len = string_length(str);
+	String_Size new_len = len + add_len;
+
+	String_Size available = string_available_space(str);
+	if (available >= add_len) // Return if there is enough space left
+		return;
+
+	void* ptr = (String_Header*)str - 1;
+	usize old_size = sizeof(String_Header) + string_length(str) + 1;
+	usize new_size = sizeof(String_Header) + new_len + 1;
+
+	Allocator* a = string_header(str)->allocator;
+	void* new_ptr = impl::string_realloc(*a, ptr, old_size, new_size);
+	if (new_ptr == nullptr)
+		return;
+	str = (char*)new_ptr + sizeof(String_Header);
+
+	string_header(str)->cap = new_len;
+}
+
+usize string_allocation_size(const String str)
+{
+	String_Size cap = string_capacity(str);
+	return sizeof(String_Header) + cap;
+}
+
+bool strings_are_equal(const String lhs, const String rhs)
+{
+	String_Size lhs_len = string_length(lhs);
+	String_Size rhs_len = string_length(rhs);
+	if (lhs_len != rhs_len)
+		return false;
+
+	for (String_Size i = 0; i < lhs_len; i++)
+	{
+		if (lhs[i] != rhs[i])
+			return false;
+	}
+
+	return true;
+}
+
+void trim_string(String& str, const char* cut_set)
+{
+	char* start;
+	char* end;
+	char* start_pos;
+	char* end_pos;
+
+	start_pos = start = str;
+	end_pos   = end   = str + string_length(str) - 1;
+
+	while (start_pos <= end && strchr(cut_set, *start_pos))
+		start_pos++;
+	while (end_pos > start_pos && strchr(cut_set, *end_pos))
+		end_pos--;
+
+	String_Size len = (start_pos > end_pos) ? 0 : ((end_pos - start_pos)+1);
+
+	if (str != start_pos)
+		memmove(str, start_pos, len);
+	str[len] = '\0';
+
+	string_header(str)->len = len;
+}
+
+
+////////////////////////////////
+/// Hash                     ///
+////////////////////////////////
+
+namespace hash
+{
+u32 adler32(const void* key, usize num_bytes)
+{
+	const u32 MOD_ADLER = 65521;
+
+	u32 a = 1;
+	u32 b = 0;
+
+	const u8* bytes = (const u8*)key;
+	for (usize i = 0; i < num_bytes; i++)
+	{
+		a = (a + bytes[i]) % MOD_ADLER;
+		b = (b + a) % MOD_ADLER;
+	}
+
+	return (b << 16) | a;
+}
+
+static const u32 GB_CRC32_TABLE[256] = {
+	0x00000000, 0x77073096, 0xee0e612c, 0x990951ba,
+	0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3,
+	0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988,
+	0x09b64c2b, 0x7eb17cbd, 0xe7b82d07, 0x90bf1d91,
+	0x1db71064, 0x6ab020f2, 0xf3b97148, 0x84be41de,
+	0x1adad47d, 0x6ddde4eb, 0xf4d4b551, 0x83d385c7,
+	0x136c9856, 0x646ba8c0, 0xfd62f97a, 0x8a65c9ec,
+	0x14015c4f, 0x63066cd9, 0xfa0f3d63, 0x8d080df5,
+	0x3b6e20c8, 0x4c69105e, 0xd56041e4, 0xa2677172,
+	0x3c03e4d1, 0x4b04d447, 0xd20d85fd, 0xa50ab56b,
+	0x35b5a8fa, 0x42b2986c, 0xdbbbc9d6, 0xacbcf940,
+	0x32d86ce3, 0x45df5c75, 0xdcd60dcf, 0xabd13d59,
+	0x26d930ac, 0x51de003a, 0xc8d75180, 0xbfd06116,
+	0x21b4f4b5, 0x56b3c423, 0xcfba9599, 0xb8bda50f,
+	0x2802b89e, 0x5f058808, 0xc60cd9b2, 0xb10be924,
+	0x2f6f7c87, 0x58684c11, 0xc1611dab, 0xb6662d3d,
+	0x76dc4190, 0x01db7106, 0x98d220bc, 0xefd5102a,
+	0x71b18589, 0x06b6b51f, 0x9fbfe4a5, 0xe8b8d433,
+	0x7807c9a2, 0x0f00f934, 0x9609a88e, 0xe10e9818,
+	0x7f6a0dbb, 0x086d3d2d, 0x91646c97, 0xe6635c01,
+	0x6b6b51f4, 0x1c6c6162, 0x856530d8, 0xf262004e,
+	0x6c0695ed, 0x1b01a57b, 0x8208f4c1, 0xf50fc457,
+	0x65b0d9c6, 0x12b7e950, 0x8bbeb8ea, 0xfcb9887c,
+	0x62dd1ddf, 0x15da2d49, 0x8cd37cf3, 0xfbd44c65,
+	0x4db26158, 0x3ab551ce, 0xa3bc0074, 0xd4bb30e2,
+	0x4adfa541, 0x3dd895d7, 0xa4d1c46d, 0xd3d6f4fb,
+	0x4369e96a, 0x346ed9fc, 0xad678846, 0xda60b8d0,
+	0x44042d73, 0x33031de5, 0xaa0a4c5f, 0xdd0d7cc9,
+	0x5005713c, 0x270241aa, 0xbe0b1010, 0xc90c2086,
+	0x5768b525, 0x206f85b3, 0xb966d409, 0xce61e49f,
+	0x5edef90e, 0x29d9c998, 0xb0d09822, 0xc7d7a8b4,
+	0x59b33d17, 0x2eb40d81, 0xb7bd5c3b, 0xc0ba6cad,
+	0xedb88320, 0x9abfb3b6, 0x03b6e20c, 0x74b1d29a,
+	0xead54739, 0x9dd277af, 0x04db2615, 0x73dc1683,
+	0xe3630b12, 0x94643b84, 0x0d6d6a3e, 0x7a6a5aa8,
+	0xe40ecf0b, 0x9309ff9d, 0x0a00ae27, 0x7d079eb1,
+	0xf00f9344, 0x8708a3d2, 0x1e01f268, 0x6906c2fe,
+	0xf762575d, 0x806567cb, 0x196c3671, 0x6e6b06e7,
+	0xfed41b76, 0x89d32be0, 0x10da7a5a, 0x67dd4acc,
+	0xf9b9df6f, 0x8ebeeff9, 0x17b7be43, 0x60b08ed5,
+	0xd6d6a3e8, 0xa1d1937e, 0x38d8c2c4, 0x4fdff252,
+	0xd1bb67f1, 0xa6bc5767, 0x3fb506dd, 0x48b2364b,
+	0xd80d2bda, 0xaf0a1b4c, 0x36034af6, 0x41047a60,
+	0xdf60efc3, 0xa867df55, 0x316e8eef, 0x4669be79,
+	0xcb61b38c, 0xbc66831a, 0x256fd2a0, 0x5268e236,
+	0xcc0c7795, 0xbb0b4703, 0x220216b9, 0x5505262f,
+	0xc5ba3bbe, 0xb2bd0b28, 0x2bb45a92, 0x5cb36a04,
+	0xc2d7ffa7, 0xb5d0cf31, 0x2cd99e8b, 0x5bdeae1d,
+	0x9b64c2b0, 0xec63f226, 0x756aa39c, 0x026d930a,
+	0x9c0906a9, 0xeb0e363f, 0x72076785, 0x05005713,
+	0x95bf4a82, 0xe2b87a14, 0x7bb12bae, 0x0cb61b38,
+	0x92d28e9b, 0xe5d5be0d, 0x7cdcefb7, 0x0bdbdf21,
+	0x86d3d2d4, 0xf1d4e242, 0x68ddb3f8, 0x1fda836e,
+	0x81be16cd, 0xf6b9265b, 0x6fb077e1, 0x18b74777,
+	0x88085ae6, 0xff0f6a70, 0x66063bca, 0x11010b5c,
+	0x8f659eff, 0xf862ae69, 0x616bffd3, 0x166ccf45,
+	0xa00ae278, 0xd70dd2ee, 0x4e048354, 0x3903b3c2,
+	0xa7672661, 0xd06016f7, 0x4969474d, 0x3e6e77db,
+	0xaed16a4a, 0xd9d65adc, 0x40df0b66, 0x37d83bf0,
+	0xa9bcae53, 0xdebb9ec5, 0x47b2cf7f, 0x30b5ffe9,
+	0xbdbdf21c, 0xcabac28a, 0x53b39330, 0x24b4a3a6,
+	0xbad03605, 0xcdd70693, 0x54de5729, 0x23d967bf,
+	0xb3667a2e, 0xc4614ab8, 0x5d681b02, 0x2a6f2b94,
+	0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d,
+};
+
+static const u64 GB_CRC64_TABLE[256] = {
+	0x0000000000000000ull, 0x42F0E1EBA9EA3693ull, 0x85E1C3D753D46D26ull, 0xC711223CFA3E5BB5ull,
+	0x493366450E42ECDFull, 0x0BC387AEA7A8DA4Cull, 0xCCD2A5925D9681F9ull, 0x8E224479F47CB76Aull,
+	0x9266CC8A1C85D9BEull, 0xD0962D61B56FEF2Dull, 0x17870F5D4F51B498ull, 0x5577EEB6E6BB820Bull,
+	0xDB55AACF12C73561ull, 0x99A54B24BB2D03F2ull, 0x5EB4691841135847ull, 0x1C4488F3E8F96ED4ull,
+	0x663D78FF90E185EFull, 0x24CD9914390BB37Cull, 0xE3DCBB28C335E8C9ull, 0xA12C5AC36ADFDE5Aull,
+	0x2F0E1EBA9EA36930ull, 0x6DFEFF5137495FA3ull, 0xAAEFDD6DCD770416ull, 0xE81F3C86649D3285ull,
+	0xF45BB4758C645C51ull, 0xB6AB559E258E6AC2ull, 0x71BA77A2DFB03177ull, 0x334A9649765A07E4ull,
+	0xBD68D2308226B08Eull, 0xFF9833DB2BCC861Dull, 0x388911E7D1F2DDA8ull, 0x7A79F00C7818EB3Bull,
+	0xCC7AF1FF21C30BDEull, 0x8E8A101488293D4Dull, 0x499B3228721766F8ull, 0x0B6BD3C3DBFD506Bull,
+	0x854997BA2F81E701ull, 0xC7B97651866BD192ull, 0x00A8546D7C558A27ull, 0x4258B586D5BFBCB4ull,
+	0x5E1C3D753D46D260ull, 0x1CECDC9E94ACE4F3ull, 0xDBFDFEA26E92BF46ull, 0x990D1F49C77889D5ull,
+	0x172F5B3033043EBFull, 0x55DFBADB9AEE082Cull, 0x92CE98E760D05399ull, 0xD03E790CC93A650Aull,
+	0xAA478900B1228E31ull, 0xE8B768EB18C8B8A2ull, 0x2FA64AD7E2F6E317ull, 0x6D56AB3C4B1CD584ull,
+	0xE374EF45BF6062EEull, 0xA1840EAE168A547Dull, 0x66952C92ECB40FC8ull, 0x2465CD79455E395Bull,
+	0x3821458AADA7578Full, 0x7AD1A461044D611Cull, 0xBDC0865DFE733AA9ull, 0xFF3067B657990C3Aull,
+	0x711223CFA3E5BB50ull, 0x33E2C2240A0F8DC3ull, 0xF4F3E018F031D676ull, 0xB60301F359DBE0E5ull,
+	0xDA050215EA6C212Full, 0x98F5E3FE438617BCull, 0x5FE4C1C2B9B84C09ull, 0x1D14202910527A9Aull,
+	0x93366450E42ECDF0ull, 0xD1C685BB4DC4FB63ull, 0x16D7A787B7FAA0D6ull, 0x5427466C1E109645ull,
+	0x4863CE9FF6E9F891ull, 0x0A932F745F03CE02ull, 0xCD820D48A53D95B7ull, 0x8F72ECA30CD7A324ull,
+	0x0150A8DAF8AB144Eull, 0x43A04931514122DDull, 0x84B16B0DAB7F7968ull, 0xC6418AE602954FFBull,
+	0xBC387AEA7A8DA4C0ull, 0xFEC89B01D3679253ull, 0x39D9B93D2959C9E6ull, 0x7B2958D680B3FF75ull,
+	0xF50B1CAF74CF481Full, 0xB7FBFD44DD257E8Cull, 0x70EADF78271B2539ull, 0x321A3E938EF113AAull,
+	0x2E5EB66066087D7Eull, 0x6CAE578BCFE24BEDull, 0xABBF75B735DC1058ull, 0xE94F945C9C3626CBull,
+	0x676DD025684A91A1ull, 0x259D31CEC1A0A732ull, 0xE28C13F23B9EFC87ull, 0xA07CF2199274CA14ull,
+	0x167FF3EACBAF2AF1ull, 0x548F120162451C62ull, 0x939E303D987B47D7ull, 0xD16ED1D631917144ull,
+	0x5F4C95AFC5EDC62Eull, 0x1DBC74446C07F0BDull, 0xDAAD56789639AB08ull, 0x985DB7933FD39D9Bull,
+	0x84193F60D72AF34Full, 0xC6E9DE8B7EC0C5DCull, 0x01F8FCB784FE9E69ull, 0x43081D5C2D14A8FAull,
+	0xCD2A5925D9681F90ull, 0x8FDAB8CE70822903ull, 0x48CB9AF28ABC72B6ull, 0x0A3B7B1923564425ull,
+	0x70428B155B4EAF1Eull, 0x32B26AFEF2A4998Dull, 0xF5A348C2089AC238ull, 0xB753A929A170F4ABull,
+	0x3971ED50550C43C1ull, 0x7B810CBBFCE67552ull, 0xBC902E8706D82EE7ull, 0xFE60CF6CAF321874ull,
+	0xE224479F47CB76A0ull, 0xA0D4A674EE214033ull, 0x67C58448141F1B86ull, 0x253565A3BDF52D15ull,
+	0xAB1721DA49899A7Full, 0xE9E7C031E063ACECull, 0x2EF6E20D1A5DF759ull, 0x6C0603E6B3B7C1CAull,
+	0xF6FAE5C07D3274CDull, 0xB40A042BD4D8425Eull, 0x731B26172EE619EBull, 0x31EBC7FC870C2F78ull,
+	0xBFC9838573709812ull, 0xFD39626EDA9AAE81ull, 0x3A28405220A4F534ull, 0x78D8A1B9894EC3A7ull,
+	0x649C294A61B7AD73ull, 0x266CC8A1C85D9BE0ull, 0xE17DEA9D3263C055ull, 0xA38D0B769B89F6C6ull,
+	0x2DAF4F0F6FF541ACull, 0x6F5FAEE4C61F773Full, 0xA84E8CD83C212C8Aull, 0xEABE6D3395CB1A19ull,
+	0x90C79D3FEDD3F122ull, 0xD2377CD44439C7B1ull, 0x15265EE8BE079C04ull, 0x57D6BF0317EDAA97ull,
+	0xD9F4FB7AE3911DFDull, 0x9B041A914A7B2B6Eull, 0x5C1538ADB04570DBull, 0x1EE5D94619AF4648ull,
+	0x02A151B5F156289Cull, 0x4051B05E58BC1E0Full, 0x87409262A28245BAull, 0xC5B073890B687329ull,
+	0x4B9237F0FF14C443ull, 0x0962D61B56FEF2D0ull, 0xCE73F427ACC0A965ull, 0x8C8315CC052A9FF6ull,
+	0x3A80143F5CF17F13ull, 0x7870F5D4F51B4980ull, 0xBF61D7E80F251235ull, 0xFD913603A6CF24A6ull,
+	0x73B3727A52B393CCull, 0x31439391FB59A55Full, 0xF652B1AD0167FEEAull, 0xB4A25046A88DC879ull,
+	0xA8E6D8B54074A6ADull, 0xEA16395EE99E903Eull, 0x2D071B6213A0CB8Bull, 0x6FF7FA89BA4AFD18ull,
+	0xE1D5BEF04E364A72ull, 0xA3255F1BE7DC7CE1ull, 0x64347D271DE22754ull, 0x26C49CCCB40811C7ull,
+	0x5CBD6CC0CC10FAFCull, 0x1E4D8D2B65FACC6Full, 0xD95CAF179FC497DAull, 0x9BAC4EFC362EA149ull,
+	0x158E0A85C2521623ull, 0x577EEB6E6BB820B0ull, 0x906FC95291867B05ull, 0xD29F28B9386C4D96ull,
+	0xCEDBA04AD0952342ull, 0x8C2B41A1797F15D1ull, 0x4B3A639D83414E64ull, 0x09CA82762AAB78F7ull,
+	0x87E8C60FDED7CF9Dull, 0xC51827E4773DF90Eull, 0x020905D88D03A2BBull, 0x40F9E43324E99428ull,
+	0x2CFFE7D5975E55E2ull, 0x6E0F063E3EB46371ull, 0xA91E2402C48A38C4ull, 0xEBEEC5E96D600E57ull,
+	0x65CC8190991CB93Dull, 0x273C607B30F68FAEull, 0xE02D4247CAC8D41Bull, 0xA2DDA3AC6322E288ull,
+	0xBE992B5F8BDB8C5Cull, 0xFC69CAB42231BACFull, 0x3B78E888D80FE17Aull, 0x7988096371E5D7E9ull,
+	0xF7AA4D1A85996083ull, 0xB55AACF12C735610ull, 0x724B8ECDD64D0DA5ull, 0x30BB6F267FA73B36ull,
+	0x4AC29F2A07BFD00Dull, 0x08327EC1AE55E69Eull, 0xCF235CFD546BBD2Bull, 0x8DD3BD16FD818BB8ull,
+	0x03F1F96F09FD3CD2ull, 0x41011884A0170A41ull, 0x86103AB85A2951F4ull, 0xC4E0DB53F3C36767ull,
+	0xD8A453A01B3A09B3ull, 0x9A54B24BB2D03F20ull, 0x5D45907748EE6495ull, 0x1FB5719CE1045206ull,
+	0x919735E51578E56Cull, 0xD367D40EBC92D3FFull, 0x1476F63246AC884Aull, 0x568617D9EF46BED9ull,
+	0xE085162AB69D5E3Cull, 0xA275F7C11F7768AFull, 0x6564D5FDE549331Aull, 0x279434164CA30589ull,
+	0xA9B6706FB8DFB2E3ull, 0xEB46918411358470ull, 0x2C57B3B8EB0BDFC5ull, 0x6EA7525342E1E956ull,
+	0x72E3DAA0AA188782ull, 0x30133B4B03F2B111ull, 0xF7021977F9CCEAA4ull, 0xB5F2F89C5026DC37ull,
+	0x3BD0BCE5A45A6B5Dull, 0x79205D0E0DB05DCEull, 0xBE317F32F78E067Bull, 0xFCC19ED95E6430E8ull,
+	0x86B86ED5267CDBD3ull, 0xC4488F3E8F96ED40ull, 0x0359AD0275A8B6F5ull, 0x41A94CE9DC428066ull,
+	0xCF8B0890283E370Cull, 0x8D7BE97B81D4019Full, 0x4A6ACB477BEA5A2Aull, 0x089A2AACD2006CB9ull,
+	0x14DEA25F3AF9026Dull, 0x562E43B4931334FEull, 0x913F6188692D6F4Bull, 0xD3CF8063C0C759D8ull,
+	0x5DEDC41A34BBEEB2ull, 0x1F1D25F19D51D821ull, 0xD80C07CD676F8394ull, 0x9AFCE626CE85B507ull,
+};
+
+
+u32 crc32(const void* key, usize num_bytes)
+{
+	u32 result = (u32)~0;
+	u8* c = (u8*)key;
+	for (usize remaining = num_bytes; remaining--; c++)
+		result = (result >> 8) ^ (GB_CRC32_TABLE[(result ^ *c) & 0xff]);
+
+	return ~result;
+}
+
+u64 crc64(const void* key, usize num_bytes)
+{
+	u64 result = (u64)~0;
+	u8* c = (u8*)key;
+	for (usize remaining = num_bytes; remaining--; c++)
+		result = (result >> 8) ^ (GB_CRC64_TABLE[(result ^ *c) & 0xff]);
+
+	return ~result;
+}
+
+// u32 fnv32(const void* key, usize num_bytes)
+// {
+
+// }
+
+// u64 fnv64(const void* key, usize num_bytes)
+// {
+
+// }
+
+// u32 fnv32a(const void* key, usize num_bytes)
+// {
+
+// }
+
+// u64 fnv64a(const void* key, usize num_bytes)
+// {
+
+// }
+
+u32 murmur32(const void* key, u32 num_bytes, u32 seed)
+{
+	static const u32 c1 = 0xcc9e2d51;
+	static const u32 c2 = 0x1b873593;
+	static const u32 r1 = 15;
+	static const u32 r2 = 13;
+	static const u32 m = 5;
+	static const u32 n = 0xe6546b64;
+
+	u32 hash = seed;
+
+	const usize nblocks = num_bytes / 4;
+	const u32* blocks = (const u32*)key;
+	for (usize i = 0; i < nblocks; i++) {
+		u32 k = blocks[i];
+		k *= c1;
+		k = (k << r1) | (k >> (32 - r1));
+		k *= c2;
+
+		hash ^= k;
+		hash = ((hash << r2) | (hash >> (32 - r2))) * m + n;
+	}
+
+	const u8* tail = ((const u8*)key) + nblocks * 4;
+	u32 k1 = 0;
+
+	switch (num_bytes & 3) {
+	case 3:
+		k1 ^= tail[2] << 16;
+	case 2:
+		k1 ^= tail[1] << 8;
+	case 1:
+		k1 ^= tail[0];
+
+		k1 *= c1;
+		k1 = (k1 << r1) | (k1 >> (32 - r1));
+		k1 *= c2;
+		hash ^= k1;
+	}
+
+	hash ^= num_bytes;
+	hash ^= (hash >> 16);
+	hash *= 0x85ebca6b;
+	hash ^= (hash >> 13);
+	hash *= 0xc2b2ae35;
+	hash ^= (hash >> 16);
+
+	return hash;
+}
+
+#ifdef GB_ARCH_64_BIT
+u64 murmur64(const void* key, usize num_bytes, u64 seed)
+{
+	static const u64 m = 0xc6a4a7935bd1e995ULL;
+	static const s32 r = 47;
+
+	u64 h = seed ^ (num_bytes * m);
+
+	const u64* data = (const u64*)key;
+	const u64* end = data + (num_bytes / 8);
+
+	while (data != end)
+	{
+		u64 k = *data++;
+
+		k *= m;
+		k ^= k >> r;
+		k *= m;
+
+		h ^= k;
+		h *= m;
+	}
+
+	const u8* data2 = (const u8*)data;
+
+	switch (num_bytes & 7)
+	{
+	case 7: h ^= u64{data2[6]} << 48;
+	case 6: h ^= u64{data2[5]} << 40;
+	case 5: h ^= u64{data2[4]} << 32;
+	case 4: h ^= u64{data2[3]} << 24;
+	case 3: h ^= u64{data2[2]} << 16;
+	case 2: h ^= u64{data2[1]} << 8;
+	case 1: h ^= u64{data2[0]};
+		h *= m;
+	};
+
+	h ^= h >> r;
+	h *= m;
+	h ^= h >> r;
+
+	return h;
+}
+#elif GB_ARCH_32_BIT
+u64 murmur64(const void* key, usize num_bytes, u64 seed)
+{
+	static const u32 m = 0x5bd1e995;
+	static const s32 r = 24;
+
+	u32 h1 = u32(seed) ^ num_bytes;
+	u32 h2 = u32(seed >> 32);
+
+	const u32* data = (const u32*)key;
+
+	while (num_bytes >= 8)
+	{
+		u32 k1 = *data++;
+		k1 *= m;
+		k1 ^= k1 >> r;
+		k1 *= m;
+		h1 *= m;
+		h1 ^= k1;
+		num_bytes -= 4;
+
+		u32 k2 = *data++;
+		k2 *= m;
+		k2 ^= k2 >> r;
+		k2 *= m;
+		h2 *= m;
+		h2 ^= k2;
+		num_bytes -= 4;
+	}
+
+	if (num_bytes >= 4)
+	{
+		u32 k1 = *data++;
+		k1 *= m;
+		k1 ^= k1 >> r;
+		k1 *= m;
+		h1 *= m;
+		h1 ^= k1;
+		num_bytes -= 4;
+	}
+
+	switch (num_bytes)
+	{
+	case 3: h2 ^= ((u8*)data)[2] << 16;
+	case 2: h2 ^= ((u8*)data)[1] << 8;
+	case 1: h2 ^= ((u8*)data)[0];
+		h2 *= m;
+	};
+
+	h1 ^= h2 >> 18;
+	h1 *= m;
+	h2 ^= h1 >> 22;
+	h2 *= m;
+	h1 ^= h2 >> 17;
+	h1 *= m;
+	h2 ^= h1 >> 19;
+	h2 *= m;
+
+	u64 h = h1;
+
+	h = (h << 32) | h2;
+
+	return h;
+
+}
+#else
+#error murmur64 function not supported on this architecture
+#endif
+} // namespace hash
+
 
 
 ////////////////////////////////
