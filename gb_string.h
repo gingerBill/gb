@@ -1,7 +1,8 @@
-// gb_string.h - v0.92 - public domain string library - no warranty implied; use at your own risk
+// gb_string.h - v0.93 - public domain string library - no warranty implied; use at your own risk
 // A Simple Dynamic Strings Library for C and C++
 //
 // Version History:
+//     0.93 - Fix typos and errors
 //     0.92 - Add extern "C" if compiling as C++
 //     0.91 - Remove `char* cstr` from String_Header
 //     0.90 - Initial Version
@@ -90,8 +91,8 @@
 //
 //           printf("%c %c\n", str[0], str[13]);
 //
-//     * gb strings are singular allocated. The meta-data is next to the character array
-//       which is better for the cache.
+//     * gb strings are singularlly allocated. The meta-data is next to the character 
+//       array which is better for the cache.
 //
 // Disadvantages:
 //
@@ -300,7 +301,7 @@ gb_inline String make_string(const void* str, usize len)
 
 gb_inline void free_string(String& str)
 {
-	gb_make_string(str);
+	gb_free_string(str);
 	str = GB_NULLPTR;
 }
 
@@ -416,7 +417,7 @@ void gb_free_string(gb_String str)
 	if (str == GB_NULLPTR)
 		return;
 
-	GB_FREE((char*)str - sizeof(struct gb_String_Header));
+	GB_FREE((struct gb_String_Header*)str - 1);
 }
 
 gb_String gb_duplicate_string(const gb_String str)
