@@ -1,7 +1,8 @@
-// gb.hpp - v0.06 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.07 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 //
 // Version History:
+//     0.07 - Bug Fixes
 //     0.06 - Os spec ideas
 //     0.05 - Transform Type and Quaternion Functions
 //     0.04 - String
@@ -117,13 +118,15 @@
 
 #define GB_IS_POWER_OF_TWO(x) ((x) != 0) && !((x) & ((x) - 1))
 
-
+#include <float.h>
+#include <math.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #ifdef GB_SYSTEM_WINDOWS
 #include <windows.h>
@@ -372,10 +375,13 @@ struct Heap_Allocator : Allocator
 
 struct Arena_Allocator : Allocator
 {
-	s64 base_size             = 0;
 	u8* base                  = nullptr;
+	s64 base_size             = 0;
 	s64 total_allocated_count = 0;
 	s64 temp_count            = 0;
+
+	Arena_Allocator() = default;
+	explicit Arena_Allocator(void* base, usize base_size);
 
 	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT);
 	virtual void  dealloc(void* ptr);
@@ -386,15 +392,6 @@ struct Arena_Allocator : Allocator
 	virtual usize get_remaining_space(usize align = GB_DEFAULT_ALIGNMENT);
 	void check();
 };
-
-inline void
-init_arena_allocator(Arena_Allocator& arena, void* base, usize base_size)
-{
-	arena.base_size  = base_size;
-	arena.base       = (u8*)base;
-	arena.temp_count = 0;
-	arena.total_allocated_count = 0;
-}
 
 struct Temporary_Arena_Memory
 {
@@ -977,7 +974,7 @@ multiple_count_from_hash_table(const Hash_Table<T>& h, u64 key)
 	while (e)
 	{
 		count++
-		e + find_next_in_hash_table(h, e);
+		e = find_next_in_hash_table(h, e);
 	}
 
 	return count;
@@ -1224,7 +1221,7 @@ Time& operator/=(Time& left, s64 right);
 
 f32 operator/(Time left, Time right);
 
-Time operator%(Time left, Time right);
+Time  operator%(Time left, Time right);
 Time& operator%=(Time& left, Time right);
 
 
@@ -1250,7 +1247,7 @@ struct Vector3
 	{
 		struct { f32 x, y, z; };
 		Vector2 xy;
-		f32 data[3];
+		f32     data[3];
 	};
 
 	inline const f32& operator[](usize index) const { return data[index]; }
@@ -1279,22 +1276,50 @@ struct Quaternion
 		Vector3 xyz;
 		f32     data[4];
 	};
+
+	inline const f32& operator[](usize index) const { return data[index]; }
+	inline       f32& operator[](usize index)       { return data[index]; }
 };
 
+struct Matrix2
+{
+	union
+	{
+		struct { Vector2 x, y; };
+		Vector2 columns[2];
+		f32     data[4];
+	};
+
+	inline const Vector2& operator[](usize index) const { return columns[index]; }
+	inline       Vector2& operator[](usize index)       { return columns[index]; }
+};
+
+
+struct Matrix3
+{
+	union
+	{
+		struct { Vector3 x, y, z; };
+		Vector3 columns[3];
+		f32     data[9];
+	};
+
+	inline const Vector3& operator[](usize index) const { return columns[index]; }
+	inline       Vector3& operator[](usize index)       { return columns[index]; }
+};
 
 struct Matrix4
 {
 	union
 	{
 		struct { Vector4 x, y, z, w; };
-		Vector4 column[4];
+		Vector4 columns[4];
 		f32     data[16];
 	};
 
-	inline const Vector4& operator[](usize index) const { return column[index]; }
-	inline       Vector4& operator[](usize index)       { return column[index]; }
+	inline const Vector4& operator[](usize index) const { return columns[index]; }
+	inline       Vector4& operator[](usize index)       { return columns[index]; }
 };
-
 
 struct Euler_Angles
 {
@@ -1598,7 +1623,53 @@ Transform inverse(const Transform& t);
 Matrix4 transform_to_matrix4(const Transform& t);
 
 } // namespace math
+
+
+#if 0
+#ifdef GB_OPENGL_TOOLS
+
+enum class Shader_Type
+{
+	VERTEX,
+	FRAGMENT,
+};
+
+struct Shader_Program
+{
+#define GB_MAX_UNIFORM_COUNT 32
+	u32 handle;
+	b32 is_linked;
+	Allocator* allocator;
+
+	const char* base_directory;
+
+
+	u32         uniform_count;
+	const char* uniform_names[GB_MAX_UNIFORM_COUNT];
+	s32         uniform_locations[GB_MAX_UNIFORM_COUNT];
+};
+
+
+Shader_Program make_shader_program(gb::Allocator& allocator);
+void destroy_shader_program(Shader_Program* program);
+
+b32 attach_shader_from_file(Shader_Program* program, Shader_Type type, const char* filename);
+b32 attach_shader_from_memory(Shader_Program* program, Shader_Type type, const char* source, usize len);
+
+void use_shader_program(const Shader_Program* program);
+b32 is_shader_program_in_use(const Shader_Program* program);
+void stop_using_shader_program(const Shader_Program* program);
+
+b32 link_shader_program(Shader_Program* program);
+
+void bind_attrib_location(Shader_Program* program, const char* name);
+
+s32 get_uniform_location(Shader_Program* program, const char* name);
+
+#endif // GB_OPENGL_TOOLS
+#endif
 } // namespace gb
+
 #endif // GB_INCLUDE_GB_HPP
 
 ///
@@ -1667,16 +1738,6 @@ Matrix4 transform_to_matrix4(const Transform& t);
 /// Implemenation            ///
 ////////////////////////////////
 #ifdef GB_IMPLEMENTATION
-
-#include <float.h>
-#include <math.h>
-#include <stdarg.h>
-#include <time.h>
-
-#ifdef GB_SYSTEM_WINDOWS
-#include <windows.h>
-#endif
-
 namespace gb
 {
 ////////////////////////////////
@@ -1805,6 +1866,14 @@ Heap_Allocator::get_header_ptr(const void* ptr)
 	return (Heap_Allocator::Header*)data;
 }
 
+Arena_Allocator::Arena_Allocator(void* base, usize base_size)
+: base((u8*)base)
+, base_size((s64)base_size)
+, temp_count(0)
+, total_allocated_count(0)
+{
+}
+
 void* Arena_Allocator::alloc(usize size_init, usize align)
 {
 	usize size = size_init;
@@ -1821,7 +1890,9 @@ void* Arena_Allocator::alloc(usize size_init, usize align)
 	return ptr;
 }
 
-s64 Arena_Allocator::allocated_size(const void* ptr)
+void Arena_Allocator::dealloc(void*) {}
+
+s64 Arena_Allocator::allocated_size(const void*)
 {
 	return -1;
 }
@@ -2033,7 +2104,7 @@ void trim_string(String& str, const char* cut_set)
 	while (end_pos > start_pos && strchr(cut_set, *end_pos))
 		end_pos--;
 
-	String_Size len = (start_pos > end_pos) ? 0 : ((end_pos - start_pos)+1);
+	String_Size len = (String_Size)((start_pos > end_pos) ? 0 : ((end_pos - start_pos)+1));
 
 	if (str != start_pos)
 		memmove(str, start_pos, len);
@@ -2485,12 +2556,12 @@ void time_sleep(Time t)
 
 #endif
 
-Time seconds(f32 s)              { return {s * 1000000ll}; }
-Time milliseconds(s32 ms)        { return {ms * 1000l};    }
-Time microseconds(s64 us)        { return {us};            }
-f32 time_as_seconds(Time t)      { return t.microseconds / 1000000.0f; }
-s32 time_as_milliseconds(Time t) { return t.microseconds / 1000l;      }
-s64 time_as_microseconds(Time t) { return t.microseconds;              }
+Time seconds(f32 s)              { return {(s64)(s * 1000000ll)}; }
+Time milliseconds(s32 ms)        { return {(s64)(ms * 1000l)}; }
+Time microseconds(s64 us)        { return {us}; }
+f32 time_as_seconds(Time t)      { return (f32)(t.microseconds / 1000000.0f); }
+s32 time_as_milliseconds(Time t) { return (s32)(t.microseconds / 1000l); }
+s64 time_as_microseconds(Time t) { return t.microseconds; }
 
 bool operator==(Time left, Time right)
 {
@@ -2907,7 +2978,6 @@ bool operator!=(const Quaternion& a, const Quaternion& b)
 Quaternion operator-(const Quaternion& a)
 {
 	return {-a.x, -a.y, -a.z, -a.w};
-	return {-a.x, -a.y, -a.z, -a.w};
 }
 
 Quaternion operator+(const Quaternion& a, const Quaternion& b)
@@ -3159,7 +3229,7 @@ inline f32 round(f32 x)      { return ::roundf(x);   }
 
 inline s32 sign(s32 x) { return x >= 0 ? +1 : -1; }
 inline s64 sign(s64 x) { return x >= 0 ? +1 : -1; }
-inline f32 sign(f32 x) { return x >= 0 ? +1 : -1; }
+inline f32 sign(f32 x) { return x >= 0.0f ? +1.0f : -1.0f; }
 
 // Other
 inline f32 abs(f32 x)
