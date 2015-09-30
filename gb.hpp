@@ -1,7 +1,8 @@
-// gb.hpp - v0.07 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.08 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 //
 // Version History:
+//     0.08 - Matrix(2,3)
 //     0.07 - Bug Fixes
 //     0.06 - Os spec ideas
 //     0.05 - Transform Type and Quaternion Functions
@@ -71,7 +72,9 @@
 #endif
 
 ////////////////////////////////
+///                          ///
 /// System OS                ///
+///                          ///
 ////////////////////////////////
 #if defined(_WIN32) || defined(_WIN64)
 #define GB_SYSTEM_WINDOWS
@@ -97,7 +100,9 @@
 #endif
 
 ////////////////////////////////
+///                          ///
 /// Environment Bit Size     ///
+///                          ///
 ////////////////////////////////
 #if defined(_WIN32) || defined(_WIN64)
 	#if defined(_WIN64)
@@ -160,14 +165,18 @@ gb__assert_handler(bool condition, const char* condition_str,
 	}
 	fprintf(stderr, "\n");
 
-	abort();
+	abort(); // TODO(bill): is abort() portable and good?
 }
 
 
+#if !defined(GB_BASIC_TYPES_WITHOUT_NAMESPACE)
 namespace gb
 {
+#endif // GB_BASIC_TYPES_WITHOUT_NAMESPACE
 ////////////////////////////////
+///                          ///
 /// Types                    ///
+///                          ///
 ////////////////////////////////
 
 using u8  = uint8_t;
@@ -222,9 +231,17 @@ using uintptr = uintptr_t;
 
 using ptrdiff = ptrdiff_t;
 
+#if !defined(GB_BASIC_TYPES_WITHOUT_NAMESPACE)
+} // namespace gb
+#endif // GB_BASIC_TYPES_WITHOUT_NAMESPACE
 
+
+namespace gb
+{
 ////////////////////////////////
+///                          ///
 /// C++11 Move Semantics     ///
+///                          ///
 ////////////////////////////////
 template <typename T> struct Remove_Reference      { using Type = T; };
 template <typename T> struct Remove_Reference<T&>  { using Type = T; };
@@ -252,22 +269,24 @@ move(T&& t)
 }
 
 ////////////////////////////////
+///                          ///
 /// Defer                    ///
+///                          ///
 ////////////////////////////////
 namespace impl
 {
-template <typename Fn>
+template <typename Func>
 struct Defer
 {
-	Fn fn;
+	Func func;
 
-	Defer(Fn&& fn) : fn{forward<Fn>(fn)} {}
-	~Defer() { fn(); };
+	Defer(Func&& func) : func{gb::forward<Func>(func)} {}
+	~Defer() { func(); };
 };
 
-template <typename Fn>
-Defer<Fn>
-defer_fn(Fn&& fn) { return Defer<Fn>(forward<Fn>(fn)); }
+template <typename Func>
+Defer<Func>
+defer_func(Func&& func) { return Defer<Func>(gb::forward<Func>(func)); }
 } // namespace impl
 } // namespace gb
 
@@ -275,12 +294,14 @@ defer_fn(Fn&& fn) { return Defer<Fn>(forward<Fn>(fn)); }
 #define GB_DEFER_1(x, y) x##y
 #define GB_DEFER_2(x, y) GB_DEFER_1(x, y)
 #define GB_DEFER_3(x)    GB_DEFER_2(GB_DEFER_2(GB_DEFER_2(x, __COUNTER__), _), __LINE__)
-#define defer(code) auto GB_DEFER_3(_defer_) = gb::impl::defer_fn([&](){code;})
+#define defer(code) auto GB_DEFER_3(_defer_) = gb::impl::defer_func([&](){code;})
 
 namespace gb
 {
 ////////////////////////////////
+///                          ///
 /// Memory                   ///
+///                          ///
 ////////////////////////////////
 
 struct Mutex
@@ -420,7 +441,9 @@ make_temporary_arena_memory(Arena_Allocator& arena)
 }
 
 ////////////////////////////////
+///                          ///
 /// String                   ///
+///                          ///
 ////////////////////////////////
 using String = char*;
 using String_Size = u32;
@@ -458,7 +481,9 @@ void trim_string(String& str, const char* cut_set);
 
 
 ////////////////////////////////
+///                          ///
 /// Array                    ///
+///                          ///
 ////////////////////////////////
 
 template <typename T>
@@ -498,7 +523,9 @@ template <typename T> void set_array_allocation(Array<T>& a, usize allocation);
 template <typename T> void grow_array(Array<T>& a, usize min_allocation = 0);
 
 ////////////////////////////////
+///                          ///
 /// Hash Table               ///
+///                          ///
 ////////////////////////////////
 
 template <typename T>
@@ -562,7 +589,9 @@ template <typename T> void remove_entry_from_hash_table(Hash_Table<T>& h, const 
 template <typename T> void remove_all_from_hash_table(Hash_Table<T>& h, u64 key);
 
 ////////////////////////////////
+///                          ///
 /// Array                    ///
+///                          ///
 ////////////////////////////////
 template <typename T>
 inline Array<T>::Array(Allocator& a, usize count_)
@@ -693,7 +722,9 @@ grow_array(Array<T>& a, usize min_allocation)
 }
 
 ////////////////////////////////
+///                          ///
 /// Hash Table               ///
+///                          ///
 ////////////////////////////////
 namespace impl
 {
@@ -1042,7 +1073,9 @@ remove_all_from_hash_table(Hash_Table<T>& h, u64 key)
 }
 
 ////////////////////////////////
+///                          ///
 /// Hash                     ///
+///                          ///
 ////////////////////////////////
 
 namespace hash
@@ -1063,7 +1096,9 @@ u64 murmur64(const void* key, usize num_bytes, u64 seed = 0x9747b28c);
 } // namespace hash
 
 ////////////////////////////////
+///                          ///
 /// Os                       ///
+///                          ///
 ////////////////////////////////
 
 namespace os
@@ -1170,7 +1205,9 @@ void name_of_file(File& file, const char* buffer, usize buffer_len);
 
 
 ////////////////////////////////
+///                          ///
 /// Time                     ///
+///                          ///
 ////////////////////////////////
 
 struct Time
@@ -1226,7 +1263,9 @@ Time& operator%=(Time& left, Time right);
 
 
 ////////////////////////////////
+///                          ///
 /// Math Types               ///
+///                          ///
 ////////////////////////////////
 
 struct Vector2
@@ -1337,7 +1376,9 @@ struct Transform
 };
 
 ////////////////////////////////
+///                          ///
 /// Math Type Op Overloads   ///
+///                          ///
 ////////////////////////////////
 
 // Vector2 Operators
@@ -1423,6 +1464,42 @@ Quaternion operator/(const Quaternion& a, f32 s);
 
 Vector3 operator*(const Quaternion& a, const Vector3& v); // Rotate v by a
 
+// Matrix2 Operators
+bool operator==(const Matrix2& a, const Matrix2& b);
+bool operator!=(const Matrix2& a, const Matrix2& b);
+
+Matrix2 operator+(const Matrix2& a, const Matrix2& b);
+Matrix2 operator-(const Matrix2& a, const Matrix2& b);
+
+Matrix2 operator*(const Matrix2& a, const Matrix2& b);
+Vector2 operator*(const Matrix2& a, const Vector2& v);
+Matrix2 operator*(const Matrix2& a, f32 scalar);
+Matrix2 operator*(f32 scalar, const Matrix2& a);
+
+Matrix2 operator/(const Matrix2& a, f32 scalar);
+
+Matrix2& operator+=(Matrix2& a, const Matrix2& b);
+Matrix2& operator-=(Matrix2& a, const Matrix2& b);
+Matrix2& operator*=(Matrix2& a, const Matrix2& b);
+
+// Matrix3 Operators
+bool operator==(const Matrix3& a, const Matrix3& b);
+bool operator!=(const Matrix3& a, const Matrix3& b);
+
+Matrix3 operator+(const Matrix3& a, const Matrix3& b);
+Matrix3 operator-(const Matrix3& a, const Matrix3& b);
+
+Matrix3 operator*(const Matrix3& a, const Matrix3& b);
+Vector3 operator*(const Matrix3& a, const Vector3& v);
+Matrix3 operator*(const Matrix3& a, f32 scalar);
+Matrix3 operator*(f32 scalar, const Matrix3& a);
+
+Matrix3 operator/(const Matrix3& a, f32 scalar);
+
+Matrix3& operator+=(Matrix3& a, const Matrix3& b);
+Matrix3& operator-=(Matrix3& a, const Matrix3& b);
+Matrix3& operator*=(Matrix3& a, const Matrix3& b);
+
 // Matrix4 Operators
 bool operator==(const Matrix4& a, const Matrix4& b);
 bool operator!=(const Matrix4& a, const Matrix4& b);
@@ -1450,7 +1527,9 @@ Transform operator/(const Transform& ws, const Transform& ps);
 Transform& operator/=(Transform& ws, const Transform& ps);
 
 //////////////////////////////////
+///                            ///
 /// Math Functions & Constants ///
+///                            ///
 //////////////////////////////////
 extern const Vector2    VECTOR2_ZERO;
 extern const Vector3    VECTOR3_ZERO;
@@ -1591,13 +1670,22 @@ inline Quaternion squad(const Quaternion& p,
                         const Quaternion& b,
                         const Quaternion& q,
                         f32 t);
+// Matrix2 functions
+Matrix2 transpose(const Matrix2& m);
+f32 determinant(const Matrix2& m);
+Matrix2 inverse(const Matrix2& m);
+Matrix2 hadamard_product(const Matrix2& a, const Matrix2&b);
+
+// Matrix3 functions
+Matrix3 transpose(const Matrix3& m);
+f32 determinant(const Matrix3& m);
+Matrix3 inverse(const Matrix3& m);
+Matrix3 hadamard_product(const Matrix3& a, const Matrix3&b);
 
 // Matrix4 functions
 Matrix4 transpose(const Matrix4& m);
 f32 determinant(const Matrix4& m);
-
 Matrix4 inverse(const Matrix4& m);
-
 Matrix4 hadamard_product(const Matrix4& a, const Matrix4&b);
 
 Matrix4 quaternion_to_matrix4(const Quaternion& a);
@@ -1735,13 +1823,17 @@ s32 get_uniform_location(Shader_Program* program, const char* name);
 ///
 ///
 ////////////////////////////////
+///                          ///
 /// Implemenation            ///
+///                          ///
 ////////////////////////////////
 #ifdef GB_IMPLEMENTATION
 namespace gb
 {
 ////////////////////////////////
+///                          ///
 /// Memory                   ///
+///                          ///
 ////////////////////////////////
 
 Mutex::Mutex()
@@ -1925,7 +2017,9 @@ void Arena_Allocator::check()
 }
 
 ////////////////////////////////
+///                          ///
 /// String                   ///
+///                          ///
 ////////////////////////////////
 String make_string(Allocator& a, const char* str)
 {
@@ -2115,7 +2209,9 @@ void trim_string(String& str, const char* cut_set)
 
 
 ////////////////////////////////
+///                          ///
 /// Hash                     ///
+///                          ///
 ////////////////////////////////
 
 namespace hash
@@ -2478,7 +2574,9 @@ u64 murmur64(const void* key, usize num_bytes, u64 seed)
 
 
 ////////////////////////////////
+///                          ///
 /// Time                     ///
+///                          ///
 ////////////////////////////////
 #ifdef GB_SYSTEM_WINDOWS
 
@@ -2686,7 +2784,9 @@ Time& operator%=(Time& left, Time right)
 }
 
 ////////////////////////////////
+///                          ///
 /// Math                     ///
+///                          ///
 ////////////////////////////////
 
 const Vector2    VECTOR2_ZERO        = {0, 0};
@@ -3025,6 +3125,193 @@ Vector3 operator*(const Quaternion& a, const Vector3& v) // Rotate v by q
 	return (v + a.w * t + math::cross(a.xyz, t));
 }
 
+
+
+// Matrix2 Operators
+bool operator==(const Matrix2& a, const Matrix2& b)
+{
+	for (usize i = 0; i < 4; i++)
+	{
+		if (a[i] != b[i])
+			return false;
+	}
+	return true;
+}
+
+bool operator!=(const Matrix2& a, const Matrix2& b)
+{
+	return !operator==(a, b);
+}
+
+Matrix2 operator+(const Matrix2& a, const Matrix2& b)
+{
+	Matrix2 mat;
+	mat[0] = a[0] + b[0];
+	mat[1] = a[1] + b[1];
+	return mat;
+}
+
+Matrix2 operator-(const Matrix2& a, const Matrix2& b)
+{
+	Matrix2 mat;
+	mat[0] = a[0] - b[0];
+	mat[1] = a[1] - b[1];
+	return mat;
+}
+
+Matrix2 operator*(const Matrix2& a, const Matrix2& b)
+{
+	Matrix2 result;
+	result[0] = a[0] * b[0][0] + a[1] * b[0][1];
+	result[1] = a[0] * b[1][0] + a[1] * b[1][1];
+	return result;
+}
+
+Vector2 operator*(const Matrix2& a, const Vector2& v)
+{
+	Vector2 mul0 = a[0] * v[0];
+	Vector2 mul1 = a[1] * v[1];
+
+	return mul0 + mul1;
+}
+
+Matrix2 operator*(const Matrix2& a, f32 scalar)
+{
+	Matrix2 mat;
+	mat[0] = a[0] * scalar;
+	mat[1] = a[1] * scalar;
+	return mat;
+}
+
+Matrix2 operator*(f32 scalar, const Matrix2& a)
+{
+	Matrix2 mat;
+	mat[0] = a[0] * scalar;
+	mat[1] = a[1] * scalar;
+	return mat;
+}
+
+Matrix2 operator/(const Matrix2& a, f32 scalar)
+{
+	Matrix2 mat;
+	mat[0] = a[0] / scalar;
+	mat[1] = a[1] / scalar;
+	return mat;
+}
+
+Matrix2& operator+=(Matrix2& a, const Matrix2& b)
+{
+	return (a = a + b);
+}
+
+Matrix2& operator-=(Matrix2& a, const Matrix2& b)
+{
+	return (a = a - b);
+}
+
+Matrix2& operator*=(Matrix2& a, const Matrix2& b)
+{
+	return (a = a * b);
+}
+
+
+// Matrix3 Operators
+bool operator==(const Matrix3& a, const Matrix3& b)
+{
+	for (usize i = 0; i < 3; i++)
+	{
+		if (a[i] != b[i])
+			return false;
+	}
+	return true;
+}
+
+bool operator!=(const Matrix3& a, const Matrix3& b)
+{
+	return !operator==(a, b);
+}
+
+Matrix3 operator+(const Matrix3& a, const Matrix3& b)
+{
+	Matrix3 mat;
+	mat[0] = a[0] + b[0];
+	mat[1] = a[1] + b[1];
+	mat[2] = a[2] + b[2];
+	return mat;
+}
+
+Matrix3 operator-(const Matrix3& a, const Matrix3& b)
+{
+	Matrix3 mat;
+	mat[0] = a[0] - b[0];
+	mat[1] = a[1] - b[1];
+	mat[2] = a[2] - b[2];
+	return mat;
+}
+
+Matrix3 operator*(const Matrix3& a, const Matrix3& b)
+{
+	Matrix3 result;
+	result[0] = a[0] * b[0][0] + a[1] * b[0][1] + a[2] * b[0][2];
+	result[1] = a[0] * b[1][0] + a[1] * b[1][1] + a[2] * b[1][2];
+	result[2] = a[0] * b[2][0] + a[1] * b[2][1] + a[2] * b[2][2];
+	return result;
+}
+
+Vector3 operator*(const Matrix3& a, const Vector3& v)
+{
+	Vector3 mul0 = a[0] * v[0];
+	Vector3 mul1 = a[1] * v[1];
+	Vector3 mul2 = a[2] * v[2];
+
+	return mul0 + mul1 + mul2;
+}
+
+Matrix3 operator*(const Matrix3& a, f32 scalar)
+{
+	Matrix3 mat;
+	mat[0] = a[0] * scalar;
+	mat[1] = a[1] * scalar;
+	mat[2] = a[2] * scalar;
+	return mat;
+}
+
+Matrix3 operator*(f32 scalar, const Matrix3& a)
+{
+	Matrix3 mat;
+	mat[0] = a[0] * scalar;
+	mat[1] = a[1] * scalar;
+	mat[2] = a[2] * scalar;
+	return mat;
+}
+
+Matrix3 operator/(const Matrix3& a, f32 scalar)
+{
+	Matrix3 mat;
+	mat[0] = a[0] / scalar;
+	mat[1] = a[1] / scalar;
+	mat[2] = a[2] / scalar;
+	return mat;
+}
+
+Matrix3& operator+=(Matrix3& a, const Matrix3& b)
+{
+	return (a = a + b);
+}
+
+Matrix3& operator-=(Matrix3& a, const Matrix3& b)
+{
+	return (a = a - b);
+}
+
+Matrix3& operator*=(Matrix3& a, const Matrix3& b)
+{
+	return (a = a * b);
+}
+
+
+
+
 // Matrix4 Operators
 bool operator==(const Matrix4& a, const Matrix4& b)
 {
@@ -3044,16 +3331,20 @@ bool operator!=(const Matrix4& a, const Matrix4& b)
 Matrix4 operator+(const Matrix4& a, const Matrix4& b)
 {
 	Matrix4 mat;
-	for (usize i = 0; i < 4; i++)
-		mat[i] = a[i] + b[i];
+	mat[0] = a[0] + b[0];
+	mat[1] = a[1] + b[1];
+	mat[2] = a[2] + b[2];
+	mat[3] = a[3] + b[3];
 	return mat;
 }
 
 Matrix4 operator-(const Matrix4& a, const Matrix4& b)
 {
 	Matrix4 mat;
-	for (usize i = 0; i < 4; i++)
-		mat[i] = a[i] - b[i];
+	mat[0] = a[0] - b[0];
+	mat[1] = a[1] - b[1];
+	mat[2] = a[2] - b[2];
+	mat[3] = a[3] - b[3];
 	return mat;
 }
 
@@ -3074,33 +3365,36 @@ Vector4 operator*(const Matrix4& a, const Vector4& v)
 	Vector4 mul2 = a[2] * v[2];
 	Vector4 mul3 = a[3] * v[3];
 
-	Vector4 add0 = mul0 + mul1;
-	Vector4 add1 = mul2 + mul3;
-
-	return add0 + add1;
+	return mul0 + mul1 + mul2 + mul3;
 }
 
 Matrix4 operator*(const Matrix4& a, f32 scalar)
 {
 	Matrix4 mat;
-	for (usize i = 0; i < 4; i++)
-		mat[i] = a[i] * scalar;
+	mat[0] = a[0] * scalar;
+	mat[1] = a[1] * scalar;
+	mat[2] = a[2] * scalar;
+	mat[3] = a[3] * scalar;
 	return mat;
 }
 
 Matrix4 operator*(f32 scalar, const Matrix4& a)
 {
 	Matrix4 mat;
-	for (usize i = 0; i < 4; i++)
-		mat[i] = a[i] * scalar;
+	mat[0] = a[0] * scalar;
+	mat[1] = a[1] * scalar;
+	mat[2] = a[2] * scalar;
+	mat[3] = a[3] * scalar;
 	return mat;
 }
 
 Matrix4 operator/(const Matrix4& a, f32 scalar)
 {
 	Matrix4 mat;
-	for (usize i = 0; i < 4; i++)
-		mat[i] = a[i] / scalar;
+	mat[0] = a[0] / scalar;
+	mat[1] = a[1] / scalar;
+	mat[2] = a[2] / scalar;
+	mat[3] = a[3] / scalar;
 	return mat;
 }
 
@@ -3160,7 +3454,9 @@ Transform& operator/=(Transform& ws, const Transform& ps)
 
 
 ////////////////////////////////
+///                          ///
 /// Math Functions           ///
+///                          ///
 ////////////////////////////////
 
 
@@ -3528,6 +3824,100 @@ inline Quaternion squad(const Quaternion& p,
 	return slerp(slerp(p, q, t), slerp(a, b, t), 2.0f * t * (1.0f - t));
 }
 
+// Matrix2 functions
+Matrix2 transpose(const Matrix2& m)
+{
+	Matrix2 result;
+
+	for (usize i = 0; i < 2; i++)
+	{
+		for (usize j = 0; j < 2; j++)
+			result[i][j] = m[j][i];
+	}
+	return result;
+}
+
+f32 determinant(const Matrix2& m)
+{
+	return m[0][0] * m[1][1] - m[1][0] * m[0][1];
+}
+
+Matrix2 inverse(const Matrix2& m)
+{
+	f32 inv_det = 1.0f / (m[0][0] * m[1][1] - m[1][0] * m[0][1]);
+	Matrix2 result;
+
+	result[0][0] =  m[1][1] * inv_det;
+	result[0][1] = -m[0][1] * inv_det;
+	result[1][0] = -m[1][0] * inv_det;
+	result[1][1] =  m[0][0] * inv_det;
+
+	return result;
+}
+
+Matrix2 hadamard_product(const Matrix2& a, const Matrix2&b)
+{
+	Matrix2 result;
+
+	result[0] = a[0] * b[0];
+	result[1] = a[1] * b[1];
+
+	return result;
+}
+
+// Matrix3 functions
+Matrix3 transpose(const Matrix3& m)
+{
+	Matrix3 result;
+
+	for (usize i = 0; i < 3; i++)
+	{
+		for (usize j = 0; j < 3; j++)
+			result[i][j] = m[j][i];
+	}
+	return result;
+}
+
+f32 determinant(const Matrix3& m)
+{
+	return ( m[0][0] * (m[1][1] * m[2][2] - m[2][1] * m[1][2])
+	        -m[1][0] * (m[0][1] * m[2][2] - m[2][1] * m[0][2])
+	        +m[2][0] * (m[0][1] * m[1][2] - m[1][1] * m[0][2]));
+}
+
+Matrix3 inverse(const Matrix3& m)
+{
+	f32 inv_det = 1.0f / (
+		+ m[0][0] * (m[1][1] * m[2][2] - m[2][1] * m[1][2])
+		- m[1][0] * (m[0][1] * m[2][2] - m[2][1] * m[0][2])
+		+ m[2][0] * (m[0][1] * m[1][2] - m[1][1] * m[0][2]));
+
+	Matrix3 result;
+
+	result[0][0] = +(m[1][1] * m[2][2] - m[2][1] * m[1][2]) * inv_det;
+	result[1][0] = -(m[1][0] * m[2][2] - m[2][0] * m[1][2]) * inv_det;
+	result[2][0] = +(m[1][0] * m[2][1] - m[2][0] * m[1][1]) * inv_det;
+	result[0][1] = -(m[0][1] * m[2][2] - m[2][1] * m[0][2]) * inv_det;
+	result[1][1] = +(m[0][0] * m[2][2] - m[2][0] * m[0][2]) * inv_det;
+	result[2][1] = -(m[0][0] * m[2][1] - m[2][0] * m[0][1]) * inv_det;
+	result[0][2] = +(m[0][1] * m[1][2] - m[1][1] * m[0][2]) * inv_det;
+	result[1][2] = -(m[0][0] * m[1][2] - m[1][0] * m[0][2]) * inv_det;
+	result[2][2] = +(m[0][0] * m[1][1] - m[1][0] * m[0][1]) * inv_det;
+
+	return result;
+}
+
+Matrix3 hadamard_product(const Matrix3& a, const Matrix3&b)
+{
+	Matrix3 result;
+
+	result[0] = a[0] * b[0];
+	result[1] = a[1] * b[1];
+	result[2] = a[2] * b[2];
+
+	return result;
+}
+
 
 // Matrix4 functions
 Matrix4 transpose(const Matrix4& m)
@@ -3652,8 +4042,10 @@ Matrix4 hadamard_product(const Matrix4& a, const Matrix4& b)
 {
 	Matrix4 result;
 
-	for (usize i = 0; i < 4; i++)
-		result[i] = a[i] * b[i];
+	result[0] = a[0] * b[0];
+	result[1] = a[1] * b[1];
+	result[2] = a[2] * b[2];
+	result[3] = a[3] * b[3];
 
 	return result;
 }
