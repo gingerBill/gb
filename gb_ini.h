@@ -224,6 +224,7 @@ enum
 	GB_INI_ERROR_COUNT,
 };
 
+typedef struct gb_Ini_Error gb_Ini_Error;
 struct gb_Ini_Error
 {
 	int    type;
@@ -242,8 +243,8 @@ typedef GB_INI_HANDLER(gb_Ini_Handler);
 
 extern const char* GB_ERROR_STRINGS[GB_INI_ERROR_COUNT];
 
-struct gb_Ini_Error gb_ini_parse(const char* filename, gb_Ini_Handler* handler_func, void* data);
-struct gb_Ini_Error gb_ini_parse_file(FILE* file, gb_Ini_Handler* handler_func, void* data);
+gb_Ini_Error gb_ini_parse(const char* filename, gb_Ini_Handler* handler_func, void* data);
+gb_Ini_Error gb_ini_parse_file(FILE* file, gb_Ini_Handler* handler_func, void* data);
 
 gb_inline const char*
 gb_ini_error_string(const struct gb_Ini_Error err)

@@ -1,7 +1,8 @@
-// gb.hpp - v0.08 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.09 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 //
 // Version History:
+//     0.09 - Bug Fixes
 //     0.08 - Matrix(2,3)
 //     0.07 - Bug Fixes
 //     0.06 - Os spec ideas
@@ -137,6 +138,7 @@
 #include <windows.h>
 #else
 #include <pthread.h>
+#include <sys/time.h>
 #endif
 
 #ifndef NDEBUG
@@ -153,7 +155,7 @@ gb__assert_handler(bool condition, const char* condition_str,
 	if (condition)
 		return;
 
-	fprintf(stderr, "ASSERT! %s(%d): %s", filename, line, condition_str);
+	fprintf(stderr, "ASSERT! %s(%d): %s", filename, (int)line, condition_str);
 	if (error_text)
 	{
 		fprintf(stderr, " - ");
@@ -359,7 +361,7 @@ inline void* alloc(Allocator& a, usize size, usize align = GB_DEFAULT_ALIGNMENT)
 inline void dealloc(Allocator& a, void* ptr) { return a.dealloc(ptr); }
 
 template <typename T>
-inline T* alloc_struct(Allocator& a) { return static_cast<T*>a.alloc(sizeof(T), alignof(T)); }
+inline T* alloc_struct(Allocator& a) { return static_cast<T*>(a.alloc(sizeof(T), alignof(T))); }
 
 
 template <typename T>
@@ -755,7 +757,7 @@ erase_from_hash_table(Hash_Table<T>& h, const Find_Result& fr)
 	if (fr.data_prev < 0)
 		h.hashes[fr.hash_index] = h.data[fr.data_index].next;
 	else
-		h.data[fr.data_prev].next = g.data[fr.data_index].next;
+		h.data[fr.data_prev].next = h.data[fr.data_index].next;
 
 	pop_back_array(h.data); // updated array count
 
@@ -803,22 +805,23 @@ Find_Result
 find_result_in_hash_table(const Hash_Table<T>& h, const typename Hash_Table<T>::Entry* e)
 {
 	Find_Result fr;
-	fr.hash_index = -1;
-	fr.data_prev  = -1;
-	fr.data_index = -1;
+	// TODO(bill):
+	// fr.hash_index = -1;
+	// fr.data_prev  = -1;
+	// fr.data_index = -1;
 
-	if (h.hashes.count == 0 || !e)
-		return fr;
+	// if (h.hashes.count == 0 || !e)
+	// 	return fr;
 
-	fr.hash_index = key % h.hashes.count;
-	fr.data_index = h.hashes[fr.hash_index];
-	while (fr.data_index >= 0)
-	{
-		if (&h.data[fr.data_index] == e)
-			return fr;
-		fr.data_prev  = fr.data_index;
-		fr.data_index = h.data[fr.data_index].next;
-	}
+	// fr.hash_index = key % h.hashes.count;
+	// fr.data_index = h.hashes[fr.hash_index];
+	// while (fr.data_index >= 0)
+	// {
+	// 	if (&h.data[fr.data_index] == e)
+	// 		return fr;
+	// 	fr.data_prev  = fr.data_index;
+	// 	fr.data_index = h.data[fr.data_index].next;
+	// }
 
 	return fr;
 }
@@ -919,7 +922,7 @@ template <typename T>
 inline bool
 hash_table_has(const Hash_Table<T>& h, u64 key)
 {
-	return imple::find_entry_or_fail_in_hash_table(h, key) >= 0;
+	return impl::find_entry_or_fail_in_hash_table(h, key) >= 0;
 }
 
 template <typename T>
@@ -1004,7 +1007,7 @@ multiple_count_from_hash_table(const Hash_Table<T>& h, u64 key)
 	auto e = find_first_in_hash_table(h, key);
 	while (e)
 	{
-		count++
+		count++;
 		e = find_next_in_hash_table(h, e);
 	}
 
@@ -1016,7 +1019,7 @@ template <typename T>
 inline const typename Hash_Table<T>::Entry*
 find_first_in_hash_table(const Hash_Table<T>& h, u64 key)
 {
-	const s64 index = impl::find_first_in_hash_table(h, key);
+	const s64 index = find_first_in_hash_table(h, key);
 	if (index < 0)
 		return nullptr;
 	return &h.data[index];
@@ -1059,7 +1062,7 @@ template <typename T>
 inline void
 remove_entry_from_hash_table(Hash_Table<T>& h, const typename Hash_Table<T>::Entry* e)
 {
-	const auto fr = impl:;find_result_in_hash_table(h, e);
+	const auto fr = impl::find_result_in_hash_table(h, e);
 	if (fr.data_index >= 0)
 		impl::erase_from_hash_table(h, fr);
 }
@@ -2634,10 +2637,10 @@ void time_sleep(Time t)
 #else
 Time time_now()
 {
-	struct timespec spec;
-	clock_gettime(CLOCK_REALTIME, &spec);
+	struct timeval t;
+	gettimeofday(&t, nullptr);
 
-	return milliseconds((spec.tv_sec * 1000000ll) + (spec.tv_nsec * 1000ll));
+	return microseconds((t.tv_sec * 1000000ll) + (t.tv_usec * 1ll));
 }
 
 void time_sleep(Time t)
@@ -3623,8 +3626,10 @@ f32 magnitude(const Vector2& a)
 
 Vector2 normalize(const Vector2& a)
 {
-	f32 m = 1.0f / magnitude(a);
-	return a * m;
+	f32 m = magnitude(a);
+	if (m > 0)
+		return a * (1.0f / m);
+	return {};
 }
 
 Vector2 hadamard_product(const Vector2& a, const Vector2& b)
@@ -3654,8 +3659,10 @@ f32 magnitude(const Vector3& a)
 
 Vector3 normalize(const Vector3& a)
 {
-	f32 m = 1.0f / magnitude(a);
-	return a * m;
+	f32 m = magnitude(a);
+	if (m > 0)
+		return a * (1.0f / m);
+	return {};
 }
 
 Vector3 hadamard_product(const Vector3& a, const Vector3& b)
@@ -3676,8 +3683,10 @@ f32 magnitude(const Vector4& a)
 
 Vector4 normalize(const Vector4& a)
 {
-	f32 m = 1.0f / magnitude(a);
-	return a * m;
+	f32 m = magnitude(a);
+	if (m > 0)
+		return a * (1.0f / m);
+	return {};
 }
 
 Vector4 hadamard_product(const Vector4& a, const Vector4& b)
@@ -3706,8 +3715,10 @@ f32 magnitude(const Quaternion& a)
 
 Quaternion normalize(const Quaternion& a)
 {
-	f32 m = 1.0f / magnitude(a);
-	return a * m;
+	f32 m = magnitude(a);
+	if (m > 0)
+		return a * (1.0f / m);
+	return {};
 }
 
 Quaternion conjugate(const Quaternion& a)
