@@ -78,9 +78,6 @@
 ////////////////////////////////
 #if defined(_WIN32) || defined(_WIN64)
 #define GB_SYSTEM_WINDOWS
-#define NOMINMAX
-#define VC_EXTRALEAN
-#define WIN32_EXTRA_LEAN
 
 #elif defined(__APPLE__) && defined(__MACH__)
 #define GB_SYSTEM_OSX
@@ -134,7 +131,14 @@
 #include <time.h>
 
 #ifdef GB_SYSTEM_WINDOWS
+#define NOMINMAX
+#define VC_EXTRALEAN
+#define WIN32_EXTRA_LEAN
 #include <windows.h>
+#undef NOMINMAX
+#undef VC_EXTRALEAN
+#undef WIN32_EXTRA_LEAN
+#include <intrin.h>
 #else
 #include <pthread.h>
 #endif
@@ -231,6 +235,30 @@ using uintptr = uintptr_t;
 
 using ptrdiff = ptrdiff_t;
 
+#ifdef GB_BASIC_TYPES_WITHOUT_NAMESPACE
+#define S8_MIN (-0x7f - 1)
+#define S8_MAX 0x7f
+#define U8_MIN 0u
+#define U8_MAX 0xffu
+
+#define S16_MIN (-0x7fff - 1)
+#define S16_MAX 0x7fff
+#define U16_MIN 0u
+#define U16_MAX 0xffffu
+
+#define S32_MIN (-0x7fffffff - 1)
+#define S32_MAX 0x7fffffff
+#define U32_MIN 0u
+#define U32_MAX 0xffffffffu
+
+#define S64_MIN (-0x7fffffffffffffffll - 1)
+#define S64_MAX 0x7fffffffffffffffll
+#define U64_MIN 0ull
+#define U64_MAX 0xffffffffffffffffull
+#else
+
+#endif
+
 #if !defined(GB_BASIC_TYPES_WITHOUT_NAMESPACE)
 } // namespace gb
 #endif // GB_BASIC_TYPES_WITHOUT_NAMESPACE
@@ -304,6 +332,7 @@ namespace gb
 ///                          ///
 ////////////////////////////////
 
+// Mutex
 struct Mutex
 {
 #ifdef GB_SYSTEM_WINDOWS
@@ -320,10 +349,36 @@ void lock_mutex(Mutex& mutex);
 bool try_lock_mutex(Mutex& mutex);
 void unlock_mutex(Mutex& mutex);
 
+// Atomics
+struct Atomic32   { u32   nonatomic; };
+struct Atomic64   { u64   nonatomic; };
+struct Atomic_Ptr { void* nonatomic; };
+
+namespace atomic
+{
+u32 load_32_relaxed(const Atomic_Ptr* object);
+void store_32_relaxed(Atomic_Ptr* object, u32 value);
+u32 compare_exchange_strong_32_relaxed(Atomic_Ptr* object, u32 expected, u32 desired);
+u32 exchanged_32_relaxed(Atomic_Ptr* object, u32 desired);
+u32 fetch_add_32_relaxed(Atomic_Ptr* object, s32 operand);
+u32 fetch_and_32_relaxed(Atomic_Ptr* object, u32 operand);
+u32 fetch_or_32_relaxed(Atomic_Ptr* object, u32 operand);
+
+u64 load_64_relaxed(const Atomic_Ptr* object);
+void store_64_relaxed(Atomic_Ptr* object, u64 value);
+u64 compare_exchange_strong_64_relaxed(Atomic_Ptr* object, u64 expected, u64 desired);
+u64 exchanged_64_relaxed(Atomic_Ptr* object, u64 desired);
+u64 fetch_add_64_relaxed(Atomic_Ptr* object, s64 operand);
+u64 fetch_and_64_relaxed(Atomic_Ptr* object, u64 operand);
+u64 fetch_or_64_relaxed(Atomic_Ptr* object, u64 operand);
+} // namespace atomic
+
 #ifndef GB_DEFAULT_ALIGNMENT
 #define GB_DEFAULT_ALIGNMENT 4
 #endif
 
+namespace memory
+{
 inline void*
 align_forward(void* ptr, usize align)
 {
@@ -337,6 +392,7 @@ align_forward(void* ptr, usize align)
 
 	return (void*)p;
 }
+} // namespace memory
 
 struct Allocator
 {
@@ -396,23 +452,32 @@ struct Heap_Allocator : Allocator
 
 struct Arena_Allocator : Allocator
 {
-	u8* base                  = nullptr;
-	s64 base_size             = 0;
-	s64 total_allocated_count = 0;
-	s64 temp_count            = 0;
+	Allocator* backing;
+	void*      physical_start;
+	s64        total_size;
+	s64        offset;
+	s64        total_allocated_count;
+	s64        temp_count;
 
-	Arena_Allocator() = default;
-	explicit Arena_Allocator(void* base, usize base_size);
+	explicit Arena_Allocator(Allocator& backing, usize size);
+	explicit Arena_Allocator(void* start, usize size);
+	virtual ~Arena_Allocator();
 
 	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT);
 	virtual void  dealloc(void* ptr);
 	virtual s64 allocated_size(const void* ptr);
 	virtual s64 total_allocated();
-
-	virtual usize get_alignment_offset(usize align = GB_DEFAULT_ALIGNMENT);
-	virtual usize get_remaining_space(usize align = GB_DEFAULT_ALIGNMENT);
-	void check();
 };
+
+inline void
+clear_arena(Arena_Allocator& arena)
+{
+	GB_ASSERT(arena.temp_count == 0,
+	          "%ld Temporary_Arena_Memory have not be cleared", arena.temp_count);
+
+	arena.offset = 0;
+	arena.total_allocated_count = 0;
+}
 
 struct Temporary_Arena_Memory
 {
@@ -479,6 +544,7 @@ bool strings_are_equal(const String lhs, const String rhs);
 
 void trim_string(String& str, const char* cut_set);
 
+// TODO(bill): string libraries
 
 ////////////////////////////////
 ///                          ///
@@ -1221,6 +1287,7 @@ void time_sleep(Time time);
 Time seconds(f32 s);
 Time milliseconds(s32 ms);
 Time microseconds(s64 us);
+
 f32 time_as_seconds(Time t);
 s32 time_as_milliseconds(Time t);
 s64 time_as_microseconds(Time t);
@@ -1373,6 +1440,24 @@ struct Transform
 	Vector3    position    = Vector3{0, 0, 0};
 	Quaternion orientation = Quaternion{0, 0, 0, 1};
 	Vector3    scale       = Vector3{0, 0, 0};
+};
+
+struct Aabb
+{
+	Vector3 center;
+	Vector3 half_size;
+};
+
+struct Sphere
+{
+	Vector3 center;
+	f32     radius;
+};
+
+struct Plane
+{
+	Vector3 normal;
+	f32     distance; // negative distance to origin
 };
 
 ////////////////////////////////
@@ -1549,6 +1634,7 @@ extern const f32 PI;
 extern const f32 TAU;
 extern const f32 SQRT_2;
 extern const f32 SQRT_3;
+extern const f32 FLOAT_PRECISION;
 
 // Power
 f32 sqrt(f32 x);
@@ -1608,7 +1694,16 @@ s32 clamp(s32 x, s32 min, s32 max);
 s64 clamp(s64 x, s64 min, s64 max);
 f32 clamp(f32 x, f32 min, f32 max);
 
-f32 lerp(f32 x, f32 y, f32 t);
+template <typename T>
+T lerp(const T& x, const T& y, const T& t);
+
+bool equals(f32 a, f32 b, f32 precision = FLOAT_PRECISION);
+
+template <typename T>
+void swap(T& a, T& b);
+
+template <typename T, usize N>
+void swap(T (& a)[N], T (& b)[N]);
 
 // Vector2 functions
 f32 dot(const Vector2& a, const Vector2& b);
@@ -1617,7 +1712,7 @@ f32 cross(const Vector2& a, const Vector2& b);
 f32 magnitude(const Vector2& a);
 Vector2 normalize(const Vector2& a);
 
-Vector2 hadamard_product(const Vector2& a, const Vector2& b);
+Vector2 hadamard(const Vector2& a, const Vector2& b);
 
 // Vector3 functions
 f32 dot(const Vector3& a, const Vector3& b);
@@ -1626,7 +1721,7 @@ Vector3 cross(const Vector3& a, const Vector3& b);
 f32 magnitude(const Vector3& a);
 Vector3 normalize(const Vector3& a);
 
-Vector3 hadamard_product(const Vector3& a, const Vector3& b);
+Vector3 hadamard(const Vector3& a, const Vector3& b);
 
 // Vector4 functions
 f32 dot(const Vector4& a, const Vector4& b);
@@ -1634,7 +1729,7 @@ f32 dot(const Vector4& a, const Vector4& b);
 f32 magnitude(const Vector4& a);
 Vector4 normalize(const Vector4& a);
 
-Vector4 hadamard_product(const Vector4& a, const Vector4& b);
+Vector4 hadamard(const Vector4& a, const Vector4& b);
 
 // Quaternion functions
 f32 dot(const Quaternion& a, const Quaternion& b);
@@ -1674,19 +1769,19 @@ inline Quaternion squad(const Quaternion& p,
 Matrix2 transpose(const Matrix2& m);
 f32 determinant(const Matrix2& m);
 Matrix2 inverse(const Matrix2& m);
-Matrix2 hadamard_product(const Matrix2& a, const Matrix2&b);
+Matrix2 hadamard(const Matrix2& a, const Matrix2&b);
 
 // Matrix3 functions
 Matrix3 transpose(const Matrix3& m);
 f32 determinant(const Matrix3& m);
 Matrix3 inverse(const Matrix3& m);
-Matrix3 hadamard_product(const Matrix3& a, const Matrix3&b);
+Matrix3 hadamard(const Matrix3& a, const Matrix3&b);
 
 // Matrix4 functions
 Matrix4 transpose(const Matrix4& m);
 f32 determinant(const Matrix4& m);
 Matrix4 inverse(const Matrix4& m);
-Matrix4 hadamard_product(const Matrix4& a, const Matrix4&b);
+Matrix4 hadamard(const Matrix4& a, const Matrix4&b);
 
 Matrix4 quaternion_to_matrix4(const Quaternion& a);
 Quaternion matrix4_to_quaternion(const Matrix4& m);
@@ -1709,6 +1804,21 @@ look_at_quaternion(const Vector3& eye, const Vector3& center, const Vector3& up 
 Vector3 transform_point(const Transform& transform, const Vector3& point);
 Transform inverse(const Transform& t);
 Matrix4 transform_to_matrix4(const Transform& t);
+
+// Aabb Functions
+f32 aabb_volume(const Aabb& aabb);
+bool aabb_contains_point(const Aabb& aabb, const Vector3& point);
+Sphere aabb_to_sphere(const Aabb& aabb);
+
+// Sphere Functions
+f32 sphere_volume(const Sphere& s);
+bool sphere_contains_point(const Sphere& s, const Vector3& point);
+
+// Plane Functions
+f32 ray_plane_intersection(const Vector3& from, const Vector3& dir, const Plane& p);
+f32 ray_sphere_intersection(const Vector3& from, const Vector3& dir, const Sphere& s);
+
+bool plane_3_intersection(const Plane& p1, const Plane& p2, const Plane& p3, Vector3& ip);
 
 } // namespace math
 
@@ -1882,6 +1992,171 @@ void unlock_mutex(Mutex& mutex)
 #endif
 }
 
+// Atomics
+namespace atomic
+{
+#if defined(_MSC_VER)
+inline u32
+load_32_relaxed(const Atomic_Ptr* object)
+{
+	return *(u32*)object->nonatomic;
+}
+
+inline void
+store_32_relaxed(Atomic_Ptr* object, u32 value)
+{
+	*(u32*)object->nonatomic = value;
+}
+
+inline u32
+compare_exchange_strong_32_relaxed(Atomic_Ptr* object, u32 expected, u32 desired)
+{
+	return _InterlockedCompareExchange((long*)object, desired, expected);
+}
+
+inline u32
+exchanged_32_relaxed(Atomic_Ptr* object, u32 desired)
+{
+	return _InterlockedExchange((long*)object, desired);
+}
+
+inline u32
+fetch_add_32_relaxed(Atomic_Ptr* object, s32 operand)
+{
+	return _InterlockedExchangeAdd((long*)object, operand);
+}
+
+inline u32
+fetch_and_32_relaxed(Atomic_Ptr* object, u32 operand)
+{
+	return _InterlockedAnd((long*)object, operand);
+}
+
+inline u32
+fetch_or_32_relaxed(Atomic_Ptr* object, u32 operand)
+{
+	return _InterlockedOr((long*)object, operand);
+}
+
+inline u64
+load_64_relaxed(const Atomic_Ptr* object)
+{
+#ifdef GB_ARCH_64_BIT
+	return *(u64*)object->nonatomic;
+#else
+	// NOTE(bill): The most compatible way to get an atomic 64-bit load on x86 is with cmpxchg8b
+	u64 result;
+	__asm
+	{
+		mov esi, object;
+		mov ebx, eax;
+		mov ecx, edx;
+        lock cmpxchg8b [esi];
+        mov dword ptr result, eax;
+        mov dword ptr result[4], edx;
+	}
+	return result;
+#endif
+}
+
+inline void
+store_64_relaxed(Atomic_Ptr* object, u64 value)
+{
+#ifdef GB_ARCH_64_BIT
+	*(u64*)object->nonatomic = value;
+#else
+	// NOTE(bill): The most compatible way to get an atomic 64-bit load on x86 is with cmpxchg8b
+	__asm
+	{
+		mov esi, object;
+		mov ebx, dword ptr value;
+		mov ecx, dword ptr value[4];
+	retry:
+		cmpxchg8b [esi];
+		jne retry;
+	}
+#endif
+}
+
+inline u64
+compare_exchange_strong_64_relaxed(Atomic_Ptr* object, u64 expected, u64 desired)
+{
+	_InterlockedCompareExchange64((LONGLONG*)object, desired, expected);
+}
+
+inline u64
+exchanged_64_relaxed(Atomic_Ptr* object, u64 desired)
+{
+#ifdef GB_ARCH_64_BIT
+	return _InterlockedExchange64((LONGLONG*)object, desired);
+#else
+	u64 expected = object->nonatomic;
+	while (true)
+	{
+		u64 original = _InterlockedCompareExchange64((LONGLONG*)object, desired, expected);
+		if (original == expected)
+			return original;
+		expected = original;
+	}
+#endif
+}
+
+inline u64
+fetch_add_64_relaxed(Atomic_Ptr* object, s64 operand)
+{
+#ifdef GB_ARCH_64_BIT
+	return _InterlockedExchangeAdd64((LONGLONG*)object, operand);
+#else
+	u64 expected = object->nonatomic;
+	while (true)
+	{
+		u64 original = _InterlockedExchange64((LONGLONG*)object, expected + operand, expected);
+		if (original == expected)
+			return original;
+		expected = original;
+	}
+#endif
+}
+
+inline u64
+fetch_and_64_relaxed(Atomic_Ptr* object, u64 operand)
+{
+#ifdef GB_ARCH_64_BIT
+	return _InterlockedAnd64((LONGLONG*)object, operand);
+#else
+	u64 expected = object->nonatomic;
+	while (true)
+	{
+		u64 original = _InterlockedCompareExchange64((LONGLONG*)object, expected & operand, expected);
+		if (original == expected)
+			return original;
+		expected = original;
+	}
+#endif
+}
+
+inline u64
+fetch_or_64_relaxed(Atomic_Ptr* object, u64 operand)
+{
+#ifdef GB_ARCH_64_BIT
+	return _InterlockedAnd64((LONGLONG*)object, operand);
+#else
+	u64 expected = object->nonatomic;
+	while (true)
+	{
+		u64 original = _InterlockedCompareExchange64((LONGLONG*)object, expected | operand, expected);
+		if (original == expected)
+			return original;
+		expected = original;
+	}
+#endif
+}
+
+#else
+#error TODO(bill): Implement atomics for this platform
+#endif
+} // namespace atomic
+
 
 Heap_Allocator::~Heap_Allocator()
 {
@@ -1900,7 +2175,7 @@ Heap_Allocator::alloc(usize size, usize align)
 	Header* h = (Header*)::malloc(total);
 	h->size   = total;
 
-	void* data = align_forward(h + 1, align);
+	void* data = memory::align_forward(h + 1, align);
 	{ // Pad header
 		usize* ptr = (usize*)(h+1);
 
@@ -1958,26 +2233,48 @@ Heap_Allocator::get_header_ptr(const void* ptr)
 	return (Heap_Allocator::Header*)data;
 }
 
-Arena_Allocator::Arena_Allocator(void* base, usize base_size)
-: base((u8*)base)
-, base_size((s64)base_size)
+
+Arena_Allocator::Arena_Allocator(Allocator& backing_, usize size)
+: backing(&backing_)
+, physical_start(nullptr)
+, total_size((s64)size)
+, offset(0)
+, temp_count(0)
+, total_allocated_count(0)
+{
+	physical_start = backing->alloc(size);
+}
+
+Arena_Allocator::Arena_Allocator(void* start, usize size)
+: backing(nullptr)
+, physical_start(start)
+, total_size((s64)size)
+, offset(0)
 , temp_count(0)
 , total_allocated_count(0)
 {
 }
 
-void* Arena_Allocator::alloc(usize size_init, usize align)
+Arena_Allocator::~Arena_Allocator()
 {
-	usize size = size_init;
+	if (backing)
+		backing->dealloc(physical_start);
 
-	usize alignment_offset = get_alignment_offset(align);
-	size += alignment_offset;
+	GB_ASSERT(offset == 0,
+	          "Memory leak of %ld bytes, maybe you forgot to call clear_arena()?", offset);
+}
 
-	GB_ASSERT(size >= size_init);
-	GB_ASSERT(total_allocated_count + size <= (usize)base_size);
+void* Arena_Allocator::alloc(usize size, usize align)
+{
+	s64 actual_size = size + align;
 
-	void* ptr = base + total_allocated_count + alignment_offset;
-	total_allocated_count += size;
+	if (offset + actual_size > total_size)
+		return nullptr;
+
+	void* ptr = memory::align_forward((u8*)physical_start + offset, align);
+
+	offset += actual_size;
+	total_allocated_count++;
 
 	return ptr;
 }
@@ -1992,28 +2289,6 @@ s64 Arena_Allocator::allocated_size(const void*)
 s64 Arena_Allocator::total_allocated()
 {
 	return total_allocated_count;
-}
-
-usize Arena_Allocator::get_alignment_offset(usize align)
-{
-	usize offset = 0;
-
-	usize result_pointer = (usize)((uintptr)base + total_allocated_count);
-	usize alignment_mask = align - 1;
-	if (result_pointer & alignment_mask)
-		offset = align - (result_pointer & alignment_mask);
-
-	return offset;
-}
-
-usize Arena_Allocator::get_remaining_space(usize align)
-{
-	return base_size - (total_allocated_count + get_alignment_offset(align));
-}
-
-void Arena_Allocator::check()
-{
-	GB_ASSERT(temp_count == 0);
 }
 
 ////////////////////////////////
@@ -2634,10 +2909,15 @@ void time_sleep(Time t)
 #else
 Time time_now()
 {
+#ifdef GB_SYSTEM_OSX
+	s64 t = (s64)mach_absolute_time();
+	return microseconds(t);
+#else
 	struct timespec spec;
 	clock_gettime(CLOCK_REALTIME, &spec);
 
 	return milliseconds((spec.tv_sec * 1000000ll) + (spec.tv_nsec * 1000ll));
+#endif
 }
 
 void time_sleep(Time t)
@@ -3462,16 +3742,17 @@ Transform& operator/=(Transform& ws, const Transform& ps)
 
 namespace math
 {
-const f32 EPSILON    = FLT_EPSILON;
-const f32 ZERO       = 0.0f;
-const f32 ONE        = 1.0f;
-const f32 THIRD      = 0.33333333f;
-const f32 TWO_THIRDS = 0.66666667f;
-const f32 E          = 2.718281828f;
-const f32 PI         = 3.141592654f;
-const f32 TAU        = 6.283185307f;
-const f32 SQRT_2     = 1.414213562f;
-const f32 SQRT_3     = 1.732050808f;
+const f32 EPSILON         = FLT_EPSILON;
+const f32 ZERO            = 0.0f;
+const f32 ONE             = 1.0f;
+const f32 THIRD           = 0.33333333f;
+const f32 TWO_THIRDS      = 0.66666667f;
+const f32 E               = 2.718281828f;
+const f32 PI              = 3.141592654f;
+const f32 TAU             = 6.283185307f;
+const f32 SQRT_2          = 1.414213562f;
+const f32 SQRT_3          = 1.732050808f;
+const f32 FLOAT_PRECISION = 1.0e-7f;
 
 // Power
 inline f32 sqrt(f32 x)       { return ::sqrtf(x);        }
@@ -3597,48 +3878,69 @@ inline f32 clamp(f32 x, f32 min, f32 max)
 	return x;
 }
 
-inline f32 lerp(f32 x, f32 y, f32 t)
+template <typename T>
+inline T
+lerp(const T& x, const T& y, const T& t)
 {
-	return x + (y-x)*t;
+	return x + (y - x) * t;
 }
 
+inline bool
+equals(f32 a, f32 b, f32 precision)
+{
+	return ((b <= (a + precision)) && (b >= (a - precision)));
+}
 
+template <typename T>
+inline void
+swap(T& a, T& b)
+{
+	T c = gb::move(a);
+	a   = gb::move(b);
+	b   = gb::move(c);
+}
 
+template <typename T, usize N>
+inline void swap(T (& a)[N], T (& b)[N])
+{
+	for (usize i = 0; i < N; i++)
+		math::swap(a[i], b[i]);
+}
 
 // Vector2 functions
-f32 dot(const Vector2& a, const Vector2& b)
+inline f32 dot(const Vector2& a, const Vector2& b)
 {
 	return a.x * b.x + a.y * b.y;
 }
 
-f32 cross(const Vector2& a, const Vector2& b)
+inline f32 cross(const Vector2& a, const Vector2& b)
 {
 	return a.x * b.y - a.y * b.x;
 }
 
-f32 magnitude(const Vector2& a)
+inline f32 magnitude(const Vector2& a)
 {
 	return math::sqrt(math::dot(a, a));
 }
 
-Vector2 normalize(const Vector2& a)
+inline Vector2 normalize(const Vector2& a)
 {
 	f32 m = 1.0f / magnitude(a);
 	return a * m;
 }
 
-Vector2 hadamard_product(const Vector2& a, const Vector2& b)
+inline Vector2 hadamard(const Vector2& a, const Vector2& b)
 {
 	return {a.x * b.x, a.y * b.y};
 }
 
 // Vector3 functions
-f32 dot(const Vector3& a, const Vector3& b)
+inline f32 dot(const Vector3& a, const Vector3& b)
 {
 	return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
-Vector3 cross(const Vector3& a, const Vector3& b)
+inline Vector3 cross(const Vector3& a, const Vector3& b)
 {
 	return {
 	    a.y * b.z - b.y * a.z, // x
@@ -3647,51 +3949,51 @@ Vector3 cross(const Vector3& a, const Vector3& b)
 	};
 }
 
-f32 magnitude(const Vector3& a)
+inline f32 magnitude(const Vector3& a)
 {
 	return math::sqrt(math::dot(a, a));
 }
 
-Vector3 normalize(const Vector3& a)
+inline Vector3 normalize(const Vector3& a)
 {
 	f32 m = 1.0f / magnitude(a);
 	return a * m;
 }
 
-Vector3 hadamard_product(const Vector3& a, const Vector3& b)
+inline Vector3 hadamard(const Vector3& a, const Vector3& b)
 {
 	return {a.x * b.x, a.y * b.y, a.z * b.z};
 }
 
 // Vector4 functions
-f32 dot(const Vector4& a, const Vector4& b)
+inline f32 dot(const Vector4& a, const Vector4& b)
 {
 	return a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w;
 }
 
-f32 magnitude(const Vector4& a)
+inline f32 magnitude(const Vector4& a)
 {
 	return math::sqrt(math::dot(a, a));
 }
 
-Vector4 normalize(const Vector4& a)
+inline Vector4 normalize(const Vector4& a)
 {
 	f32 m = 1.0f / magnitude(a);
 	return a * m;
 }
 
-Vector4 hadamard_product(const Vector4& a, const Vector4& b)
+inline Vector4 hadamard(const Vector4& a, const Vector4& b)
 {
 	return {a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w};
 }
 
 // Quaternion functions
-f32 dot(const Quaternion& a, const Quaternion& b)
+inline f32 dot(const Quaternion& a, const Quaternion& b)
 {
 	return math::dot(a.xyz, b.xyz) + a.w*b.w;
 }
 
-Quaternion cross(const Quaternion& a, const Quaternion& b)
+inline Quaternion cross(const Quaternion& a, const Quaternion& b)
 {
 	return {a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
             a.w * b.y + a.y * b.w + a.z * b.x - a.x * b.z,
@@ -3699,34 +4001,34 @@ Quaternion cross(const Quaternion& a, const Quaternion& b)
             a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z};
 }
 
-f32 magnitude(const Quaternion& a)
+inline f32 magnitude(const Quaternion& a)
 {
 	return math::sqrt(math::dot(a, a));
 }
 
-Quaternion normalize(const Quaternion& a)
+inline Quaternion normalize(const Quaternion& a)
 {
 	f32 m = 1.0f / magnitude(a);
 	return a * m;
 }
 
-Quaternion conjugate(const Quaternion& a)
+inline Quaternion conjugate(const Quaternion& a)
 {
 	return {-a.x, -a.y, -a.z, a.w};
 }
 
-Quaternion inverse(const Quaternion& a)
+inline Quaternion inverse(const Quaternion& a)
 {
 	f32 m = 1.0f / dot(a, a);
 	return math::conjugate(a) * m;
 }
 
-f32 quaternion_angle(const Quaternion& a)
+inline f32 quaternion_angle(const Quaternion& a)
 {
 	return 2.0f * math::acos(a.w);
 }
 
-Vector3 quaternion_axis(const Quaternion& a)
+inline Vector3 quaternion_axis(const Quaternion& a)
 {
 	f32 s2 = 1.0f - a.w * a.w;
 
@@ -3738,7 +4040,7 @@ Vector3 quaternion_axis(const Quaternion& a)
 	return a.xyz * invs2;
 }
 
-Quaternion axis_angle(const Vector3& axis, f32 radians)
+inline Quaternion axis_angle(const Vector3& axis, f32 radians)
 {
 	Vector3 a = math::normalize(axis);
 	f32 s = math::sin(0.5f * radians);
@@ -3750,33 +4052,35 @@ Quaternion axis_angle(const Vector3& axis, f32 radians)
 	return q;
 }
 
-f32 quaternion_roll(const Quaternion& a)
+inline f32 quaternion_roll(const Quaternion& a)
 {
 	return math::atan2(2.0f * a.x * a.y + a.z * a.w,
 	                   a.x * a.x + a.w * a.w - a.y * a.y - a.z * a.z);
 }
 
-f32 quaternion_pitch(const Quaternion& a)
+inline f32 quaternion_pitch(const Quaternion& a)
 {
 	return math::atan2(2.0f * a.y * a.z + a.w * a.x,
 	                   a.w * a.w - a.x * a.x - a.y * a.y + a.z * a.z);
 }
 
-f32 quaternion_yaw(const Quaternion& a)
+inline f32 quaternion_yaw(const Quaternion& a)
 {
 	return math::asin(-2.0f * (a.x * a.z - a.w * a.y));
 
 }
 
-Euler_Angles quaternion_to_euler_angles(const Quaternion& a)
+inline Euler_Angles
+quaternion_to_euler_angles(const Quaternion& a)
 {
 	return {quaternion_pitch(a), quaternion_yaw(a), quaternion_roll(a)};
 }
 
-Quaternion euler_angles_to_quaternion(const Euler_Angles& e,
-                                      const Vector3& x_axis,
-                                      const Vector3& y_axis,
-                                      const Vector3& z_axis)
+inline Quaternion
+euler_angles_to_quaternion(const Euler_Angles& e,
+                           const Vector3& x_axis,
+                           const Vector3& y_axis,
+                           const Vector3& z_axis)
 {
 	Quaternion p = axis_angle(x_axis, e.pitch);
 	Quaternion y = axis_angle(y_axis, e.yaw);
@@ -3787,7 +4091,8 @@ Quaternion euler_angles_to_quaternion(const Euler_Angles& e,
 
 
 // Spherical Linear Interpolation
-Quaternion slerp(const Quaternion& x, const Quaternion& y, f32 t)
+inline Quaternion
+slerp(const Quaternion& x, const Quaternion& y, f32 t)
 {
 	Quaternion z = y;
 
@@ -3855,7 +4160,7 @@ Matrix2 inverse(const Matrix2& m)
 	return result;
 }
 
-Matrix2 hadamard_product(const Matrix2& a, const Matrix2&b)
+Matrix2 hadamard(const Matrix2& a, const Matrix2&b)
 {
 	Matrix2 result;
 
@@ -3907,7 +4212,7 @@ Matrix3 inverse(const Matrix3& m)
 	return result;
 }
 
-Matrix3 hadamard_product(const Matrix3& a, const Matrix3&b)
+Matrix3 hadamard(const Matrix3& a, const Matrix3&b)
 {
 	Matrix3 result;
 
@@ -4038,7 +4343,7 @@ Matrix4 inverse(const Matrix4& m)
 	return inverse * oneOverDeterminant;
 }
 
-Matrix4 hadamard_product(const Matrix4& a, const Matrix4& b)
+Matrix4 hadamard(const Matrix4& a, const Matrix4& b)
 {
 	Matrix4 result;
 
@@ -4324,12 +4629,105 @@ Transform inverse(const Transform& t)
 	return inv_transform;
 }
 
-Matrix4 transform_to_matrix4(const Transform& t)
+inline Matrix4
+transform_to_matrix4(const Transform& t)
 {
 	return math::translate(t.position) *                //
 	       math::quaternion_to_matrix4(t.orientation) * //
 	       math::scale(t.scale);                        //
 }
+
+
+// Aabb Functions
+inline f32
+aabb_volume(const Aabb& aabb)
+{
+	Vector3 s = aabb.half_size;
+	return s.x * s.y * s.z * 8.0f;
+}
+
+inline bool
+aabb_contains_point(const Aabb& aabb, const Vector3& point)
+{
+	Vector3 distance = aabb.center - point;
+
+	return (math::abs(distance.x) <= aabb.half_size.x) &
+           (math::abs(distance.y) <= aabb.half_size.y) &
+           (math::abs(distance.z) <= aabb.half_size.z);
+}
+
+inline Sphere
+aabb_to_sphere(const Aabb& aabb)
+{
+	Sphere s;
+	s.center = aabb.center;
+	s.radius = math::magnitude(aabb.half_size);
+	return s;
+}
+
+// Sphere Functions
+inline f32
+sphere_volume(const Sphere& s)
+{
+	return TWO_THIRDS * TAU * s.radius * s.radius * s.radius;
+}
+
+
+inline bool
+sphere_contains_point(const Sphere& s, const Vector3& point)
+{
+	Vector3 dr = point - s.center;
+	f32 distance = math::dot(dr, dr);
+	return distance < s.radius * s.radius;
+}
+
+// Plane Functions
+inline f32
+ray_plane_intersection(const Vector3& from, const Vector3& dir, const Plane& p)
+{
+	f32 nd   = math::dot(dir,  p.normal);
+	f32 orpn = math::dot(from, p.normal);
+	f32 dist = -1.0f;
+
+	if (nd < 0.0f)
+		dist = (-p.distance - orpn) / nd;
+
+	return dist > 0.0f ? dist : -1.0f;
+}
+
+inline f32
+ray_sphere_intersection(const Vector3& from, const Vector3& dir, const Sphere& s)
+{
+	Vector3 v = s.center - from;
+	f32 b = math::dot(v, dir);
+	f32 det = (s.radius * s.radius) - math::dot(v, v) + (b * b);
+
+	if (det < 0.0 || b < s.radius)
+		return -1.0f;
+	return b - math::sqrt(det);
+}
+
+inline bool
+plane_3_intersection(const Plane& p1, const Plane& p2, const Plane& p3, Vector3& ip)
+{
+	const Vector3& n1 = p1.normal;
+	const Vector3& n2 = p2.normal;
+	const Vector3& n3 = p3.normal;
+
+	f32 den = -math::dot(math::cross(n1, n2), n3);
+
+	if (math::equals(den, 0.0f))
+		return false;
+
+	Vector3 res = p1.distance * math::cross(n2, n3)
+	            + p2.distance * math::cross(n3, n1)
+	            + p3.distance * math::cross(n1, n2);
+	ip = res / den;
+
+	return true;
+}
+
+
 
 
 } // namespace math
