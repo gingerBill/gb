@@ -1,7 +1,9 @@
-// gb.hpp - v0.09 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.11 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 //
 // Version History:
+//     0.11 - Complex
+//     0.10 - Atomics
 //     0.09 - Bug Fixes
 //     0.08 - Matrix(2,3)
 //     0.07 - Bug Fixes
@@ -20,8 +22,9 @@
 //
 // WARNING
 //
-//     This library is highly experimental and features may not work as expected.
+//     This library is _highly_ experimental and features may not work as expected.
 //     This also means that many functions are not documented.
+//     This library is not compatible with STL at all!!!
 //
 // CONTENT
 //
@@ -31,23 +34,31 @@
 //     - C++11 Move Semantics
 //     - Defer
 //     - Memory
+//         - Mutex
+//         - Atomics
 //         - Functions
 //         - Allocator
-//         - Heap_Allocator
-//         - Arena_Allocator
-//         - Temporary_Arena_Memory
+//         - Heap Allocator
+//         - Arena Allocator
+//         - Temporary Arena Memory
 //     - String
 //     - Array
-//     - Hash_Table
+//     - Hash Table
 //     - Hash Functions
 //    [- Os] (Not Yet Implemented)
-//     - Math Types
-//         - Vector(2,3,4)
-//         - Quaternion
-//         - Matrix4
-//     - Math Operations
-//     - Math Functions & Constants
-//     - Math Type Functions
+//     - Math
+//         - Types
+//             - Vector(2,3,4)
+//             - Quaternion
+//             - Matrix(2,3,4)
+//             - Euler_Angles
+//             - Transform
+//             - Aabb
+//             - Sphere
+//             - Plane
+//         - Operations
+//         - Functions & Constants
+//         - Type Functions
 //
 //
 //
@@ -78,18 +89,18 @@
 ///                          ///
 ////////////////////////////////
 #if defined(_WIN32) || defined(_WIN64)
-#define GB_SYSTEM_WINDOWS
+#define GB_SYSTEM_WINDOWS 1
 
 #elif defined(__APPLE__) && defined(__MACH__)
-#define GB_SYSTEM_OSX
+#define GB_SYSTEM_OSX 1
 
 #elif defined(__unix__)
-#define GB_SYSTEM_UNIX
+#define GB_SYSTEM_UNIX 1
 
 	#if defined(__linux__)
-	#define GB_SYSTEM_LINUX
+	#define GB_SYSTEM_LINUX 1
 	#elif defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
-	#define GB_SYSTEM_FREEBSD
+	#define GB_SYSTEM_FREEBSD 1
 	#else
 	#error This UNIX operating system is not supported by gb.hpp
 	#endif
@@ -103,19 +114,21 @@
 ///                          ///
 ////////////////////////////////
 #if defined(_WIN32) || defined(_WIN64)
+
 	#if defined(_WIN64)
-	#define GB_ARCH_64_BIT
+	#define GB_ARCH_64_BIT 1
 	#else
-	#define GB_ARCH_32_BIT
+	#define GB_ARCH_32_BIT 1
 	#endif
 #endif
 
 // TODO(bill): Check if this KEPLER_ENVIRONMENT works on clang
 #if defined(__GNUC__)
+
 	#if defined(__x86_64__) || defined(__ppc64__)
-	#define GB_ARCH_64_BIT
+	#define GB_ARCH_64_BIT 1
 	#else
-	#define GB_ARCH_32_BIT
+	#define GB_ARCH_32_BIT 1
 	#endif
 #endif
 
@@ -131,16 +144,24 @@
 #include <string.h>
 #include <time.h>
 
-#ifdef GB_SYSTEM_WINDOWS
-#define NOMINMAX
-#define VC_EXTRALEAN
-#define WIN32_EXTRA_LEAN
+#if defined(GB_SYSTEM_WINDOWS)
+
+#define NOMINMAX            1
+#define VC_EXTRALEAN        1
+#define WIN32_EXTRA_LEAN    1
+#define WIN32_LEAN_AND_MEAN 1
+
 #include <windows.h>
+#include <mmsystem.h> // Time functions
+
 #undef NOMINMAX
 #undef VC_EXTRALEAN
 #undef WIN32_EXTRA_LEAN
+#undef WIN32_LEAN_AND_MEAN
+
 #include <intrin.h>
 #else
+
 #include <pthread.h>
 #include <sys/time.h>
 #endif
@@ -159,7 +180,7 @@ gb__assert_handler(bool condition, const char* condition_str,
 	if (condition)
 		return;
 
-	fprintf(stderr, "ASSERT! %s(%d): %s", filename, (int)line, condition_str);
+	fprintf(stderr, "ASSERT! %s(%lu): %s", filename, line, condition_str);
 	if (error_text)
 	{
 		fprintf(stderr, " - ");
@@ -185,25 +206,25 @@ namespace gb
 ///                          ///
 ////////////////////////////////
 
-using u8  = uint8_t;
-using s8  = int8_t;
+using u8  =  uint8_t;
+using s8  =   int8_t;
 using u16 = uint16_t;
-using s16 = int16_t;
+using s16 =  int16_t;
 using u32 = uint32_t;
-using s32 = int32_t;
+using s32 =  int32_t;
 
 #if defined(_MSC_VER)
-using s64 = signed __int64;
+using s64 = signed   __int64;
 using u64 = unsigned __int64;
 #else
-using s64 = int64_t;
+using s64 =  int64_t;
 using u64 = uint64_t;
 #endif
 
 using f32 = float;
 using f64 = double;
 
-#ifdef GB_B8_AS_BOOL
+#if defined(GB_B8_AS_BOOL)
 using b8 = bool;
 #else
 using b8 = s8;
@@ -237,34 +258,85 @@ using uintptr = uintptr_t;
 
 using ptrdiff = ptrdiff_t;
 
-#ifdef GB_BASIC_TYPES_WITHOUT_NAMESPACE
-#define S8_MIN (-0x7f - 1)
-#define S8_MAX 0x7f
-#define U8_MIN 0u
-#define U8_MAX 0xffu
+#define GB_U8_MIN (0u)
+#define GB_U8_MAX (0xffu)
+#define GB_S8_MIN (-0x7f - 1)
+#define GB_S8_MAX (0x7f)
 
-#define S16_MIN (-0x7fff - 1)
-#define S16_MAX 0x7fff
-#define U16_MIN 0u
-#define U16_MAX 0xffffu
+#define GB_U16_MIN (0u)
+#define GB_U16_MAX (0xffffu)
+#define GB_S16_MIN (-0x7fff - 1)
+#define GB_S16_MAX (0x7fff)
 
-#define S32_MIN (-0x7fffffff - 1)
-#define S32_MAX 0x7fffffff
-#define U32_MIN 0u
-#define U32_MAX 0xffffffffu
+#define GB_U32_MIN (0u)
+#define GB_U32_MAX (0xffffffffu)
+#define GB_S32_MIN (-0x7fffffff - 1)
+#define GB_S32_MAX (0x7fffffff)
 
-#define S64_MIN (-0x7fffffffffffffffll - 1)
-#define S64_MAX 0x7fffffffffffffffll
-#define U64_MIN 0ull
-#define U64_MAX 0xffffffffffffffffull
-#else
+#define GB_U64_MIN (0ull)
+#define GB_U64_MAX (0xffffffffffffffffull)
+#define GB_S64_MIN (-0x7fffffffffffffffll - 1)
+#define GB_S64_MAX (0x7fffffffffffffffll)
+
+#if defined(GB_ARCH_64_BIT)
+#define GB_USIZE_MIX U64_MIN
+#define GB_USIZE_MAX U64_MAX
+
+#define GB_SSIZE_MIX S64_MIN
+#define GB_SSIZE_MAX S64_MAX
+
+#elif defined(GB_ARCH_32_BIT)
+#define GB_USIZE_MIX U32_MIN
+#define GB_USIZE_MAX U32_MAX
+
+#define GB_SSIZE_MIX S32_MIN
+#define GB_SSIZE_MAX S32_MAX
 
 #endif
+
+#if defined(GB_BASIC_TYPES_WITHOUT_NAMESPACE)
+#define U8_MIN 0u
+#define U8_MAX 0xffu
+#define S8_MIN (-0x7f - 1)
+#define S8_MAX 0x7f
+
+#define U16_MIN 0u
+#define U16_MAX 0xffffu
+#define S16_MIN (-0x7fff - 1)
+#define S16_MAX 0x7fff
+
+#define U32_MIN 0u
+#define U32_MAX 0xffffffffu
+#define S32_MIN (-0x7fffffff - 1)
+#define S32_MAX 0x7fffffff
+
+#define U64_MIN 0ull
+#define U64_MAX 0xffffffffffffffffull
+#define S64_MIN (-0x7fffffffffffffffll - 1)
+#define S64_MAX 0x7fffffffffffffffll
+
+#if defined(GB_ARCH_64_BIT)
+#define USIZE_MIX U64_MIN
+#define USIZE_MAX U64_MAX
+
+#define SSIZE_MIX S64_MIN
+#define SSIZE_MAX S64_MAX
+
+#elif defined(GB_ARCH_32_BIT)
+#define USIZE_MIX U32_MIN
+#define USIZE_MAX U32_MAX
+
+#define SSIZE_MIX S32_MIN
+#define SSIZE_MAX S32_MAX
+
+#endif
+#endif
+
+
 
 #if !defined(GB_BASIC_TYPES_WITHOUT_NAMESPACE)
 } // namespace gb
 #endif // GB_BASIC_TYPES_WITHOUT_NAMESPACE
-
 
 namespace gb
 {
@@ -337,7 +409,7 @@ namespace gb
 // Mutex
 struct Mutex
 {
-#ifdef GB_SYSTEM_WINDOWS
+#if defined(GB_SYSTEM_WINDOWS)
 	HANDLE win32_mutex;
 #else
 	pthread_mutex_t posix_mutex;
@@ -358,21 +430,21 @@ struct Atomic_Ptr { void* nonatomic; };
 
 namespace atomic
 {
-u32 load_32_relaxed(const Atomic_Ptr* object);
-void store_32_relaxed(Atomic_Ptr* object, u32 value);
-u32 compare_exchange_strong_32_relaxed(Atomic_Ptr* object, u32 expected, u32 desired);
-u32 exchanged_32_relaxed(Atomic_Ptr* object, u32 desired);
-u32 fetch_add_32_relaxed(Atomic_Ptr* object, s32 operand);
-u32 fetch_and_32_relaxed(Atomic_Ptr* object, u32 operand);
-u32 fetch_or_32_relaxed(Atomic_Ptr* object, u32 operand);
+u32 load_32_relaxed(const Atomic32* object);
+void store_32_relaxed(Atomic32* object, u32 value);
+u32 compare_exchange_strong_32_relaxed(Atomic32* object, u32 expected, u32 desired);
+u32 exchanged_32_relaxed(Atomic32* object, u32 desired);
+u32 fetch_add_32_relaxed(Atomic32* object, s32 operand);
+u32 fetch_and_32_relaxed(Atomic32* object, u32 operand);
+u32 fetch_or_32_relaxed(Atomic32* object, u32 operand);
 
-u64 load_64_relaxed(const Atomic_Ptr* object);
-void store_64_relaxed(Atomic_Ptr* object, u64 value);
-u64 compare_exchange_strong_64_relaxed(Atomic_Ptr* object, u64 expected, u64 desired);
-u64 exchanged_64_relaxed(Atomic_Ptr* object, u64 desired);
-u64 fetch_add_64_relaxed(Atomic_Ptr* object, s64 operand);
-u64 fetch_and_64_relaxed(Atomic_Ptr* object, u64 operand);
-u64 fetch_or_64_relaxed(Atomic_Ptr* object, u64 operand);
+u64 load_64_relaxed(const Atomic64* object);
+void store_64_relaxed(Atomic64* object, u64 value);
+u64 compare_exchange_strong_64_relaxed(Atomic64* object, u64 expected, u64 desired);
+u64 exchanged_64_relaxed(Atomic64* object, u64 desired);
+u64 fetch_add_64_relaxed(Atomic64* object, s64 operand);
+u64 fetch_and_64_relaxed(Atomic64* object, u64 operand);
+u64 fetch_or_64_relaxed(Atomic64* object, u64 operand);
 } // namespace atomic
 
 #ifndef GB_DEFAULT_ALIGNMENT
@@ -402,7 +474,7 @@ struct Allocator
 	virtual ~Allocator() {}
 
 	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT) = 0;
-	virtual void  dealloc(void* ptr) = 0;
+	virtual void dealloc(const void* ptr) = 0;
 	virtual s64 allocated_size(const void* ptr) = 0;
 	virtual s64 total_allocated() = 0;
 
@@ -414,11 +486,10 @@ private:
 
 inline void* alloc(Allocator& a, usize size, usize align = GB_DEFAULT_ALIGNMENT) { return a.alloc(size, align); }
 
-inline void dealloc(Allocator& a, void* ptr) { return a.dealloc(ptr); }
+inline void dealloc(Allocator& a, const void* ptr) { return a.dealloc(ptr); }
 
 template <typename T>
 inline T* alloc_struct(Allocator& a) { return static_cast<T*>(a.alloc(sizeof(T), alignof(T))); }
-
 
 template <typename T>
 inline T* alloc_array(Allocator& a, usize count) { return static_cast<T*>(alloc(a, count * sizeof(T), alignof(T))); }
@@ -438,13 +509,13 @@ struct Heap_Allocator : Allocator
 	Mutex mutex               = Mutex{};
 	s64 total_allocated_count = 0;
 	s64 allocation_count      = 0;
-
-	Heap_Allocator() = default;
+Heap_Allocator
+	() = default;
 
 	virtual ~Heap_Allocator();
 
 	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT);
-	virtual void  dealloc(void* ptr);
+	virtual void  dealloc(const void* ptr);
 	virtual s64 allocated_size(const void* ptr);
 	virtual s64 total_allocated();
 
@@ -457,7 +528,6 @@ struct Arena_Allocator : Allocator
 	Allocator* backing;
 	void*      physical_start;
 	s64        total_size;
-	s64        offset;
 	s64        total_allocated_count;
 	s64        temp_count;
 
@@ -466,7 +536,7 @@ struct Arena_Allocator : Allocator
 	virtual ~Arena_Allocator();
 
 	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT);
-	virtual void  dealloc(void* ptr);
+	virtual void  dealloc(const void* ptr);
 	virtual s64 allocated_size(const void* ptr);
 	virtual s64 total_allocated();
 };
@@ -477,7 +547,6 @@ clear_arena(Arena_Allocator& arena)
 	GB_ASSERT(arena.temp_count == 0,
 	          "%ld Temporary_Arena_Memory have not be cleared", arena.temp_count);
 
-	arena.offset = 0;
 	arena.total_allocated_count = 0;
 }
 
@@ -485,31 +554,32 @@ struct Temporary_Arena_Memory
 {
 	Arena_Allocator* arena;
 	s64              original_count;
-
-	explicit Temporary_Arena_Memory(Arena_Allocator& arena_)
-	: arena(&arena_)
-	, original_count(arena_.total_allocated_count)
-	{
-	}
-
-	~Temporary_Arena_Memory()
-	{
-		GB_ASSERT(arena->total_allocated() >= original_count);
-		arena->total_allocated_count = original_count;
-		GB_ASSERT(arena->temp_count > 0);
-		arena->temp_count--;
-	}
 };
 
 inline Temporary_Arena_Memory
 make_temporary_arena_memory(Arena_Allocator& arena)
 {
-	return Temporary_Arena_Memory{arena};
+	Temporary_Arena_Memory tmp = {};
+	tmp.arena = &arena;
+	tmp.original_count = arena.total_allocated_count;
+}
+
+inline void
+free_temporary_arena_memory(Temporary_Arena_Memory& tmp)
+{
+	if (tmp.arena == nullptr)
+		return;
+	GB_ASSERT(tmp.arena->total_allocated() >= tmp.original_count);
+	tmp.arena->total_allocated_count = tmp.original_count;
+	GB_ASSERT(tmp.arena->temp_count > 0);
+	tmp.arena->temp_count--;
 }
 
 ////////////////////////////////
 ///                          ///
 /// String                   ///
+///                          ///
+/// C compatible string      ///
 ///                          ///
 ////////////////////////////////
 using String = char*;
@@ -1189,14 +1259,20 @@ struct Error
 
 struct File
 {
+#if defined(GB_SYSTEM_WINDOWS)
+	HANDLE handle;
+#else
+#error gb::File Not implemented for this platform
+#endif
+	uintptr fd;
 	// TODO(bill): Implement File type
-	// Os Specific Crap Here
 };
 
 const Error ERR_INVALID    = Error{"invalid argument"};
 const Error ERR_PERMISSION = Error{"permission denied"};
 const Error ERR_EXIST      = Error{"file already exists"};
 const Error ERR_NOT_EXIST  = Error{"file already exists"};
+const Error ERR_PATH_ERROR = Error{"path error"};
 
 
 // Os Functions
@@ -1240,19 +1316,26 @@ Error* truncate(const char* name, s64 size);
 
 // File functions
 
-// TODO(bill): Create enums?
-#define O_RDONLY 00
-#define O_WRONLY 01
-#define O_RDWR   02
+enum File_Flag : s32
+{
+	READ_ONLY  = 0,
+	WRITE_ONLY = 1,
+	READ_WRITE = 2,
+	CREATE     = 4,
+	TRUNCATE   = 8,
+};
 
 File new_file(uintptr fd, const char* name);
 Error* create_file(File& file, const char* name);
-Error* open_file(File& file, const char* filename, int flag = O_RDONLY, u32 perm = 0);
+Error* open_file(File& file, const char* filename, int flag = READ_ONLY, u32 perm = 0);
 Error* close_file(File& file);
 
 bool is_file_open(File& file);
+bool is_file_dir(File& file);
 
 bool get_line(File& file, const char* buffer, usize buffer_len);
+
+s64 file_size(File& file);
 
 Error* read_file(File& file, const void* buffer, usize num_bytes);
 Error* read_file_at(File& file, const void* buffer, usize num_bytes, s64 offset);
@@ -1371,6 +1454,19 @@ struct Vector4
 		struct { Vector2 xy, zw; };
 		Vector3 xyz;
 		f32     data[4];
+	};
+
+	inline const f32& operator[](usize index) const { return data[index]; }
+	inline       f32& operator[](usize index)       { return data[index]; }
+};
+
+struct Complex
+{
+	union 
+	{
+		struct { f32 x, y; };
+		struct { f32 real, imag; };
+		f32 data[2];
 	};
 
 	inline const f32& operator[](usize index) const { return data[index]; }
@@ -1535,6 +1631,21 @@ Vector4& operator-=(Vector4& a, const Vector4& b);
 Vector4& operator*=(Vector4& a, f32 scalar);
 Vector4& operator/=(Vector4& a, f32 scalar);
 
+// Complex Operators
+bool operator==(const Complex& a, const Complex& b);
+bool operator!=(const Complex& a, const Complex& b);
+
+Complex operator-(const Complex& a);
+
+Complex operator+(const Complex& a, const Complex& b);
+Complex operator-(const Complex& a, const Complex& b);
+
+Complex operator*(const Complex& a, const Complex& b);
+Complex operator*(const Complex& a, f32 s);
+Complex operator*(f32 s, const Complex& a);
+
+Complex operator/(const Complex& a, f32 s);
+
 // Quaternion Operators
 bool operator==(const Quaternion& a, const Quaternion& b);
 bool operator!=(const Quaternion& a, const Quaternion& b);
@@ -1619,11 +1730,16 @@ Transform& operator/=(Transform& ws, const Transform& ps);
 /// Math Functions & Constants ///
 ///                            ///
 //////////////////////////////////
-extern const Vector2    VECTOR2_ZERO;
-extern const Vector3    VECTOR3_ZERO;
-extern const Vector4    VECTOR4_ZERO;
-extern const Quaternion QUATERNION_IDENTITY;
-extern const Matrix4    MATRIX4_IDENTITY;
+extern const Vector2      VECTOR2_ZERO;
+extern const Vector3      VECTOR3_ZERO;
+extern const Vector4      VECTOR4_ZERO;
+extern const Complex      COMPLEX_ZERO;
+extern const Quaternion   QUATERNION_IDENTITY;
+extern const Matrix2      MATRIX2_IDENTITY;
+extern const Matrix3      MATRIX3_IDENTITY;
+extern const Matrix4      MATRIX4_IDENTITY;
+extern const Euler_Angles EULER_ANGLES_ZERO;
+extern const Transform    TRANSFORM_IDENTITY;
 
 namespace math
 {
@@ -1734,11 +1850,27 @@ Vector4 normalize(const Vector4& a);
 
 Vector4 hadamard(const Vector4& a, const Vector4& b);
 
+// Complex functions
+f32 dot(const Complex& a, const Complex& b);
+
+f32 magnitude(const Complex& a);
+f32 norm(const Complex& a);
+Complex normalize(const Complex& a);
+
+Complex conjugate(const Complex& a);
+Complex inverse(const Complex& a);
+
+f32 complex_angle(const Complex& a);
+inline f32 complex_argument(const Complex& a) { return complex_angle(a); }
+Complex magnitude_angle(f32 magnitude, f32 radians);
+inline Complex complex_polar(f32 magnitude, f32 radians) { return magnitude_angle(magnitude, radians); }
+
 // Quaternion functions
 f32 dot(const Quaternion& a, const Quaternion& b);
 Quaternion cross(const Quaternion& a, const Quaternion& b);
 
 f32 magnitude(const Quaternion& a);
+f32 norm(const Quaternion& a);
 Quaternion normalize(const Quaternion& a);
 
 Quaternion conjugate(const Quaternion& a);
@@ -1763,22 +1895,24 @@ Quaternion slerp(const Quaternion& x, const Quaternion& y, f32 t);
 
 // Shoemake's Quaternion Curves
 // Sqherical Cubic Interpolation
-inline Quaternion squad(const Quaternion& p,
-                        const Quaternion& a,
-                        const Quaternion& b,
-                        const Quaternion& q,
-                        f32 t);
+Quaternion squad(const Quaternion& p,
+                 const Quaternion& a,
+                 const Quaternion& b,
+                 const Quaternion& q,
+                 f32 t);
 // Matrix2 functions
 Matrix2 transpose(const Matrix2& m);
 f32 determinant(const Matrix2& m);
 Matrix2 inverse(const Matrix2& m);
 Matrix2 hadamard(const Matrix2& a, const Matrix2&b);
+Matrix4 matrix2_to_matrix4(const Matrix2& m);
 
 // Matrix3 functions
 Matrix3 transpose(const Matrix3& m);
 f32 determinant(const Matrix3& m);
 Matrix3 inverse(const Matrix3& m);
 Matrix3 hadamard(const Matrix3& a, const Matrix3&b);
+Matrix4 matrix3_to_matrix4(const Matrix3& m);
 
 // Matrix4 functions
 Matrix4 transpose(const Matrix4& m);
@@ -1827,7 +1961,7 @@ bool plane_3_intersection(const Plane& p1, const Plane& p2, const Plane& p3, Vec
 
 
 #if 0
-#ifdef GB_OPENGL_TOOLS
+#if defined(GB_OPENGL_TOOLS)
 
 enum class Shader_Type
 {
@@ -1940,7 +2074,7 @@ s32 get_uniform_location(Shader_Program* program, const char* name);
 /// Implemenation            ///
 ///                          ///
 ////////////////////////////////
-#ifdef GB_IMPLEMENTATION
+#if defined(GB_IMPLEMENTATION)
 namespace gb
 {
 ////////////////////////////////
@@ -1951,7 +2085,7 @@ namespace gb
 
 Mutex::Mutex()
 {
-#ifdef GB_SYSTEM_WINDOWS
+#if defined(GB_SYSTEM_WINDOWS)
 	win32_mutex = CreateMutex(0, 0, 0);
 #else
 	pthread_mutex_init(&posix_mutex, nullptr);
@@ -1960,7 +2094,7 @@ Mutex::Mutex()
 
 Mutex::~Mutex()
 {
-#ifdef GB_SYSTEM_WINDOWS
+#if defined(GB_SYSTEM_WINDOWS)
 	CloseHandle(win32_mutex);
 #else
 	pthread_mutex_destroy(&posix_mutex);
@@ -1969,7 +2103,7 @@ Mutex::~Mutex()
 
 void lock_mutex(Mutex& mutex)
 {
-#ifdef GB_SYSTEM_WINDOWS
+#if defined(GB_SYSTEM_WINDOWS)
 	WaitForSingleObject(mutex.win32_mutex, INFINITE);
 #else
 	pthread_mutex_lock(&mutex.posix_mutex);
@@ -1978,7 +2112,7 @@ void lock_mutex(Mutex& mutex)
 
 bool try_lock_mutex(Mutex& mutex)
 {
-#ifdef GB_SYSTEM_WINDOWS
+#if defined(GB_SYSTEM_WINDOWS)
 	return WaitForSingleObject(mutex.win32_mutex, 0) == WAIT_OBJECT_0;
 #else
 	return pthread_mutex_trylock(&mutex.posix_mutex) == 0;
@@ -1988,7 +2122,7 @@ bool try_lock_mutex(Mutex& mutex)
 
 void unlock_mutex(Mutex& mutex)
 {
-#ifdef GB_SYSTEM_WINDOWS
+#if defined(GB_SYSTEM_WINDOWS)
 	ReleaseMutex(mutex.win32_mutex);
 #else
 	pthread_mutex_unlock(&mutex.posix_mutex);
@@ -2000,52 +2134,52 @@ namespace atomic
 {
 #if defined(_MSC_VER)
 inline u32
-load_32_relaxed(const Atomic_Ptr* object)
+load_32_relaxed(const Atomic32* object)
 {
-	return *(u32*)object->nonatomic;
+	return object->nonatomic;
 }
 
 inline void
-store_32_relaxed(Atomic_Ptr* object, u32 value)
+store_32_relaxed(Atomic32* object, u32 value)
 {
-	*(u32*)object->nonatomic = value;
+	object->nonatomic = value;
 }
 
 inline u32
-compare_exchange_strong_32_relaxed(Atomic_Ptr* object, u32 expected, u32 desired)
+compare_exchange_strong_32_relaxed(Atomic32* object, u32 expected, u32 desired)
 {
 	return _InterlockedCompareExchange((long*)object, desired, expected);
 }
 
 inline u32
-exchanged_32_relaxed(Atomic_Ptr* object, u32 desired)
+exchanged_32_relaxed(Atomic32* object, u32 desired)
 {
 	return _InterlockedExchange((long*)object, desired);
 }
 
 inline u32
-fetch_add_32_relaxed(Atomic_Ptr* object, s32 operand)
+fetch_add_32_relaxed(Atomic32* object, s32 operand)
 {
 	return _InterlockedExchangeAdd((long*)object, operand);
 }
 
 inline u32
-fetch_and_32_relaxed(Atomic_Ptr* object, u32 operand)
+fetch_and_32_relaxed(Atomic32* object, u32 operand)
 {
 	return _InterlockedAnd((long*)object, operand);
 }
 
 inline u32
-fetch_or_32_relaxed(Atomic_Ptr* object, u32 operand)
+fetch_or_32_relaxed(Atomic32* object, u32 operand)
 {
 	return _InterlockedOr((long*)object, operand);
 }
 
 inline u64
-load_64_relaxed(const Atomic_Ptr* object)
+load_64_relaxed(const Atomic64* object)
 {
-#ifdef GB_ARCH_64_BIT
-	return *(u64*)object->nonatomic;
+#if defined(GB_ARCH_64_BIT)
+	return object->nonatomic;
 #else
 	// NOTE(bill): The most compatible way to get an atomic 64-bit load on x86 is with cmpxchg8b
 	u64 result;
@@ -2063,10 +2197,10 @@ load_64_relaxed(const Atomic_Ptr* object)
 }
 
 inline void
-store_64_relaxed(Atomic_Ptr* object, u64 value)
+store_64_relaxed(Atomic64* object, u64 value)
 {
-#ifdef GB_ARCH_64_BIT
-	*(u64*)object->nonatomic = value;
+#if defined(GB_ARCH_64_BIT)
+	object->nonatomic = value;
 #else
 	// NOTE(bill): The most compatible way to get an atomic 64-bit load on x86 is with cmpxchg8b
 	__asm
@@ -2082,21 +2216,21 @@ store_64_relaxed(Atomic_Ptr* object, u64 value)
 }
 
 inline u64
-compare_exchange_strong_64_relaxed(Atomic_Ptr* object, u64 expected, u64 desired)
+compare_exchange_strong_64_relaxed(Atomic64* object, u64 expected, u64 desired)
 {
-	_InterlockedCompareExchange64((LONGLONG*)object, desired, expected);
+	_InterlockedCompareExchange64((s64*)object, desired, expected);
 }
 
 inline u64
-exchanged_64_relaxed(Atomic_Ptr* object, u64 desired)
+exchanged_64_relaxed(Atomic64* object, u64 desired)
 {
-#ifdef GB_ARCH_64_BIT
-	return _InterlockedExchange64((LONGLONG*)object, desired);
+#if defined(GB_ARCH_64_BIT)
+	return _InterlockedExchange64((s64*)object, desired);
 #else
 	u64 expected = object->nonatomic;
 	while (true)
 	{
-		u64 original = _InterlockedCompareExchange64((LONGLONG*)object, desired, expected);
+		u64 original = _InterlockedCompareExchange64((s64*)object, desired, expected);
 		if (original == expected)
 			return original;
 		expected = original;
@@ -2105,15 +2239,15 @@ exchanged_64_relaxed(Atomic_Ptr* object, u64 desired)
 }
 
 inline u64
-fetch_add_64_relaxed(Atomic_Ptr* object, s64 operand)
+fetch_add_64_relaxed(Atomic64* object, s64 operand)
 {
-#ifdef GB_ARCH_64_BIT
-	return _InterlockedExchangeAdd64((LONGLONG*)object, operand);
+#if defined(GB_ARCH_64_BIT)
+	return _InterlockedExchangeAdd64((s64*)object, operand);
 #else
 	u64 expected = object->nonatomic;
 	while (true)
 	{
-		u64 original = _InterlockedExchange64((LONGLONG*)object, expected + operand, expected);
+		u64 original = _InterlockedExchange64((s64*)object, expected + operand, expected);
 		if (original == expected)
 			return original;
 		expected = original;
@@ -2122,15 +2256,15 @@ fetch_add_64_relaxed(Atomic_Ptr* object, s64 operand)
 }
 
 inline u64
-fetch_and_64_relaxed(Atomic_Ptr* object, u64 operand)
+fetch_and_64_relaxed(Atomic64* object, u64 operand)
 {
-#ifdef GB_ARCH_64_BIT
-	return _InterlockedAnd64((LONGLONG*)object, operand);
+#if defined(GB_ARCH_64_BIT)
+	return _InterlockedAnd64((s64*)object, operand);
 #else
 	u64 expected = object->nonatomic;
 	while (true)
 	{
-		u64 original = _InterlockedCompareExchange64((LONGLONG*)object, expected & operand, expected);
+		u64 original = _InterlockedCompareExchange64((s64*)object, expected & operand, expected);
 		if (original == expected)
 			return original;
 		expected = original;
@@ -2139,15 +2273,15 @@ fetch_and_64_relaxed(Atomic_Ptr* object, u64 operand)
 }
 
 inline u64
-fetch_or_64_relaxed(Atomic_Ptr* object, u64 operand)
+fetch_or_64_relaxed(Atomic64* object, u64 operand)
 {
-#ifdef GB_ARCH_64_BIT
-	return _InterlockedAnd64((LONGLONG*)object, operand);
+#if defined(GB_ARCH_64_BIT)
+	return _InterlockedAnd64((s64*)object, operand);
 #else
 	u64 expected = object->nonatomic;
 	while (true)
 	{
-		u64 original = _InterlockedCompareExchange64((LONGLONG*)object, expected | operand, expected);
+		u64 original = _InterlockedCompareExchange64((s64*)object, expected | operand, expected);
 		if (original == expected)
 			return original;
 		expected = original;
@@ -2192,7 +2326,7 @@ Heap_Allocator::alloc(usize size, usize align)
 }
 
 void
-Heap_Allocator::dealloc(void* ptr)
+Heap_Allocator::dealloc(const void* ptr)
 {
 	if (!ptr)
 		return;
@@ -2206,7 +2340,7 @@ Heap_Allocator::dealloc(void* ptr)
 	total_allocated_count -= h->size;
 	allocation_count--;
 
-	::free(h);
+	::free((void*)h);
 }
 
 s64
@@ -2241,7 +2375,6 @@ Arena_Allocator::Arena_Allocator(Allocator& backing_, usize size)
 : backing(&backing_)
 , physical_start(nullptr)
 , total_size((s64)size)
-, offset(0)
 , temp_count(0)
 , total_allocated_count(0)
 {
@@ -2252,7 +2385,6 @@ Arena_Allocator::Arena_Allocator(void* start, usize size)
 : backing(nullptr)
 , physical_start(start)
 , total_size((s64)size)
-, offset(0)
 , temp_count(0)
 , total_allocated_count(0)
 {
@@ -2263,36 +2395,29 @@ Arena_Allocator::~Arena_Allocator()
 	if (backing)
 		backing->dealloc(physical_start);
 
-	GB_ASSERT(offset == 0,
-	          "Memory leak of %ld bytes, maybe you forgot to call clear_arena()?", offset);
+	GB_ASSERT(total_allocated_count == 0,
+	          "Memory leak of %ld bytes, maybe you forgot to call clear_arena()?", total_allocated_count);
 }
 
 void* Arena_Allocator::alloc(usize size, usize align)
 {
 	s64 actual_size = size + align;
 
-	if (offset + actual_size > total_size)
+	if (total_allocated_count + actual_size > total_size)
 		return nullptr;
 
-	void* ptr = memory::align_forward((u8*)physical_start + offset, align);
+	void* ptr = memory::align_forward((u8*)physical_start + total_allocated_count, align);
 
-	offset += actual_size;
-	total_allocated_count++;
+	total_allocated_count += actual_size;
 
 	return ptr;
 }
 
-void Arena_Allocator::dealloc(void*) {}
+inline void Arena_Allocator::dealloc(const void*) {}
 
-s64 Arena_Allocator::allocated_size(const void*)
-{
-	return -1;
-}
+inline s64 Arena_Allocator::allocated_size(const void*) { return -1; }
 
-s64 Arena_Allocator::total_allocated()
-{
-	return total_allocated_count;
-}
+inline s64 Arena_Allocator::total_allocated() { return total_allocated_count; }
 
 ////////////////////////////////
 ///                          ///
@@ -2736,7 +2861,7 @@ u32 murmur32(const void* key, u32 num_bytes, u32 seed)
 	return hash;
 }
 
-#ifdef GB_ARCH_64_BIT
+#if defined(GB_ARCH_64_BIT)
 u64 murmur64(const void* key, usize num_bytes, u64 seed)
 {
 	local_persist const u64 m = 0xc6a4a7935bd1e995ULL;
@@ -2853,10 +2978,194 @@ u64 murmur64(const void* key, usize num_bytes, u64 seed)
 
 ////////////////////////////////
 ///                          ///
+/// Os                       ///
+///                          ///
+////////////////////////////////
+
+#if 0 && defined(GB_SYSTEM_WINDOWS)
+namespace os
+{
+File
+new_file(uintptr fd, const char* name)
+{
+	// TODO(bill):
+	return nullptr;
+}
+
+Error*
+create_file(File& file, const char* name)
+{
+	return open_file(file, name, READ_WRITE|CREATE|TRUNCATE, 0666);
+}
+
+internal File
+win32_open_file(const char* name, int flag, u32 perm)
+{
+
+}
+
+Error*
+open_file(File& file, const char* name, int flag, u32 perm)
+{
+	if (name || name[0] == '\0')
+		return &ERR_PATH_ERROR;
+	return nullptr;
+	File r = {};
+	Error* err = nullptr;
+	err = win32_open_file(r, name, flag, perm);
+	if (!err)
+	{
+		file = r;
+		return nullptr;
+	}
+	err = win32_open_dir(r, name);
+	if (!err)
+	{
+		if ((flag & WRITE_ONLY) || (flag & READ_WRITE))
+		{
+			close_file(r);
+			return &ERR_PATH_ERROR;
+		}
+		file = r;
+		return nullptr;
+	}
+	return &ERR_PATH_ERROR;
+}
+
+Error*
+close_file(File& file)
+{
+	// TODO(bill):
+	if (is_file_dir(file))
+		return nullptr;
+	Error* err = nullptr;
+
+	return err;
+}
+
+bool
+is_file_open(File& file)
+{
+	// TODO(bill):
+	return false;
+}
+
+bool
+is_file_dir(File& file)
+{
+	// TODO(bill);
+	return false;
+}
+
+
+bool
+get_line(File& file, const char* buffer, usize buffer_len)
+{
+	// TODO(bill):
+	return nullptr;
+}
+
+
+s64
+file_size(File& file)
+{
+	if (!file)
+		return -1;
+	LARGE_INTEGER file_size;
+	if (GetFileSizeEx(file->handle, &file_size))
+		return (s64)file_size.QuadPart;
+	return -1;
+}
+
+
+Error*
+read_file(File& file, const void* buffer, usize num_bytes)
+{
+	// TODO(bill):
+	return nullptr;
+}
+
+Error*
+read_file_at(File& file, const void* buffer, usize num_bytes, s64 offset)
+{
+	// TODO(bill):
+	return nullptr;
+}
+
+Error*
+write_to_file(File& file, const void* buffer, usize num_bytes)
+{
+	// TODO(bill):
+	return nullptr;
+}
+
+Error*
+write_to_file_at(File& file, const void* buffer, usize num_bytes, s64 offset)
+{
+	// TODO(bill):
+	return nullptr;
+}
+
+Error*
+seek_file(File& file, s64 offset, s64 whence)
+{
+	// TODO(bill):
+	return nullptr;
+}
+
+Error*
+sync_file(File& file)
+{
+	// TODO(bill):
+	return nullptr;
+}
+
+Error*
+truncate_file(File& file)
+{
+	// TODO(bill):
+	return nullptr;
+}
+
+Error*
+chdir_of_file(File& file)
+{
+	// TODO(bill):
+	return nullptr;
+}
+
+Error*
+chmod_of_file(File& file, u32 mode)
+{
+	// TODO(bill):
+	return nullptr;
+}
+
+Error*
+chown_of_file(File& file, int uid, int gid)
+{
+	// TODO(bill):
+	return nullptr;
+}
+
+void
+name_of_file(File& file, const char* buffer, usize buffer_len)
+{
+	// TODO(bill):
+	return;
+}
+} // namespace os
+
+#endif
+
+
+
+////////////////////////////////
+///                          ///
 /// Time                     ///
 ///                          ///
 ////////////////////////////////
-#ifdef GB_SYSTEM_WINDOWS
+#if defined(GB_SYSTEM_WINDOWS)
 
 internal LARGE_INTEGER
 win32_get_frequency()
@@ -2912,7 +3221,7 @@ void time_sleep(Time t)
 #else
 Time time_now()
 {
-#ifdef GB_SYSTEM_OSX
+#if defined(GB_SYSTEM_OSX)
 	s64 t = (s64)mach_absolute_time();
 	return microseconds(t);
 #else
@@ -3072,15 +3381,22 @@ Time& operator%=(Time& left, Time right)
 ///                          ///
 ////////////////////////////////
 
-const Vector2    VECTOR2_ZERO        = {0, 0};
-const Vector3    VECTOR3_ZERO        = {0, 0, 0};
-const Vector4    VECTOR4_ZERO        = {0, 0, 0, 0};
-const Quaternion QUATERNION_IDENTITY = {0, 0, 0, 1};
-const Matrix4    MATRIX4_IDENTITY    = {1, 0, 0, 0,
-                                        0, 1, 0, 0,
-                                        0, 0, 1, 0,
-                                        0, 0, 0, 1};
-
+const Vector2      VECTOR2_ZERO        = {0, 0};
+const Vector3      VECTOR3_ZERO        = {0, 0, 0};
+const Vector4      VECTOR4_ZERO        = {0, 0, 0, 0};
+const Complex      COMPLEX_ZERO        = {0, 0};
+const Quaternion   QUATERNION_IDENTITY = {0, 0, 0, 1};
+const Matrix2      MATRIX2_IDENTITY    = {1, 0,
+                                          0, 1};
+const Matrix3      MATRIX3_IDENTITY    = {1, 0, 0,
+                                          0, 1, 0,
+                                          0, 0, 1};
+const Matrix4      MATRIX4_IDENTITY    = {1, 0, 0, 0,
+                                          0, 1, 0, 0,
+                                          0, 0, 1, 0,
+                                          0, 0, 0, 1};
+const Euler_Angles EULER_ANGLES_ZERO   = {0, 0, 0};
+const Transform    TRANSFORM_IDENTITY  = Transform{};
 
 ////////////////////////////////
 /// Math Type Op Overloads   ///
@@ -3347,6 +3663,58 @@ Vector4& operator/=(Vector4& a, f32 scalar)
 	return a;
 }
 
+// Complex Operators
+bool operator==(const Complex& a, const Complex& b)
+{
+	return (a.x == b.x) && (a.y == b.y);
+}
+
+bool operator!=(const Complex& a, const Complex& b)
+{
+	return !operator==(a, b);
+}
+
+Complex operator-(const Complex& a)
+{
+	return {-a.x, -a.y};
+}
+
+Complex operator+(const Complex& a, const Complex& b)
+{
+	return {a.x + b.x, a.y + b.y};
+}
+
+Complex operator-(const Complex& a, const Complex& b)
+{
+	return {a.x - b.x, a.y - b.y};
+
+}
+
+Complex operator*(const Complex& a, const Complex& b)
+{
+	Complex c = {};
+
+	c.x = a.x * b.x - a.y * b.y;
+	c.y = a.y * b.x - a.y * b.x;
+
+	return c;
+}
+
+Complex operator*(const Complex& a, f32 s)
+{
+	return {a.x * s, a.y * s};
+}
+
+Complex operator*(f32 s, const Complex& a)
+{
+	return {a.x * s, a.y * s};
+}
+
+Complex operator/(const Complex& a, f32 s)
+{
+	return {a.x / s, a.y / s};
+}
+
 // Quaternion Operators
 bool operator==(const Quaternion& a, const Quaternion& b)
 {
@@ -3452,10 +3820,8 @@ Matrix2 operator*(const Matrix2& a, const Matrix2& b)
 
 Vector2 operator*(const Matrix2& a, const Vector2& v)
 {
-	Vector2 mul0 = a[0] * v[0];
-	Vector2 mul1 = a[1] * v[1];
-
-	return mul0 + mul1;
+	return Vector2{a[0][0] * v.x + a[1][0] * v.y,
+	               a[0][1] * v.x + a[1][1] * v.y};
 }
 
 Matrix2 operator*(const Matrix2& a, f32 scalar)
@@ -3543,11 +3909,9 @@ Matrix3 operator*(const Matrix3& a, const Matrix3& b)
 
 Vector3 operator*(const Matrix3& a, const Vector3& v)
 {
-	Vector3 mul0 = a[0] * v[0];
-	Vector3 mul1 = a[1] * v[1];
-	Vector3 mul2 = a[2] * v[2];
-
-	return mul0 + mul1 + mul2;
+	return Vector3{a[0][0] * v.x + a[1][0] * v.y + a[2][0] * v.z,
+	               a[0][1] * v.x + a[1][1] * v.y + a[2][1] * v.z,
+                   a[0][2] * v.x + a[1][2] * v.y + a[2][2] * v.z};
 }
 
 Matrix3 operator*(const Matrix3& a, f32 scalar)
@@ -3643,12 +4007,10 @@ Matrix4 operator*(const Matrix4& a, const Matrix4& b)
 
 Vector4 operator*(const Matrix4& a, const Vector4& v)
 {
-	Vector4 mul0 = a[0] * v[0];
-	Vector4 mul1 = a[1] * v[1];
-	Vector4 mul2 = a[2] * v[2];
-	Vector4 mul3 = a[3] * v[3];
-
-	return mul0 + mul1 + mul2 + mul3;
+	return Vector4{a[0][0] * v.x + a[1][0] * v.y + a[2][0] * v.z + a[3][0] * v.w,
+	               a[0][1] * v.x + a[1][1] * v.y + a[2][1] * v.z + a[3][1] * v.w,
+                   a[0][2] * v.x + a[1][2] * v.y + a[2][2] * v.z + a[3][2] * v.w,
+                   a[0][3] * v.x + a[1][3] * v.y + a[2][3] * v.z + a[3][3] * v.w};
 }
 
 Matrix4 operator*(const Matrix4& a, f32 scalar)
@@ -3762,18 +4124,19 @@ inline f32 sqrt(f32 x)       { return ::sqrtf(x);        }
 inline f32 pow(f32 x, f32 y) { return (f32)::powf(x, y); }
 inline f32 cbrt(f32 x)       { return (f32)::cbrtf(x);   }
 
-inline f32 fast_inv_sqrt(f32 x)
+inline f32
+fast_inv_sqrt(f32 x)
 {
-	const f32 three_halfs = 1.5f;
+	const f32 THREE_HALFS = 1.5f;
 
-	f32 x2 = x * 0.5f;
+	const f32 x2 = x * 0.5f;
 	f32 y  = x;
 	u32 i  = *(u32*)&y;                       // Evil floating point bit level hacking
 	//	i = 0x5f3759df - (i >> 1);            // What the fuck? Old
 	i = 0x5f375a86 - (i >> 1);                // What the fuck? Improved!
 	y = *(f32*)&i;
-	y = y * (three_halfs - (x2 * y * y));     // 1st iteration
-	//	y = y * (three_halfs - (x2 * y * y)); // 2nd iteration, this can be removed
+	y = y * (THREE_HALFS - (x2 * y * y));     // 1st iteration
+	//	y = y * (THREE_HALFS - (x2 * y * y)); // 2nd iteration, this can be removed
 
 	return y;
 }
@@ -3812,35 +4175,40 @@ inline s64 sign(s64 x) { return x >= 0 ? +1 : -1; }
 inline f32 sign(f32 x) { return x >= 0.0f ? +1.0f : -1.0f; }
 
 // Other
-inline f32 abs(f32 x)
+inline f32
+abs(f32 x)
 {
 	u32 i = reinterpret_cast<const u32&>(x);
 	i &= 0x7FFFFFFFul;
 	return reinterpret_cast<const f32&>(i);
 }
 
-inline s8 abs(s8 x)
+inline s8
+abs(s8 x)
 {
 	u8 i = reinterpret_cast<const u8&>(x);
 	i &= 0x7Fu;
 	return reinterpret_cast<const s8&>(i);
 }
 
-inline s16 abs(s16 x)
+inline s16
+abs(s16 x)
 {
 	u16 i = reinterpret_cast<const u16&>(x);
 	i &= 0x7FFFu;
 	return reinterpret_cast<const s16&>(i);
 }
 
-inline s32 abs(s32 x)
+inline s32
+abs(s32 x)
 {
 	u32 i = reinterpret_cast<const u32&>(x);
 	i &= 0x7FFFFFFFul;
 	return reinterpret_cast<const s32&>(i);
 }
 
-inline s64 abs(s64 x)
+inline s64
+abs(s64 x)
 {
 	u64 i = reinterpret_cast<const u64&>(x);
 	i &= 0x7FFFFFFFFFFFFFFFull;
@@ -3856,7 +4224,8 @@ inline s32 max(s32 a, s32 b) { return a > b ? a : b; }
 inline s64 max(s64 a, s64 b) { return a > b ? a : b; }
 inline f32 max(f32 a, f32 b) { return a > b ? a : b; }
 
-inline s32 clamp(s32 x, s32 min, s32 max)
+inline s32
+clamp(s32 x, s32 min, s32 max)
 {
 	if (x < min)
 		return min;
@@ -3864,7 +4233,9 @@ inline s32 clamp(s32 x, s32 min, s32 max)
 		return max;
 	return x;
 }
-inline s64 clamp(s64 x, s64 min, s64 max)
+
+inline s64
+clamp(s64 x, s64 min, s64 max)
 {
 	if (x < min)
 		return min;
@@ -3872,7 +4243,9 @@ inline s64 clamp(s64 x, s64 min, s64 max)
 		return max;
 	return x;
 }
-inline f32 clamp(f32 x, f32 min, f32 max)
+
+inline f32
+clamp(f32 x, f32 min, f32 max)
 {
 	if (x < min)
 		return min;
@@ -3904,29 +4277,34 @@ swap(T& a, T& b)
 }
 
 template <typename T, usize N>
-inline void swap(T (& a)[N], T (& b)[N])
+inline void
+swap(T (& a)[N], T (& b)[N])
 {
 	for (usize i = 0; i < N; i++)
 		math::swap(a[i], b[i]);
 }
 
 // Vector2 functions
-inline f32 dot(const Vector2& a, const Vector2& b)
+inline f32
+dot(const Vector2& a, const Vector2& b)
 {
 	return a.x * b.x + a.y * b.y;
 }
 
-inline f32 cross(const Vector2& a, const Vector2& b)
+inline f32
+cross(const Vector2& a, const Vector2& b)
 {
 	return a.x * b.y - a.y * b.x;
 }
 
-inline f32 magnitude(const Vector2& a)
+inline f32
+magnitude(const Vector2& a)
 {
 	return math::sqrt(math::dot(a, a));
 }
 
-inline Vector2 normalize(const Vector2& a)
+inline Vector2
+normalize(const Vector2& a)
 {
 	f32 m = magnitude(a);
 	if (m > 0)
@@ -3934,32 +4312,48 @@ inline Vector2 normalize(const Vector2& a)
 	return {};
 }
 
-inline Vector2 hadamard(const Vector2& a, const Vector2& b)
+inline Vector2
+hadamard(const Vector2& a, const Vector2& b)
 {
 	return {a.x * b.x, a.y * b.y};
 }
 
+inline Matrix4
+matrix2_to_matrix4(const Matrix2& m)
+{
+	Matrix4 result = MATRIX4_IDENTITY;
+	result[0][0] = m[0][0];
+	result[0][1] = m[0][1];
+	result[1][0] = m[1][0];
+	result[1][1] = m[1][1];
+	return result;
+}
+
 // Vector3 functions
-inline f32 dot(const Vector3& a, const Vector3& b)
+inline f32
+dot(const Vector3& a, const Vector3& b)
 {
 	return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
-inline Vector3 cross(const Vector3& a, const Vector3& b)
+inline Vector3
+cross(const Vector3& a, const Vector3& b)
 {
-	return {
+	return Vector3{
 	    a.y * b.z - b.y * a.z, // x
 	    a.z * b.x - b.z * a.x, // y
 	    a.x * b.y - b.x * a.y  // z
 	};
 }
 
-inline f32 magnitude(const Vector3& a)
+inline f32
+magnitude(const Vector3& a)
 {
 	return math::sqrt(math::dot(a, a));
 }
 
-inline Vector3 normalize(const Vector3& a)
+inline Vector3
+normalize(const Vector3& a)
 {
 	f32 m = magnitude(a);
 	if (m > 0)
@@ -3967,23 +4361,43 @@ inline Vector3 normalize(const Vector3& a)
 	return {};
 }
 
-inline Vector3 hadamard(const Vector3& a, const Vector3& b)
+inline Vector3
+hadamard(const Vector3& a, const Vector3& b)
 {
 	return {a.x * b.x, a.y * b.y, a.z * b.z};
 }
 
+inline Matrix4
+matrix3_to_matrix4(const Matrix3& m)
+{
+	Matrix4 result = MATRIX4_IDENTITY;
+	result[0][0] = m[0][0];
+	result[0][1] = m[0][1];
+	result[0][2] = m[0][2];
+	result[1][0] = m[1][0];
+	result[1][1] = m[1][1];
+	result[1][2] = m[1][2];
+	result[2][0] = m[2][0];
+	result[2][1] = m[2][1];
+	result[2][2] = m[2][2];
+	return result;
+}
+
 // Vector4 functions
-inline f32 dot(const Vector4& a, const Vector4& b)
+inline f32
+dot(const Vector4& a, const Vector4& b)
 {
 	return a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w;
 }
 
-inline f32 magnitude(const Vector4& a)
+inline f32
+magnitude(const Vector4& a)
 {
 	return math::sqrt(math::dot(a, a));
 }
 
-inline Vector4 normalize(const Vector4& a)
+inline Vector4
+normalize(const Vector4& a)
 {
 	f32 m = magnitude(a);
 	if (m > 0)
@@ -3991,31 +4405,99 @@ inline Vector4 normalize(const Vector4& a)
 	return {};
 }
 
-inline Vector4 hadamard(const Vector4& a, const Vector4& b)
+inline Vector4
+hadamard(const Vector4& a, const Vector4& b)
 {
 	return {a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w};
 }
 
+// Complex Functions
+inline f32
+dot(const Complex& a, const Complex& b)
+{
+	return a.real * b.real + a.imag * b.imag;
+}
+
+inline f32
+magnitude(const Complex& a)
+{
+	return math::sqrt(norm(a));
+}
+
+inline f32
+norm(const Complex& a)
+{
+	return math::dot(a, a);
+}
+
+inline Complex
+normalize(const Complex& a)
+{
+	f32 m = magnitude(a);
+	if (m > 0)
+		return a / magnitude(a);
+	return COMPLEX_ZERO;
+}
+
+inline Complex
+conjugate(const Complex& a)
+{
+	return {a.real, -a.imag};
+}
+
+inline Complex
+inverse(const Complex& a)
+{
+	f32 m = norm(a);
+	if (m > 0)
+		return conjugate(a) / norm(a);
+	return COMPLEX_ZERO;
+}
+
+inline f32
+complex_angle(const Complex& a)
+{
+	return atan2(a.imag, a.real);
+}
+
+inline Complex
+magnitude_angle(f32 magnitude, f32 radians)
+{
+	f32 real = magnitude * cos(radians);
+	f32 imag = magnitude * sin(radians);
+	return {real, imag};
+}
+
 // Quaternion functions
-inline f32 dot(const Quaternion& a, const Quaternion& b)
+inline f32
+dot(const Quaternion& a, const Quaternion& b)
 {
 	return math::dot(a.xyz, b.xyz) + a.w*b.w;
 }
 
-inline Quaternion cross(const Quaternion& a, const Quaternion& b)
+inline Quaternion
+cross(const Quaternion& a, const Quaternion& b)
 {
-	return {a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
-            a.w * b.y + a.y * b.w + a.z * b.x - a.x * b.z,
-            a.w * b.z + a.z * b.w + a.x * b.y - a.y * b.x,
-            a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z};
+	return Quaternion{a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+                      a.w * b.y + a.y * b.w + a.z * b.x - a.x * b.z,
+                      a.w * b.z + a.z * b.w + a.x * b.y - a.y * b.x,
+                      a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z};
 }
 
-inline f32 magnitude(const Quaternion& a)
+inline f32
+magnitude(const Quaternion& a)
 {
 	return math::sqrt(math::dot(a, a));
 }
 
-inline Quaternion normalize(const Quaternion& a)
+inline f32
+norm(const Quaternion& a)
+{
+	return math::dot(a, a);
+}
+
+inline Quaternion
+normalize(const Quaternion& a)
 {
 	f32 m = magnitude(a);
 	if (m > 0)
@@ -4023,23 +4505,27 @@ inline Quaternion normalize(const Quaternion& a)
 	return {};
 }
 
-inline Quaternion conjugate(const Quaternion& a)
+inline Quaternion
+conjugate(const Quaternion& a)
 {
 	return {-a.x, -a.y, -a.z, a.w};
 }
 
-inline Quaternion inverse(const Quaternion& a)
+inline Quaternion
+inverse(const Quaternion& a)
 {
 	f32 m = 1.0f / dot(a, a);
 	return math::conjugate(a) * m;
 }
 
-inline f32 quaternion_angle(const Quaternion& a)
+inline f32
+quaternion_angle(const Quaternion& a)
 {
 	return 2.0f * math::acos(a.w);
 }
 
-inline Vector3 quaternion_axis(const Quaternion& a)
+inline Vector3
+quaternion_axis(const Quaternion& a)
 {
 	f32 s2 = 1.0f - a.w * a.w;
 
@@ -4051,7 +4537,8 @@ inline Vector3 quaternion_axis(const Quaternion& a)
 	return a.xyz * invs2;
 }
 
-inline Quaternion axis_angle(const Vector3& axis, f32 radians)
+inline Quaternion
+axis_angle(const Vector3& axis, f32 radians)
 {
 	Vector3 a = math::normalize(axis);
 	f32 s = math::sin(0.5f * radians);
@@ -4063,19 +4550,22 @@ inline Quaternion axis_angle(const Vector3& axis, f32 radians)
 	return q;
 }
 
-inline f32 quaternion_roll(const Quaternion& a)
+inline f32
+quaternion_roll(const Quaternion& a)
 {
 	return math::atan2(2.0f * a.x * a.y + a.z * a.w,
 	                   a.x * a.x + a.w * a.w - a.y * a.y - a.z * a.z);
 }
 
-inline f32 quaternion_pitch(const Quaternion& a)
+inline f32
+quaternion_pitch(const Quaternion& a)
 {
 	return math::atan2(2.0f * a.y * a.z + a.w * a.x,
 	                   a.w * a.w - a.x * a.x - a.y * a.y + a.z * a.z);
 }
 
-inline f32 quaternion_yaw(const Quaternion& a)
+inline f32
+quaternion_yaw(const Quaternion& a)
 {
 	return math::asin(-2.0f * (a.x * a.z - a.w * a.y));
 
@@ -4131,20 +4621,21 @@ slerp(const Quaternion& x, const Quaternion& y, f32 t)
 
 // Shoemake's Quaternion Curves
 // Sqherical Cubic Interpolation
-inline Quaternion squad(const Quaternion& p,
-                        const Quaternion& a,
-                        const Quaternion& b,
-                        const Quaternion& q,
-                        f32 t)
+inline Quaternion
+squad(const Quaternion& p,
+      const Quaternion& a,
+      const Quaternion& b,
+      const Quaternion& q,
+      f32 t)
 {
 	return slerp(slerp(p, q, t), slerp(a, b, t), 2.0f * t * (1.0f - t));
 }
 
 // Matrix2 functions
-Matrix2 transpose(const Matrix2& m)
+inline Matrix2
+transpose(const Matrix2& m)
 {
 	Matrix2 result;
-
 	for (usize i = 0; i < 2; i++)
 	{
 		for (usize j = 0; j < 2; j++)
@@ -4153,36 +4644,36 @@ Matrix2 transpose(const Matrix2& m)
 	return result;
 }
 
-f32 determinant(const Matrix2& m)
+inline f32
+determinant(const Matrix2& m)
 {
 	return m[0][0] * m[1][1] - m[1][0] * m[0][1];
 }
 
-Matrix2 inverse(const Matrix2& m)
+inline Matrix2
+inverse(const Matrix2& m)
 {
 	f32 inv_det = 1.0f / (m[0][0] * m[1][1] - m[1][0] * m[0][1]);
 	Matrix2 result;
-
 	result[0][0] =  m[1][1] * inv_det;
 	result[0][1] = -m[0][1] * inv_det;
 	result[1][0] = -m[1][0] * inv_det;
 	result[1][1] =  m[0][0] * inv_det;
-
 	return result;
 }
 
-Matrix2 hadamard(const Matrix2& a, const Matrix2&b)
+inline Matrix2
+hadamard(const Matrix2& a, const Matrix2&b)
 {
 	Matrix2 result;
-
 	result[0] = a[0] * b[0];
 	result[1] = a[1] * b[1];
-
 	return result;
 }
 
 // Matrix3 functions
-Matrix3 transpose(const Matrix3& m)
+inline Matrix3
+transpose(const Matrix3& m)
 {
 	Matrix3 result;
 
@@ -4194,14 +4685,16 @@ Matrix3 transpose(const Matrix3& m)
 	return result;
 }
 
-f32 determinant(const Matrix3& m)
+inline f32
+determinant(const Matrix3& m)
 {
 	return ( m[0][0] * (m[1][1] * m[2][2] - m[2][1] * m[1][2])
 	        -m[1][0] * (m[0][1] * m[2][2] - m[2][1] * m[0][2])
 	        +m[2][0] * (m[0][1] * m[1][2] - m[1][1] * m[0][2]));
 }
 
-Matrix3 inverse(const Matrix3& m)
+inline Matrix3
+inverse(const Matrix3& m)
 {
 	f32 inv_det = 1.0f / (
 		+ m[0][0] * (m[1][1] * m[2][2] - m[2][1] * m[1][2])
@@ -4223,20 +4716,19 @@ Matrix3 inverse(const Matrix3& m)
 	return result;
 }
 
-Matrix3 hadamard(const Matrix3& a, const Matrix3&b)
+inline Matrix3 
+hadamard(const Matrix3& a, const Matrix3&b)
 {
 	Matrix3 result;
-
 	result[0] = a[0] * b[0];
 	result[1] = a[1] * b[1];
 	result[2] = a[2] * b[2];
-
 	return result;
 }
 
-
 // Matrix4 functions
-Matrix4 transpose(const Matrix4& m)
+inline Matrix4
+transpose(const Matrix4& m)
 {
 	Matrix4 result;
 
@@ -4248,7 +4740,8 @@ Matrix4 transpose(const Matrix4& m)
 	return result;
 }
 
-f32 determinant(const Matrix4& m)
+f32
+determinant(const Matrix4& m)
 {
 	f32 coef00 = m[2][2] * m[3][3] - m[3][2] * m[2][3];
 	f32 coef02 = m[1][2] * m[3][3] - m[3][2] * m[1][3];
@@ -4302,7 +4795,8 @@ f32 determinant(const Matrix4& m)
 	return dot1;
 }
 
-Matrix4 inverse(const Matrix4& m)
+Matrix4
+inverse(const Matrix4& m)
 {
 	f32 coef00 = m[2][2] * m[3][3] - m[3][2] * m[2][3];
 	f32 coef02 = m[1][2] * m[3][3] - m[3][2] * m[1][3];
@@ -4354,7 +4848,8 @@ Matrix4 inverse(const Matrix4& m)
 	return inverse * oneOverDeterminant;
 }
 
-Matrix4 hadamard(const Matrix4& a, const Matrix4& b)
+inline Matrix4
+hadamard(const Matrix4& a, const Matrix4& b)
 {
 	Matrix4 result;
 
@@ -4366,7 +4861,8 @@ Matrix4 hadamard(const Matrix4& a, const Matrix4& b)
 	return result;
 }
 
-Matrix4 quaternion_to_matrix4(const Quaternion& q)
+inline Matrix4
+quaternion_to_matrix4(const Quaternion& q)
 {
 	Matrix4 mat = MATRIX4_IDENTITY;
 
@@ -4397,7 +4893,8 @@ Matrix4 quaternion_to_matrix4(const Quaternion& q)
 	return mat;
 }
 
-Quaternion matrix4_to_quaternion(const Matrix4& m)
+Quaternion
+matrix4_to_quaternion(const Matrix4& m)
 {
 	f32 four_x_squared_minus_1 = m[0][0] - m[1][1] - m[2][2];
 	f32 four_y_squared_minus_1 = m[1][1] - m[0][0] - m[2][2];
@@ -4472,7 +4969,8 @@ Quaternion matrix4_to_quaternion(const Matrix4& m)
 }
 
 
-Matrix4 translate(const Vector3& v)
+inline Matrix4
+translate(const Vector3& v)
 {
 	Matrix4 result = MATRIX4_IDENTITY;
 	result[3].xyz = v;
@@ -4480,7 +4978,8 @@ Matrix4 translate(const Vector3& v)
 	return result;
 }
 
-Matrix4 rotate(const Vector3& v, f32 radians)
+inline Matrix4
+rotate(const Vector3& v, f32 radians)
 {
 	const f32 c = math::cos(radians);
 	const f32 s = math::sin(radians);
@@ -4508,7 +5007,8 @@ Matrix4 rotate(const Vector3& v, f32 radians)
 	return rot;
 }
 
-Matrix4 scale(const Vector3& v)
+inline Matrix4
+scale(const Vector3& v)
 {
 	return { v.x,   0,   0, 0,
 	           0, v.y,   0, 0,
@@ -4516,7 +5016,8 @@ Matrix4 scale(const Vector3& v)
 	           0,   0,   0, 1 };
 }
 
-Matrix4 ortho(f32 left, f32 right, f32 bottom, f32 top)
+inline Matrix4
+ortho(f32 left, f32 right, f32 bottom, f32 top)
 {
 	Matrix4 result = MATRIX4_IDENTITY;
 
@@ -4529,7 +5030,8 @@ Matrix4 ortho(f32 left, f32 right, f32 bottom, f32 top)
 	return result;
 }
 
-Matrix4 ortho(f32 left, f32 right, f32 bottom, f32 top, f32 z_near, f32 z_far)
+inline Matrix4
+ortho(f32 left, f32 right, f32 bottom, f32 top, f32 z_near, f32 z_far)
 {
 	Matrix4 result = MATRIX4_IDENTITY;
 
@@ -4543,7 +5045,8 @@ Matrix4 ortho(f32 left, f32 right, f32 bottom, f32 top, f32 z_near, f32 z_far)
 	return result;
 }
 
-Matrix4 perspective(f32 fovy_radians, f32 aspect, f32 z_near, f32 z_far)
+inline Matrix4
+perspective(f32 fovy_radians, f32 aspect, f32 z_near, f32 z_far)
 {
 	GB_ASSERT(math::abs(aspect) > 0.0f,
 	          "math::perspective `fovy_radians` is %f", fovy_radians);
@@ -4560,7 +5063,8 @@ Matrix4 perspective(f32 fovy_radians, f32 aspect, f32 z_near, f32 z_far)
 	return result;
 }
 
-Matrix4 infinite_perspective(f32 fovy_radians, f32 aspect, f32 z_near)
+inline Matrix4
+infinite_perspective(f32 fovy_radians, f32 aspect, f32 z_near)
 {
 	f32 range  = math::tan(0.5f * fovy_radians) * z_near;
 	f32 left   = -range * aspect;
@@ -4580,7 +5084,7 @@ Matrix4 infinite_perspective(f32 fovy_radians, f32 aspect, f32 z_near)
 }
 
 
-Matrix4
+inline Matrix4
 look_at_matrix4(const Vector3& eye, const Vector3& center, const Vector3& up)
 {
 	const Vector3 f = math::normalize(center - eye);
@@ -4609,7 +5113,7 @@ look_at_matrix4(const Vector3& eye, const Vector3& center, const Vector3& up)
 }
 
 
-Quaternion
+inline Quaternion
 look_at_quaternion(const Vector3& eye, const Vector3& center, const Vector3& up)
 {
 	const f32 similar = 0.001f;
@@ -4622,12 +5126,14 @@ look_at_quaternion(const Vector3& eye, const Vector3& center, const Vector3& up)
 }
 
 // Transform Functions
-Vector3 transform_point(const Transform& transform, const Vector3& point)
+inline Vector3
+transform_point(const Transform& transform, const Vector3& point)
 {
 	return (math::conjugate(transform.orientation) * (transform.position - point)) / transform.scale;
 }
 
-Transform inverse(const Transform& t)
+inline Transform
+inverse(const Transform& t)
 {
 	const Quaternion inv_orientation = math::conjugate(t.orientation);
 
@@ -4737,9 +5243,6 @@ plane_3_intersection(const Plane& p1, const Plane& p2, const Plane& p3, Vector3&
 
 	return true;
 }
-
-
-
 
 } // namespace math
 } // namespace gb
