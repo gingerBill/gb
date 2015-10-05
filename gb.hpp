@@ -1,7 +1,8 @@
-// gb.hpp - v0.11 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.12 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 //
 // Version History:
+//     0.12 - Random
 //     0.11 - Complex
 //     0.10 - Atomics
 //     0.09 - Bug Fixes
@@ -45,10 +46,10 @@
 //     - Array
 //     - Hash Table
 //     - Hash Functions
-//    [- Os] (Not Yet Implemented)
 //     - Math
 //         - Types
 //             - Vector(2,3,4)
+//             - Complex
 //             - Quaternion
 //             - Matrix(2,3,4)
 //             - Euler_Angles
@@ -59,7 +60,13 @@
 //         - Operations
 //         - Functions & Constants
 //         - Type Functions
-//
+//     - Random
+//         - Generator_Type
+//         - Geneartor Definition (Template/Concept)
+//             - Mt19937_32_Generator
+//             - Mt19937_64_Generator
+//         - random_device_value()
+//         - Functions
 //
 //
 #ifndef GB_INCLUDE_GB_HPP
@@ -143,6 +150,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
+#ifndef GB_CONSTEXPR
+	#if defined(_MSC_VER)
+	#define GB_CONSTEXPR
+	#else
+	#define GB_CONSTEXPR constexpr
+	#endif
+#endif
 
 #if defined(GB_SYSTEM_WINDOWS)
 
@@ -1236,128 +1251,6 @@ u64 murmur64(const void* key, usize num_bytes, u64 seed = 0x9747b28c);
 
 ////////////////////////////////
 ///                          ///
-/// Os                       ///
-///                          ///
-////////////////////////////////
-
-namespace os
-{
-#if 0
-// TODO(bill) NOTE(bill): How should I do error handling?
-// Because C++ cannot return multiple variables (ignoring tuples),
-// the Golang way is not possible
-// e.g. auto file, err = os::open_file("whatever.ext");
-// Also this is ugly :
-// File* file; Error* err;
-// tie(file, err) = os::open_file("whatever.ext");
-
-// TODO(bill): Move to gb:: ? e.g. make error handling type?
-struct Error
-{
-	const char* text;
-};
-
-struct File
-{
-#if defined(GB_SYSTEM_WINDOWS)
-	HANDLE handle;
-#else
-#error gb::File Not implemented for this platform
-#endif
-	uintptr fd;
-	// TODO(bill): Implement File type
-};
-
-const Error ERR_INVALID    = Error{"invalid argument"};
-const Error ERR_PERMISSION = Error{"permission denied"};
-const Error ERR_EXIST      = Error{"file already exists"};
-const Error ERR_NOT_EXIST  = Error{"file already exists"};
-const Error ERR_PATH_ERROR = Error{"path error"};
-
-
-// Os Functions
-
-Error* chdir(const char* dir);
-Error* chmod(const char* name, u32 mode);
-Error* mkdir(const char* name, u32 perm);
-Error* mkdir_all(const char* name, u32 perm);
-
-Error* remove(const char* name);
-Error* remove_all(const char* name);
-
-Error* rename(const char* old_path, const char* new_path);
-
-void clear_env();
-void exit(int code);
-
-int get_egid();
-int get_euid();
-int get_gid();
-int get_page_size();
-int get_ppid();
-int get_uid();
-
-Error* get_wd(const char* buffer, usize buffer_len);
-Error* hostname(const char* buffer, usize buffer_len);
-
-bool is_path_separator(char c);
-
-Error* lchown(const char* name, int uid, int gid);
-
-Error* link(const char* old_name, const char* new_name);
-Error* read_link(const char* name, const char* buffer, usize buffer_len);
-Error* symlink(const char* old_name, const char* new_name);
-
-void temp_dir(const char* buffer, usize buffer_len);
-
-Error* truncate(const char* name, s64 size);
-
-
-
-// File functions
-
-enum File_Flag : s32
-{
-	READ_ONLY  = 0,
-	WRITE_ONLY = 1,
-	READ_WRITE = 2,
-	CREATE     = 4,
-	TRUNCATE   = 8,
-};
-
-File new_file(uintptr fd, const char* name);
-Error* create_file(File& file, const char* name);
-Error* open_file(File& file, const char* filename, int flag = READ_ONLY, u32 perm = 0);
-Error* close_file(File& file);
-
-bool is_file_open(File& file);
-bool is_file_dir(File& file);
-
-bool get_line(File& file, const char* buffer, usize buffer_len);
-
-s64 file_size(File& file);
-
-Error* read_file(File& file, const void* buffer, usize num_bytes);
-Error* read_file_at(File& file, const void* buffer, usize num_bytes, s64 offset);
-
-Error* write_to_file(File& file, const void* buffer, usize num_bytes);
-Error* write_to_file_at(File& file, const void* buffer, usize num_bytes, s64 offset);
-
-Error* seek_file(File& file, s64 offset, s64 whence);
-Error* sync_file(File& file);
-Error* truncate_file(File& file);
-
-Error* chdir_of_file(File& file);
-Error* chmod_of_file(File& file, u32 mode);
-Error* chown_of_file(File& file, int uid, int gid);
-
-void name_of_file(File& file, const char* buffer, usize buffer_len);
-#endif
-} // namespace os
-
-
-////////////////////////////////
-///                          ///
 /// Time                     ///
 ///                          ///
 ////////////////////////////////
@@ -1462,7 +1355,7 @@ struct Vector4
 
 struct Complex
 {
-	union 
+	union
 	{
 		struct { f32 x, y; };
 		struct { f32 real, imag; };
@@ -1753,7 +1646,8 @@ extern const f32 PI;
 extern const f32 TAU;
 extern const f32 SQRT_2;
 extern const f32 SQRT_3;
-extern const f32 FLOAT_PRECISION;
+
+extern const f32 F32_PRECISION;
 
 // Power
 f32 sqrt(f32 x);
@@ -1801,6 +1695,9 @@ s16 abs(s16 x);
 s32 abs(s32 x);
 s64 abs(s64 x);
 
+bool is_infinite(f32 x);
+bool is_nan(f32 x);
+
 s32 min(s32 a, s32 b);
 s64 min(s64 a, s64 b);
 f32 min(f32 a, f32 b);
@@ -1816,7 +1713,7 @@ f32 clamp(f32 x, f32 min, f32 max);
 template <typename T>
 T lerp(const T& x, const T& y, const T& t);
 
-bool equals(f32 a, f32 b, f32 precision = FLOAT_PRECISION);
+bool equals(f32 a, f32 b, f32 precision = F32_PRECISION);
 
 template <typename T>
 void swap(T& a, T& b);
@@ -1919,6 +1816,7 @@ Matrix4 transpose(const Matrix4& m);
 f32 determinant(const Matrix4& m);
 Matrix4 inverse(const Matrix4& m);
 Matrix4 hadamard(const Matrix4& a, const Matrix4&b);
+bool is_affine(const Matrix4& m);
 
 Matrix4 quaternion_to_matrix4(const Quaternion& a);
 Quaternion matrix4_to_quaternion(const Matrix4& m);
@@ -1943,12 +1841,28 @@ Transform inverse(const Transform& t);
 Matrix4 transform_to_matrix4(const Transform& t);
 
 // Aabb Functions
+Aabb calculate_aabb(const void* vertices, usize num_vertices, usize stride, usize offset);
+
+f32 aabb_surface_area(const Aabb& aabb);
 f32 aabb_volume(const Aabb& aabb);
-bool aabb_contains_point(const Aabb& aabb, const Vector3& point);
+
 Sphere aabb_to_sphere(const Aabb& aabb);
 
+bool contains(const Aabb& aabb, const Vector3& point);
+bool contains(const Aabb& a, const Aabb& b);
+bool intersects(const Aabb& a, const Aabb& b);
+
+Aabb aabb_transform_affine(const Aabb& aabb, const Matrix4& m);
+
 // Sphere Functions
+Sphere calculate_min_bounding_sphere(const void* vertices, usize num_vertices, usize stride, usize offset, f32 step);
+Sphere calculate_max_bounding_sphere(const void* vertices, usize num_vertices, usize stride, usize offset);
+
+f32 sphere_surface_area(const Sphere& s);
 f32 sphere_volume(const Sphere& s);
+
+Aabb sphere_to_aabb(const Sphere& sphere);
+
 bool sphere_contains_point(const Sphere& s, const Vector3& point);
 
 // Plane Functions
@@ -1956,9 +1870,215 @@ f32 ray_plane_intersection(const Vector3& from, const Vector3& dir, const Plane&
 f32 ray_sphere_intersection(const Vector3& from, const Vector3& dir, const Sphere& s);
 
 bool plane_3_intersection(const Plane& p1, const Plane& p2, const Plane& p3, Vector3& ip);
-
 } // namespace math
 
+namespace random
+{
+enum Generator_Type
+{
+	MERSENNE_TWISTER_32,
+	MERSENNE_TWISTER_64,
+};
+
+// NOTE(bill): Basic Definition of a Random Number Generator
+// NOTE(bill): C++(17)?? Concepts would be useful here
+/*
+struct Generator
+{
+	using Result_Type = T;
+	using Seed_Type   = U;
+
+	Seed_Type seed;
+	Generator_Type type;
+
+	Result_Type next();
+	u32 next_u32();
+	s32 next_s32();
+	u64 next_u64();
+	s64 next_s64();
+	f32 next_f32();
+	f64 next_f64();
+};
+*/
+
+struct Mt19937_32_Generator
+{
+	using Result_Type = s32;
+	using Seed_Type   = u32;
+
+	Seed_Type seed;
+	Generator_Type type = MERSENNE_TWISTER_32;
+
+	u32 index;
+	s32 mt[624];
+
+	Result_Type next();
+	u32 next_u32();
+	s32 next_s32();
+	u64 next_u64();
+	s64 next_s64();
+	f32 next_f32();
+	f64 next_f64();
+};
+
+struct Mt19937_64_Generator
+{
+	using Result_Type = s64;
+	using Seed_Type   = u64;
+
+	Seed_Type seed;
+	Generator_Type type = MERSENNE_TWISTER_64;
+
+	u32 index;
+	s64 mt[312];
+
+	Result_Type next();
+	u32 next_u32();
+	s32 next_s32();
+	u64 next_u64();
+	s64 next_s64();
+	f32 next_f32();
+	f64 next_f64();
+};
+
+u32 random_device_value();
+
+Mt19937_32_Generator make_mt19937_32(Mt19937_32_Generator::Seed_Type seed);
+Mt19937_64_Generator make_mt19937_64(Mt19937_64_Generator::Seed_Type seed);
+
+void set_seed(Mt19937_32_Generator& gen, Mt19937_32_Generator::Seed_Type seed);
+void set_seed(Mt19937_64_Generator& gen, Mt19937_64_Generator::Seed_Type seed);
+
+template <typename Generator> s32 uniform_s32_distribution(Generator& gen, s32 min_inc, s32 max_inc);
+template <typename Generator> s64 uniform_s64_distribution(Generator& gen, s64 min_inc, s64 max_inc);
+template <typename Generator> u32 uniform_u32_distribution(Generator& gen, u32 min_inc, u32 max_inc);
+template <typename Generator> u64 uniform_u64_distribution(Generator& gen, u64 min_inc, u64 max_inc);
+template <typename Generator> f32 uniform_f32_distribution(Generator& gen, f32 min_inc, f32 max_inc);
+template <typename Generator> f64 uniform_f64_distribution(Generator& gen, f64 min_inc, f64 max_inc);
+
+template <typename Generator> ssize uniform_ssize_distribution(Generator& gen, ssize min_inc, ssize max_inc);
+template <typename Generator> usize uniform_usize_distribution(Generator& gen, usize min_inc, usize max_inc);
+
+inline u32
+random_device_value()
+{
+	// TODO(bill): Actually return true random value
+	return 12;
+}
+
+
+inline Mt19937_32_Generator
+make_mt19937_32(Mt19937_32_Generator::Seed_Type seed)
+{
+	Mt19937_32_Generator gen = {};
+	gen.type = MERSENNE_TWISTER_32;
+	set_seed(gen, seed);
+	return gen;
+}
+
+inline Mt19937_64_Generator
+make_mt19937_64(Mt19937_64_Generator::Seed_Type seed)
+{
+	Mt19937_64_Generator gen = {};
+	gen.type = MERSENNE_TWISTER_64;
+	set_seed(gen, seed);
+	return gen;
+}
+
+inline void
+set_seed(Mt19937_32_Generator& gen, Mt19937_32_Generator::Seed_Type seed)
+{
+	gen.seed = seed;
+	gen.mt[0] = seed;
+	for (u32 i = 1; i < 624; i++)
+		gen.mt[i] = 1812433253 * (gen.mt[i-1] ^ gen.mt[i-1] >> 30) + i;
+}
+
+inline void
+set_seed(Mt19937_64_Generator& gen, Mt19937_64_Generator::Seed_Type seed)
+{
+	gen.seed = seed;
+	gen.mt[0] = seed;
+	for (u32 i = 1; i < 312; i++)
+		gen.mt[i] = 6364136223846793005ull * (gen.mt[i-1] ^ gen.mt[i-1] >> 62) + i;
+}
+
+template <typename Generator>
+inline s32
+uniform_s32_distribution(Generator& gen, s32 min_inc, s32 max_inc)
+{
+	return (gen.next_s32() % (max_inc - min_inc + 1)) + min_inc;
+}
+
+template <typename Generator>
+inline s64
+uniform_s64_distribution(Generator& gen, s64 min_inc, s64 max_inc)
+{
+	return (gen.next_s64() % (max_inc - min_inc + 1)) + min_inc;
+}
+
+
+template <typename Generator>
+inline u32
+uniform_u32_distribution(Generator& gen, u32 min_inc, u32 max_inc)
+{
+	return (gen.next_u64() % (max_inc - min_inc + 1)) + min_inc;
+}
+
+
+template <typename Generator>
+inline u64
+uniform_u64_distribution(Generator& gen, u64 min_inc, u64 max_inc)
+{
+	return (gen.next_u64() % (max_inc - min_inc + 1)) + min_inc;
+}
+
+
+template <typename Generator>
+inline f32
+uniform_f32_distribution(Generator& gen, f32 min_inc, f32 max_inc)
+{
+	f64 n = (gen.next_s64() >> 11) * (1.0/4503599627370495.0);
+	return (f32)(n * ((f64)max_inc - (f64)min_inc + 1.0) + (f64)min_inc);
+}
+
+
+template <typename Generator>
+inline f64
+uniform_f64_distribution(Generator& gen, f64 min_inc, f64 max_inc)
+{
+	f64 n = (gen.next_s64() >> 11) * (1.0/4503599627370495.0);
+	return n * (max_inc - min_inc + 1.0) + min_inc;
+}
+
+template <typename Generator>
+inline ssize
+uniform_ssize_distribution(Generator& gen, ssize min_inc, ssize max_inc)
+{
+#if GB_ARCH_32_BIT
+	return (gen.next_s32() % (max_inc - min_inc + 1)) + min_inc;
+#elif GB_ARCH_64_BIT
+	return (gen.next_s64() % (max_inc - min_inc + 1)) + min_inc;
+#else
+#error Bit size not supported
+#endif
+}
+
+
+template <typename Generator>
+inline usize
+uniform_usize_distribution(Generator& gen, usize min_inc, usize max_inc)
+{
+#if GB_ARCH_32_BIT
+	return (gen.next_u32() % (max_inc - min_inc + 1)) + min_inc;
+#elif GB_ARCH_64_BIT
+	return (gen.next_u64() % (max_inc - min_inc + 1)) + min_inc;
+#else
+#error Bit size not supported
+#endif
+}
+
+} // namespace random
 
 #if 0
 #if defined(GB_OPENGL_TOOLS)
@@ -2063,7 +2183,7 @@ s32 get_uniform_location(Shader_Program* program, const char* name);
 ///
 ///
 ///
-/// It's a long way to Tipperary
+/// It's turtles all the way down!
 ///
 ///
 ///
@@ -2967,198 +3087,11 @@ u64 murmur64(const void* key, usize num_bytes, u64 seed)
 	h = (h << 32) | h2;
 
 	return h;
-
 }
 #else
 #error murmur64 function not supported on this architecture
 #endif
 } // namespace hash
-
-
-
-////////////////////////////////
-///                          ///
-/// Os                       ///
-///                          ///
-////////////////////////////////
-
-#if 0 && defined(GB_SYSTEM_WINDOWS)
-namespace os
-{
-File
-new_file(uintptr fd, const char* name)
-{
-	// TODO(bill):
-	return nullptr;
-}
-
-Error*
-create_file(File& file, const char* name)
-{
-	return open_file(file, name, READ_WRITE|CREATE|TRUNCATE, 0666);
-}
-
-internal File
-win32_open_file(const char* name, int flag, u32 perm)
-{
-
-}
-
-Error*
-open_file(File& file, const char* name, int flag, u32 perm)
-{
-	if (name || name[0] == '\0')
-		return &ERR_PATH_ERROR;
-	return nullptr;
-	File r = {};
-	Error* err = nullptr;
-	err = win32_open_file(r, name, flag, perm);
-	if (!err)
-	{
-		file = r;
-		return nullptr;
-	}
-	err = win32_open_dir(r, name);
-	if (!err)
-	{
-		if ((flag & WRITE_ONLY) || (flag & READ_WRITE))
-		{
-			close_file(r);
-			return &ERR_PATH_ERROR;
-		}
-		file = r;
-		return nullptr;
-	}
-	return &ERR_PATH_ERROR;
-}
-
-Error*
-close_file(File& file)
-{
-	// TODO(bill):
-	if (is_file_dir(file))
-		return nullptr;
-	Error* err = nullptr;
-
-	return err;
-}
-
-bool
-is_file_open(File& file)
-{
-	// TODO(bill):
-	return false;
-}
-
-bool
-is_file_dir(File& file)
-{
-	// TODO(bill);
-	return false;
-}
-
-
-bool
-get_line(File& file, const char* buffer, usize buffer_len)
-{
-	// TODO(bill):
-	return nullptr;
-}
-
-
-s64
-file_size(File& file)
-{
-	if (!file)
-		return -1;
-	LARGE_INTEGER file_size;
-	if (GetFileSizeEx(file->handle, &file_size))
-		return (s64)file_size.QuadPart;
-	return -1;
-}
-
-
-Error*
-read_file(File& file, const void* buffer, usize num_bytes)
-{
-	// TODO(bill):
-	return nullptr;
-}
-
-Error*
-read_file_at(File& file, const void* buffer, usize num_bytes, s64 offset)
-{
-	// TODO(bill):
-	return nullptr;
-}
-
-Error*
-write_to_file(File& file, const void* buffer, usize num_bytes)
-{
-	// TODO(bill):
-	return nullptr;
-}
-
-Error*
-write_to_file_at(File& file, const void* buffer, usize num_bytes, s64 offset)
-{
-	// TODO(bill):
-	return nullptr;
-}
-
-Error*
-seek_file(File& file, s64 offset, s64 whence)
-{
-	// TODO(bill):
-	return nullptr;
-}
-
-Error*
-sync_file(File& file)
-{
-	// TODO(bill):
-	return nullptr;
-}
-
-Error*
-truncate_file(File& file)
-{
-	// TODO(bill):
-	return nullptr;
-}
-
-Error*
-chdir_of_file(File& file)
-{
-	// TODO(bill):
-	return nullptr;
-}
-
-Error*
-chmod_of_file(File& file, u32 mode)
-{
-	// TODO(bill):
-	return nullptr;
-}
-
-Error*
-chown_of_file(File& file, int uid, int gid)
-{
-	// TODO(bill):
-	return nullptr;
-}
-
-void
-name_of_file(File& file, const char* buffer, usize buffer_len)
-{
-	// TODO(bill):
-	return;
-}
-} // namespace os
-
-#endif
-
-
 
 ////////////////////////////////
 ///                          ///
@@ -4117,7 +4050,8 @@ const f32 PI              = 3.141592654f;
 const f32 TAU             = 6.283185307f;
 const f32 SQRT_2          = 1.414213562f;
 const f32 SQRT_3          = 1.732050808f;
-const f32 FLOAT_PRECISION = 1.0e-7f;
+
+const f32 F32_PRECISION = 1.0e-7f;
 
 // Power
 inline f32 sqrt(f32 x)       { return ::sqrtf(x);        }
@@ -4215,6 +4149,17 @@ abs(s64 x)
 	return reinterpret_cast<const s64&>(i);
 }
 
+inline bool
+is_infinite(f32 x)
+{
+	return isinf(x);
+}
+
+inline bool
+is_nan(f32 x)
+{
+	return isnan(x);
+}
 
 inline s32 min(s32 a, s32 b) { return a < b ? a : b; }
 inline s64 min(s64 a, s64 b) { return a < b ? a : b; }
@@ -4716,7 +4661,7 @@ inverse(const Matrix3& m)
 	return result;
 }
 
-inline Matrix3 
+inline Matrix3
 hadamard(const Matrix3& a, const Matrix3&b)
 {
 	Matrix3 result;
@@ -4860,6 +4805,16 @@ hadamard(const Matrix4& a, const Matrix4& b)
 
 	return result;
 }
+
+inline bool
+is_affine(const Matrix4& m)
+{
+	return (equals(m.columns[3].x, 0)) &
+	       (equals(m.columns[3].y, 0)) &
+	       (equals(m.columns[3].z, 0)) &
+	       (equals(m.columns[3].w, 1.0f));
+}
+
 
 inline Matrix4
 quaternion_to_matrix4(const Quaternion& q)
@@ -5156,21 +5111,58 @@ transform_to_matrix4(const Transform& t)
 
 
 // Aabb Functions
+inline Aabb
+calculate_aabb(const void* vertices, usize num_vertices, usize stride, usize offset)
+{
+	Vector3 min;
+	Vector3 max;
+	u8* vertex = (u8*)vertices;
+	vertex += offset;
+	Vector3 position = *(Vector3*)vertex;
+	min.x = max.x = position.x;
+	min.y = max.y = position.y;
+	min.z = max.z = position.z;
+	vertex += stride;
+
+	for (usize i = 1; i < num_vertices; i++)
+	{
+		position = *(Vector3*)vertex;
+		vertex += stride;
+
+		Vector3 p = position;
+		min.x = math::min(p.x, min.x);
+		min.y = math::min(p.y, min.y);
+		min.z = math::min(p.z, min.z);
+		max.x = math::max(p.x, max.x);
+		max.y = math::max(p.y, max.y);
+		max.z = math::max(p.z, max.z);
+	}
+
+	Aabb aabb;
+
+	aabb.center    = 0.5f * (min + max);
+	aabb.half_size = 0.5f * (max - min);
+
+	return aabb;
+}
+
+inline f32
+aabb_surface_area(const Aabb& aabb)
+{
+	Vector3 h = aabb.half_size * 2.0f;
+	f32 s = 0.0f;
+	s += h.x * h.y;
+	s += h.y * h.z;
+	s += h.z * h.x;
+	s *= 3.0f;
+	return s;
+}
+
 inline f32
 aabb_volume(const Aabb& aabb)
 {
-	Vector3 s = aabb.half_size;
-	return s.x * s.y * s.z * 8.0f;
-}
-
-inline bool
-aabb_contains_point(const Aabb& aabb, const Vector3& point)
-{
-	Vector3 distance = aabb.center - point;
-
-	return (math::abs(distance.x) <= aabb.half_size.x) &
-           (math::abs(distance.y) <= aabb.half_size.y) &
-           (math::abs(distance.z) <= aabb.half_size.z);
+	Vector3 h = aabb.half_size * 2.0f;
+	return h.x * h.y * h.z;
 }
 
 inline Sphere
@@ -5182,13 +5174,165 @@ aabb_to_sphere(const Aabb& aabb)
 	return s;
 }
 
+
+inline bool
+contains(const Aabb& aabb, const Vector3& point)
+{
+	Vector3 distance = aabb.center - point;
+
+	// NOTE(bill): & is faster than &&
+	return (math::abs(distance.x) <= aabb.half_size.x) &
+           (math::abs(distance.y) <= aabb.half_size.y) &
+           (math::abs(distance.z) <= aabb.half_size.z);
+}
+
+inline bool
+contains(const Aabb& a, const Aabb& b)
+{
+	Vector3 dist = a.center - b.center;
+
+	// NOTE(bill): & is faster than &&
+	return (math::abs(dist.x) + b.half_size.x <= a.half_size.x) &
+	       (math::abs(dist.y) + b.half_size.y <= a.half_size.y) &
+	       (math::abs(dist.z) + b.half_size.z <= a.half_size.z);
+}
+
+
+inline bool
+intersects(const Aabb& a, const Aabb& b)
+{
+	Vector3 dist = a.center - b.center;
+	Vector3 sum_half_sizes = a.half_size + b.half_size;
+
+	// NOTE(bill): & is faster than &&
+	return (math::abs(dist.x) <= sum_half_sizes.x) &
+	       (math::abs(dist.y) <= sum_half_sizes.y) &
+	       (math::abs(dist.z) <= sum_half_sizes.z);
+}
+
+inline Aabb
+aabb_transform_affine(const Aabb& aabb, const Matrix4& m)
+{
+	GB_ASSERT(math::is_affine(m),
+	          "Passed Matrix4 must be an affine matrix");
+
+	Aabb result;
+	Vector4 ac;
+	ac.xyz = aabb.center;
+	ac.w   = 1;
+	result.center = (m * ac).xyz;
+
+	Vector3 hs = aabb.half_size;
+	f32 x = math::abs(m[0][0] * hs.x + math::abs(m[0][1]) * hs.y + math::abs(m[0][2]) * hs.z);
+	f32 y = math::abs(m[1][0] * hs.x + math::abs(m[1][1]) * hs.y + math::abs(m[1][2]) * hs.z);
+	f32 z = math::abs(m[2][0] * hs.x + math::abs(m[2][1]) * hs.y + math::abs(m[2][2]) * hs.z);
+
+	result.half_size.x = math::is_infinite(math::abs(hs.x)) ? hs.x : x;
+	result.half_size.y = math::is_infinite(math::abs(hs.y)) ? hs.y : y;
+	result.half_size.z = math::is_infinite(math::abs(hs.z)) ? hs.z : z;
+
+	return result;
+}
+
+
 // Sphere Functions
+inline Sphere
+calculate_min_bounding_sphere(const void* vertices, usize num_vertices, usize stride, usize offset, f32 step)
+{
+	auto gen = random::make_mt19937_64(1337); // TODO(bill): Initialize with random seed from random device
+
+	u8* vertex = (u8*)vertices;
+	vertex += offset;
+
+	Vector3 position = *(Vector3*)&vertex[0];;
+	Vector3 center = position;
+	center += *(Vector3*)&vertex[1 * stride];
+	center *= 0.5f;
+
+	Vector3 d = position - center;
+	f32 max_dist_sq = math::dot(d, d);
+	f32 radius_step = step * 0.37f;
+
+	bool done;
+	do
+	{
+		done = true;
+		for (usize i = 0, index = random::uniform_usize_distribution(gen, 0, num_vertices-1);
+		     i < num_vertices;
+		     i++, index = (index + 1)%num_vertices)
+		{
+			Vector3 position = *(Vector3*)&vertex[index * stride];
+
+			d = position - center;
+			f32 dist_sq = math::dot(d, d);
+
+			if (dist_sq > max_dist_sq)
+			{
+				done = false;
+
+				center = d * radius_step;
+				max_dist_sq = math::lerp(max_dist_sq, dist_sq, step);
+
+				break;
+			}
+		}
+	}
+	while (!done);
+
+
+	Sphere result;
+
+	result.center = center;
+	result.radius = math::sqrt(max_dist_sq);
+
+	return result;
+}
+
+inline Sphere
+calculate_max_bounding_sphere(const void* vertices, usize num_vertices, usize stride, usize offset)
+{
+	Aabb aabb = calculate_aabb(vertices, num_vertices, stride, offset);
+
+	Vector3 center = aabb.center;
+
+	f32 max_dist_sq = 0.0f;
+	u8* vertex = (u8*)vertices;
+	vertex += offset;
+
+	for (usize i = 0; i < num_vertices; i++)
+	{
+		Vector3 position = *(Vector3*)vertex;
+		vertex += stride;
+
+		Vector3 d = position - center;
+		f32 dist_sq = math::dot(d, d);
+		max_dist_sq = math::max(dist_sq, max_dist_sq);
+	}
+
+	Sphere sphere;
+	sphere.center = center;
+	sphere.radius = math::sqrt(max_dist_sq);
+
+	return sphere;
+}
+
+inline f32
+sphere_surface_area(const Sphere& s)
+{
+
+}
+
 inline f32
 sphere_volume(const Sphere& s)
 {
 	return TWO_THIRDS * TAU * s.radius * s.radius * s.radius;
 }
 
+inline Aabb
+sphere_to_aabb(const Sphere& s)
+{
+
+}
 
 inline bool
 sphere_contains_point(const Sphere& s, const Vector3& point)
@@ -5245,6 +5389,172 @@ plane_3_intersection(const Plane& p1, const Plane& p2, const Plane& p3, Vector3&
 }
 
 } // namespace math
+
+namespace random
+{
+inline s32
+Mt19937_32_Generator::next()
+{
+	if (index >= 624)
+	{
+		for (u32 i = 0; i < 624; i++)
+		{
+			s32 y = ((mt[i] & 0x80000000) + (mt[(i + 1) % 624] & 0x7fffffff)) & 0xFFFFFFFF;
+			mt[i] = mt[(i + 397) % 624] ^ y >> 1;
+
+			if (y % 2 != 0)
+				mt[i] = mt[i] ^ 0x9908b0df;
+		}
+		index = 0;
+	}
+
+	s32 y = mt[index];
+
+	y ^= (y >> 11);
+	y ^= (y <<  7) & 2636928640;
+	y ^= (y << 15) & 4022730752;
+	y ^= (y >> 18);
+
+	index++;
+
+	return y;
+}
+
+inline u32
+Mt19937_32_Generator::next_u32()
+{
+	s32 n = next();
+	u32 x = *(u32*)&n;
+	return x;
+}
+
+inline s32
+Mt19937_32_Generator::next_s32()
+{
+	return next();
+}
+
+inline u64
+Mt19937_32_Generator::next_u64()
+{
+	s32 n = next();
+	u64 a = *(u64*)&n;
+	a = (u64)(a << 32) | (u64)next();
+	return a;
+}
+
+inline s64
+Mt19937_32_Generator::next_s64()
+{
+	s32 n = next();
+	u64 a = *(u64*)&n;
+	a = (u64)(a << 32) | (u64)next();
+	s64 x = *(s64*)&a;
+	return x;
+}
+
+inline f32
+Mt19937_32_Generator::next_f32()
+{
+	s32 n = next();
+	f32 x = *(f32*)&n;
+	return x;
+}
+
+inline f64
+Mt19937_32_Generator::next_f64()
+{
+	s32 n = next();
+	u64 a = *(u64*)&n;
+	a = (u64)(a << 32) | (u64)next();
+	f64 x = *(f64*)&a;
+	return x;
+}
+
+
+inline Mt19937_64_Generator::Result_Type
+Mt19937_64_Generator::next()
+{
+	local_persist u64 mag01[2] = {0ull, 0xB5026F5AA96619E9ull};
+
+	u64 x;
+	if (index > 312)
+	{
+		u32 i = 0;
+		for (; i < 312-156; i++)
+		{
+			x = (mt[i] & 0xffffffff80000000ull) | (mt[i+1] & 0x7fffffffull);
+			mt[i] = mt[i+156] ^ (x>>1) ^ mag01[(u32)(x & 1ull)];
+		}
+		for (; i < 312-1; i++)
+		{
+			x = (mt[i] & 0xffffffff80000000ull) | (mt[i+1] & 0x7fffffffull);
+			mt[i] = mt[i + (312-156)] ^ (x >> 1) ^ mag01[(u32)(x & 1ull)];
+		}
+		x = (mt[312-1] & 0xffffffff80000000ull) | (mt[0] & 0x7fffffffull);
+		mt[312-1] = mt[156-1] ^ (x>>1) ^ mag01[(u32)(x & 1ull)];
+
+		index = 0;
+	}
+
+	x = mt[index++];
+
+	x ^= (x >> 29) & 0x5555555555555555ull;
+	x ^= (x << 17) & 0x71d67fffeda60000ull;
+	x ^= (x << 37) & 0xfff7eee000000000ull;
+	x ^= (x >> 43);
+
+    return x;
+}
+
+inline u32
+Mt19937_64_Generator::next_u32()
+{
+	s64 n = next();
+	u32 x = *(u32*)&n;
+	return x;
+}
+
+inline s32
+Mt19937_64_Generator::next_s32()
+{
+	s64 n = next();
+	s32 x = *(s32*)&n;
+	return x;
+}
+
+inline u64
+Mt19937_64_Generator::next_u64()
+{
+	s64 n = next();
+	u64 x = *(u64*)&n;
+	return x;
+}
+
+inline s64
+Mt19937_64_Generator::next_s64()
+{
+	s64 n = next();
+	return n;
+}
+
+inline f32
+Mt19937_64_Generator::next_f32()
+{
+	s64 n = next();
+	f32 x = *(f32*)&n;
+	return x;
+}
+
+inline f64
+Mt19937_64_Generator::next_f64()
+{
+	s64 n = next();
+	f64 x = *(f64*)&n;
+	return x;
+}
+
+} // namespace random
 } // namespace gb
 
 #endif // GB_IMPLEMENTATION
