@@ -1,21 +1,22 @@
-// gb.hpp - v0.13 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.13a - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
 Version History:
-	0.13 - Basic Type Traits
-	0.12 - Random
-	0.11 - Complex
-	0.10 - Atomics
-	0.09 - Bug Fixes
-	0.08 - Matrix(2,3)
-	0.07 - Bug Fixes
-	0.06 - Os spec ideas
-	0.05 - Transform Type and Quaternion Functions
-	0.04 - String
-	0.03 - Hash Functions
-	0.02 - Hash Table
-	0.01 - Initial Version
+	0.13a - Fix Todos
+	0.13  - Basic Type Traits
+	0.12  - Random
+	0.11  - Complex
+	0.10  - Atomics
+	0.09  - Bug Fixes
+	0.08  - Matrix(2,3)
+	0.07  - Bug Fixes
+	0.06  - Os spec ideas
+	0.05  - Transform Type and Quaternion Functions
+	0.04  - String
+	0.03  - Hash Functions
+	0.02  - Hash Table
+	0.01  - Initial Version
 
 LICENSE
 	This software is in the public domain. Where that dedication is not
@@ -64,7 +65,7 @@ Context:
 		- Geneartor Definition (Template/Concept)
 			- Mt19937_32
 			- Mt19937_64
-		- random_device_value()
+			- Random_Device
 		- Functions
 */
 
@@ -526,12 +527,17 @@ namespace gb
 
 // NOTE(bill): Very similar to doing
 //             *(T*)(&u)
+//             But easier to write
 template <typename T, typename U>
 inline T
 pseudo_cast(const U& u)
 {
 	return reinterpret_cast<const T&>(u);
 }
+
+// NOTE(bill): There used to be a magic_cast that was equivalent to
+// a C-style cast but I removed it I could not get it work as intented
+// for everything
 
 #if !defined(GB_CASTS_WITHOUT_NAMESPACE)
 } // namespace gb
@@ -624,7 +630,6 @@ private:
 };
 
 inline void* alloc(Allocator& a, usize size, usize align = GB_DEFAULT_ALIGNMENT) { return a.alloc(size, align); }
-
 inline void dealloc(Allocator& a, const void* ptr) { return a.dealloc(ptr); }
 
 template <typename T>
@@ -1079,23 +1084,22 @@ Find_Result
 find_result_in_hash_table(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
 {
 	Find_Result fr;
-	// TODO(bill):
-	// fr.hash_index = -1;
-	// fr.data_prev  = -1;
-	// fr.data_index = -1;
+	fr.hash_index = -1;
+	fr.data_prev  = -1;
+	fr.data_index = -1;
 
-	// if (h.hashes.count == 0 || !e)
-	// 	return fr;
+	if (h.hashes.count == 0 || !e)
+		return fr;
 
-	// fr.hash_index = key % h.hashes.count;
-	// fr.data_index = h.hashes[fr.hash_index];
-	// while (fr.data_index >= 0)
-	// {
-	// 	if (&h.data[fr.data_index] == e)
-	// 		return fr;
-	// 	fr.data_prev  = fr.data_index;
-	// 	fr.data_index = h.data[fr.data_index].next;
-	// }
+	fr.hash_index = key % h.hashes.count;
+	fr.data_index = h.hashes[fr.hash_index];
+	while (fr.data_index >= 0)
+	{
+		if (&h.data[fr.data_index] == e)
+			return fr;
+		fr.data_prev  = fr.data_index;
+		fr.data_index = h.data[fr.data_index].next;
+	}
 
 	return fr;
 }
@@ -5394,7 +5398,7 @@ aabb_transform_affine(const Aabb& aabb, const Matrix4& m)
 inline Sphere
 calculate_min_bounding_sphere(const void* vertices, usize num_vertices, usize stride, usize offset, f32 step)
 {
-	auto gen = random::make_mt19937_64(1337); // TODO(bill): Initialize with random seed from random device
+	auto gen = random::make_mt19937_64(random::next(random::make_random_device()));
 
 	const u8* vertex = reinterpret_cast<const u8*>(vertices);
 	vertex += offset;
@@ -5433,7 +5437,6 @@ calculate_min_bounding_sphere(const void* vertices, usize num_vertices, usize st
 		}
 	}
 	while (!done);
-
 
 	Sphere result;
 
@@ -5474,7 +5477,7 @@ calculate_max_bounding_sphere(const void* vertices, usize num_vertices, usize st
 inline f32
 sphere_surface_area(const Sphere& s)
 {
-
+	return 2.0f * TAU * s.radius * s.radius;
 }
 
 inline f32
@@ -5486,8 +5489,12 @@ sphere_volume(const Sphere& s)
 inline Aabb
 sphere_to_aabb(const Sphere& s)
 {
-	// TODO(bill):
-	return Aabb{};
+	Aabb a;
+	a.center = s.center;
+	a.half_size.x = s.radius * SQRT_3;
+	a.half_size.y = s.radius * SQRT_3;
+	a.half_size.z = s.radius * SQRT_3;
+	return a;
 }
 
 inline bool
@@ -5717,7 +5724,7 @@ inline Random_Device::Result_Type
 Random_Device::next()
 {
 	u32 result = 0;
-	// TODO(bill): Implenent Random_Device::next()
+	// IMPORTANT TODO(bill): Implenent Random_Device::next()
 	return result;
 }
 
