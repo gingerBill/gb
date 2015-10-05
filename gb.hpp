@@ -1,74 +1,73 @@
-// gb.hpp - v0.12 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.13 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
-//
-// Version History:
-//     0.12 - Random
-//     0.11 - Complex
-//     0.10 - Atomics
-//     0.09 - Bug Fixes
-//     0.08 - Matrix(2,3)
-//     0.07 - Bug Fixes
-//     0.06 - Os spec ideas
-//     0.05 - Transform Type and Quaternion Functions
-//     0.04 - String
-//     0.03 - Hash Functions
-//     0.02 - Hash Table
-//     0.01 - Initial Version
-//
-// LICENSE
-//
-//     This software is in the public domain. Where that dedication is not
-//     recognized, you are granted a perpetual, irrevocable license to copy,
-//     distribute, and modify this file as you see fit.
-//
-// WARNING
-//
-//     This library is _highly_ experimental and features may not work as expected.
-//     This also means that many functions are not documented.
-//     This library is not compatible with STL at all!!!
-//
-// CONTENT
-//
-//     - Common Macros
-//     - Assert
-//     - Types
-//     - C++11 Move Semantics
-//     - Defer
-//     - Memory
-//         - Mutex
-//         - Atomics
-//         - Functions
-//         - Allocator
-//         - Heap Allocator
-//         - Arena Allocator
-//         - Temporary Arena Memory
-//     - String
-//     - Array
-//     - Hash Table
-//     - Hash Functions
-//     - Math
-//         - Types
-//             - Vector(2,3,4)
-//             - Complex
-//             - Quaternion
-//             - Matrix(2,3,4)
-//             - Euler_Angles
-//             - Transform
-//             - Aabb
-//             - Sphere
-//             - Plane
-//         - Operations
-//         - Functions & Constants
-//         - Type Functions
-//     - Random
-//         - Generator_Type
-//         - Geneartor Definition (Template/Concept)
-//             - Mt19937_32_Generator
-//             - Mt19937_64_Generator
-//         - random_device_value()
-//         - Functions
-//
-//
+
+/*
+Version History:
+	0.13 - Basic Type Traits
+	0.12 - Random
+	0.11 - Complex
+	0.10 - Atomics
+	0.09 - Bug Fixes
+	0.08 - Matrix(2,3)
+	0.07 - Bug Fixes
+	0.06 - Os spec ideas
+	0.05 - Transform Type and Quaternion Functions
+	0.04 - String
+	0.03 - Hash Functions
+	0.02 - Hash Table
+	0.01 - Initial Version
+
+LICENSE
+	This software is in the public domain. Where that dedication is not
+	recognized, you are granted a perpetual, irrevocable license to copy,
+	distribute, and modify this file as you see fit.
+
+WARNING
+	- This library is _highly_ experimental and features may not work as expected.
+	- This also means that many functions are not documented.
+	- This library is not compatible with STL at all! (By design)
+
+Context:
+	- Common Macros
+	- Assert
+	- Types
+	- C++11 Move Semantics
+	- Defer
+	- Memory
+		- Mutex
+		- Atomics
+		- Functions
+		- Allocator
+		- Heap Allocator
+		- Arena Allocator
+		- Temporary Arena Memory
+	- String
+	- Array
+	- Hash Table
+	- Hash Functions
+	- Math
+		- Types
+			- Vector(2,3,4)
+			- Complex
+			- Quaternion
+			- Matrix(2,3,4)
+			- Euler_Angles
+			- Transform
+			- Aabb
+			- Sphere
+			- Plane
+		- Operations
+		- Functions & Constants
+		- Type Functions
+	- Random
+		- Generator_Type
+		- Geneartor Definition (Template/Concept)
+			- Mt19937_32
+			- Mt19937_64
+		- random_device_value()
+		- Functions
+*/
+
 #ifndef GB_INCLUDE_GB_HPP
 #define GB_INCLUDE_GB_HPP
 
@@ -88,6 +87,7 @@
 	#if !defined(alignof) // Needed for MSVC 2013
 	#define alignof(x) __alignof(x)
 	#endif
+	#define alignment_of(x) alignof(x)
 #endif
 
 ////////////////////////////////
@@ -151,11 +151,29 @@
 #include <string.h>
 #include <time.h>
 
-#ifndef GB_CONSTEXPR
+#if !defined(GB_HAS_NO_CONSTEXPR)
+	#if defined(_GNUC_VER) && _GNUC_VER < 406  // Less than gcc 4.06
+	#define GB_HAS_NO_CONSTEXPR
+	#elif defined(_MSC_VER) && _MSC_VER < 1900 // Less than Visual Studio 2015/MSVC++ 14.0
+	#define GB_HAS_NO_CONSTEXPR
+	#elif !defined(__GXX_EXPERIMENTAL_CXX0X__) && __cplusplus < 201103L
+	#define GB_HAS_NO_CONSTEXPR
+	#endif
+#endif
+
+#if defined(GB_HAS_NO_CONSTEXPR)
+#define GB_CONSTEXPR
+#else
+#define GB_CONSTEXPR constexpr
+#endif
+
+
+
+#ifndef GB_FORCE_INLINE
 	#if defined(_MSC_VER)
-	#define GB_CONSTEXPR
+	#define GB_FORCE_INLINE __forceinline
 	#else
-	#define GB_CONSTEXPR constexpr
+	#define __attribute__ ((__always_inline__))
 	#endif
 #endif
 
@@ -168,6 +186,7 @@
 
 #include <windows.h>
 #include <mmsystem.h> // Time functions
+// #include <ntsecapi.h> // Random  generation functions
 
 #undef NOMINMAX
 #undef VC_EXTRALEAN
@@ -189,8 +208,8 @@
 
 extern "C" inline void
 gb__assert_handler(bool condition, const char* condition_str,
-                   const char* filename, size_t line,
-                   const char* error_text = nullptr, ...)
+				   const char* filename, size_t line,
+				   const char* error_text = nullptr, ...)
 {
 	if (condition)
 		return;
@@ -211,10 +230,10 @@ gb__assert_handler(bool condition, const char* condition_str,
 }
 
 
-#if !defined(GB_BASIC_TYPES_WITHOUT_NAMESPACE)
+#if !defined(GB_BASIC_WITHOUT_NAMESPACE)
 namespace gb
 {
-#endif // GB_BASIC_TYPES_WITHOUT_NAMESPACE
+#endif // GB_BASIC_WITHOUT_NAMESPACE
 ////////////////////////////////
 ///                          ///
 /// Types                    ///
@@ -264,9 +283,9 @@ using usize = u32;
 #endif
 
 static_assert(sizeof(usize) == sizeof(size_t),
-              "`usize` is not the same size as `size_t`");
+			  "`usize` is not the same size as `size_t`");
 static_assert(sizeof(ssize) == sizeof(usize),
-              "`ssize` is not the same size as `usize`");
+			  "`ssize` is not the same size as `usize`");
 
 using intptr  = intptr_t;
 using uintptr = uintptr_t;
@@ -309,7 +328,7 @@ using ptrdiff = ptrdiff_t;
 
 #endif
 
-#if defined(GB_BASIC_TYPES_WITHOUT_NAMESPACE)
+#if defined(GB_BASIC_WITHOUT_NAMESPACE)
 #define U8_MIN 0u
 #define U8_MAX 0xffu
 #define S8_MIN (-0x7f - 1)
@@ -349,40 +368,126 @@ using ptrdiff = ptrdiff_t;
 
 
 
-#if !defined(GB_BASIC_TYPES_WITHOUT_NAMESPACE)
+#if !defined(GB_BASIC_WITHOUT_NAMESPACE)
 } // namespace gb
-#endif // GB_BASIC_TYPES_WITHOUT_NAMESPACE
+#endif // GB_BASIC_WITHOUT_NAMESPACE
 
 namespace gb
 {
 ////////////////////////////////
 ///                          ///
+/// C++11 Types Traits       ///
+///                          ///
+////////////////////////////////
+
+template <typename T, T t>
+struct Integral_Constant
+{
+	global GB_CONSTEXPR const T VALUE = t;
+	using Value_Type = T;
+	using Type = Integral_Constant;
+
+	GB_FORCE_INLINE
+	GB_CONSTEXPR operator Value_Type() const { return VALUE; }
+	GB_CONSTEXPR Value_Type operator()() const { return VALUE; }
+};
+
+using True_Type  = Integral_Constant<bool, true>;
+using False_Type = Integral_Constant<bool, true>;
+
+template <typename T> struct Add_Const_Def { using Type = const T; };
+template <typename T> using  Add_Const = typename Add_Const_Def<T>::Type;
+
+template <typename T> struct Add_Volatile_Def { using Type = volatile T; };
+template <typename T> using  Add_Volatile = typename Add_Volatile_Def<T>::Type;
+
+template <typename T> using  Add_Const_Volatile = Add_Const<Add_Volatile<T>>;
+
+
+template <typename T> struct Add_Lvalue_Reference_Def      { using Type = T&; };
+template <typename T> struct Add_Lvalue_Reference_Def<T&>  { using Type = T&; };
+template <typename T> struct Add_Lvalue_Reference_Def<T&&> { using Type = T&; };
+template <> struct Add_Lvalue_Reference_Def<void>                { using Type = void;                };
+template <> struct Add_Lvalue_Reference_Def<const void>          { using Type = const void;          };
+template <> struct Add_Lvalue_Reference_Def<volatile void>       { using Type = volatile void;       };
+template <> struct Add_Lvalue_Reference_Def<const volatile void> { using Type = const volatile void; };
+template <typename T> using  Add_Lvalue_Reference = typename Add_Lvalue_Reference_Def<T>::Type;
+
+template <typename T> struct Add_Rvalue_Reference_Def      { using Type = T&&; };
+template <typename T> struct Add_Rvalue_Reference_Def<T&>  { using Type = T&; };
+template <typename T> struct Add_Rvalue_Reference_Def<T&&> { using Type = T&&; };
+template <> struct Add_Rvalue_Reference_Def<void>                { using Type = void;                };
+template <> struct Add_Rvalue_Reference_Def<const void>          { using Type = const void;          };
+template <> struct Add_Rvalue_Reference_Def<volatile void>       { using Type = volatile void;       };
+template <> struct Add_Rvalue_Reference_Def<const volatile void> { using Type = const volatile void; };
+template <typename T> using  Add_Rvalue_Reference = typename Add_Rvalue_Reference_Def<T>::Type;
+
+
+template <typename T> struct Remove_Pointer_Def                    { using Type = T; };
+template <typename T> struct Remove_Pointer_Def<T*>                { using Type = T; };
+template <typename T> struct Remove_Pointer_Def<T* const>          { using Type = T; };
+template <typename T> struct Remove_Pointer_Def<T* volatile>       { using Type = T; };
+template <typename T> struct Remove_Pointer_Def<T* const volatile> { using Type = T; };
+template <typename T> using  Remove_Pointer = typename Remove_Pointer_Def<T>::Type;
+
+template <typename T> struct Add_Pointer_Def { using Type = T*; };
+template <typename T> using  Add_Pointer = typename Add_Pointer_Def<T>::Type;
+
+template <typename T> struct Remove_Const_Def            { using Type = T; };
+template <typename T> struct Remove_Const_Def<const T>   { using Type = T; };
+template <typename T> using  Remove_Const = typename Remove_Const_Def<T>::Type;
+
+template <typename T> struct Remove_Volatile_Def             { using Type = T; };
+template <typename T> struct Remove_Volatile_Def<volatile T> { using Type = T; };
+template <typename T> using  Remove_Volatile = typename Remove_Const_Def<T>::Type;
+
+template <typename T> using  Remove_Const_Volatile = Remove_Const<Remove_Volatile<T>>;
+
+template <typename T> struct Remove_Reference_Def      { using Type = T; };
+template <typename T> struct Remove_Reference_Def<T&>  { using Type = T; };
+template <typename T> struct Remove_Reference_Def<T&&> { using Type = T; };
+template <typename T> using  Remove_Reference = typename Remove_Reference_Def<T>::Type;
+
+
+template <typename T> struct Is_Integral_Def : False_Type {};
+template <> struct Is_Integral_Def<bool>     : True_Type {};
+template <> struct Is_Integral_Def<char>     : True_Type {};
+template <> struct Is_Integral_Def<wchar_t>  : True_Type {};
+template <> struct Is_Integral_Def<s8>       : True_Type {};
+template <> struct Is_Integral_Def<u8>       : True_Type {};
+template <> struct Is_Integral_Def<s16>      : True_Type {};
+template <> struct Is_Integral_Def<u16>      : True_Type {};
+template <> struct Is_Integral_Def<s32>      : True_Type {};
+template <> struct Is_Integral_Def<u32>      : True_Type {};
+template <> struct Is_Integral_Def<s64>      : True_Type {};
+template <> struct Is_Integral_Def<u64>      : True_Type {};
+template <typename T> struct Is_Integral : Is_Integral_Def<Remove_Const_Volatile<T>> {};
+
+
+////////////////////////////////
+///                          ///
 /// C++11 Move Semantics     ///
 ///                          ///
 ////////////////////////////////
-template <typename T> struct Remove_Reference      { using Type = T; };
-template <typename T> struct Remove_Reference<T&>  { using Type = T; };
-template <typename T> struct Remove_Reference<T&&> { using Type = T; };
-
 template <typename T>
 inline T&&
-forward(typename Remove_Reference<T>::Type& t)
+forward(Remove_Reference<T>& t)
 {
 	return static_cast<T&&>(t);
 }
 
 template <typename T>
 inline T&&
-forward(typename Remove_Reference<T>::Type&& t)
+forward(Remove_Reference<T>&& t)
 {
 	return static_cast<T&&>(t);
 }
 
 template <typename T>
-inline typename Remove_Reference<T>::Type&&
+inline Remove_Reference<T>&&
 move(T&& t)
 {
-	return static_cast<typename Remove_Reference<T>::Type&&>(t);
+	return static_cast<Remove_Reference<T>&&>(t);
 }
 
 ////////////////////////////////
@@ -412,6 +517,25 @@ defer_func(Func&& func) { return Defer<Func>(gb::forward<Func>(func)); }
 #define GB_DEFER_2(x, y) GB_DEFER_1(x, y)
 #define GB_DEFER_3(x)    GB_DEFER_2(GB_DEFER_2(GB_DEFER_2(x, __COUNTER__), _), __LINE__)
 #define defer(code) auto GB_DEFER_3(_defer_) = gb::impl::defer_func([&](){code;})
+
+
+#if !defined(GB_CASTS_WITHOUT_NAMESPACE)
+namespace gb
+{
+#endif // GB_CASTS_WITHOUT_NAMESPACE
+
+// NOTE(bill): Very similar to doing
+//             *(T*)(&u)
+template <typename T, typename U>
+inline T
+pseudo_cast(const U& u)
+{
+	return reinterpret_cast<const T&>(u);
+}
+
+#if !defined(GB_CASTS_WITHOUT_NAMESPACE)
+} // namespace gb
+#endif // GB_CASTS_WITHOUT_NAMESPACE
 
 namespace gb
 {
@@ -473,13 +597,13 @@ align_forward(void* ptr, usize align)
 {
 	GB_ASSERT(GB_IS_POWER_OF_TWO(align));
 
-	uintptr p = (uintptr)ptr;
+	uintptr p = reinterpret_cast<uintptr>(ptr);
 
 	const usize modulo = p % align;
 	if (modulo)
 		p += (uintptr)(align - modulo);
 
-	return (void*)p;
+	return reinterpret_cast<void*>(p);
 }
 } // namespace memory
 
@@ -524,9 +648,8 @@ struct Heap_Allocator : Allocator
 	Mutex mutex               = Mutex{};
 	s64 total_allocated_count = 0;
 	s64 allocation_count      = 0;
-Heap_Allocator
-	() = default;
 
+	Heap_Allocator() = default;
 	virtual ~Heap_Allocator();
 
 	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT);
@@ -560,7 +683,7 @@ inline void
 clear_arena(Arena_Allocator& arena)
 {
 	GB_ASSERT(arena.temp_count == 0,
-	          "%ld Temporary_Arena_Memory have not be cleared", arena.temp_count);
+			  "%ld Temporary_Arena_Memory have not be cleared", arena.temp_count);
 
 	arena.total_allocated_count = 0;
 }
@@ -652,7 +775,7 @@ struct Array
 	virtual ~Array() { if (allocator) dealloc(*allocator, data); }
 
 	const T& operator[](usize index) const { return data[index]; }
-	      T& operator[](usize index)       { return data[index]; }
+		  T& operator[](usize index)       { return data[index]; }
 };
 
 template <typename T> Array<T> make_array(Allocator& allocator, usize count = 0);
@@ -726,19 +849,19 @@ template <typename T> void reserve_hash_table(Hash_Table<T>& h, usize capacity);
 template <typename T> void clear_hash_table(Hash_Table<T>& h);
 
 // Iterators (in random order)
-template <typename T> const typename Hash_Table<T>::Entry* begin(const Hash_Table<T>& h);
-template <typename T> const typename Hash_Table<T>::Entry* end(const Hash_Table<T>& h);
+template <typename T> typename const Hash_Table<T>::Entry* begin(const Hash_Table<T>& h);
+template <typename T> typename const Hash_Table<T>::Entry* end(const Hash_Table<T>& h);
 
 // Mutli_Hash_Table
 template <typename T> void get_multiple_from_hash_table(const Hash_Table<T>& h, u64 key, Array<T>& items);
 template <typename T> usize multiple_count_from_hash_table(const Hash_Table<T>& h, u64 key);
 
-template <typename T> const typename Hash_Table<T>::Entry* find_first_in_hash_table(const Hash_Table<T>& h, u64 key);
-template <typename T> const typename Hash_Table<T>::Entry* find_next_in_hash_table(const Hash_Table<T>& h, const typename Hash_Table<T>::Entry* e);
+template <typename T> typename const Hash_Table<T>::Entry* find_first_in_hash_table(const Hash_Table<T>& h, u64 key);
+template <typename T> typename const Hash_Table<T>::Entry* find_next_in_hash_table(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e);
 
 
 template <typename T> void insert_into_hash_table(Hash_Table<T>& h, u64 key, const T& value);
-template <typename T> void remove_entry_from_hash_table(Hash_Table<T>& h, const typename Hash_Table<T>::Entry* e);
+template <typename T> void remove_entry_from_hash_table(Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e);
 template <typename T> void remove_all_from_hash_table(Hash_Table<T>& h, u64 key);
 
 ////////////////////////////////
@@ -830,7 +953,7 @@ template <typename T>
 inline void
 resize_array(Array<T>& a, usize count)
 {
-	if (a.allocation < (s64)count)
+	if (a.allocation < static_cast<s64>(count))
 		grow_array(a, count);
 	a.count = count;
 }
@@ -839,7 +962,7 @@ template <typename T>
 inline void
 reserve_array(Array<T>& a, usize allocation)
 {
-	if (a.allocation < (s64)allocation)
+	if (a.allocation < static_cast<s64>(allocation))
 		set_array_allocation(a, allocation);
 }
 
@@ -847,10 +970,10 @@ template <typename T>
 inline void
 set_array_allocation(Array<T>& a, usize allocation)
 {
-	if ((s64)allocation == a.allocation)
+	if (static_cast<s64>(allocation) == a.allocation)
 		return;
 
-	if ((s64)allocation < a.count)
+	if (static_cast<s64>(allocation) < a.count)
 		resize_array(a, allocation);
 
 	T* data = nullptr;
@@ -953,7 +1076,7 @@ find_result_in_hash_table(const Hash_Table<T>& h, u64 key)
 
 template <typename T>
 Find_Result
-find_result_in_hash_table(const Hash_Table<T>& h, const typename Hash_Table<T>::Entry* e)
+find_result_in_hash_table(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
 {
 	Find_Result fr;
 	// TODO(bill):
@@ -1123,14 +1246,14 @@ clear_hash_table(Hash_Table<T>& h)
 }
 
 template <typename T>
-inline const typename Hash_Table<T>::Entry*
+inline typename const Hash_Table<T>::Entry*
 begin(const Hash_Table<T>& h)
 {
 	return begin(h.data);
 }
 
 template <typename T>
-inline const typename Hash_Table<T>::Entry*
+inline typename const Hash_Table<T>::Entry*
 end(const Hash_Table<T>& h)
 {
 	return end(h.data);
@@ -1167,7 +1290,7 @@ multiple_count_from_hash_table(const Hash_Table<T>& h, u64 key)
 
 
 template <typename T>
-inline const typename Hash_Table<T>::Entry*
+inline typename const Hash_Table<T>::Entry*
 find_first_in_hash_table(const Hash_Table<T>& h, u64 key)
 {
 	const s64 index = find_first_in_hash_table(h, key);
@@ -1177,8 +1300,8 @@ find_first_in_hash_table(const Hash_Table<T>& h, u64 key)
 }
 
 template <typename T>
-const typename Hash_Table<T>::Entry*
-find_next_in_hash_table(const Hash_Table<T>& h, const typename Hash_Table<T>::Entry* e)
+typename const Hash_Table<T>::Entry*
+find_next_in_hash_table(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
 {
 	if (!e)
 		return nullptr;
@@ -1211,7 +1334,7 @@ insert_into_hash_table(Hash_Table<T>& h, u64 key, const T& value)
 
 template <typename T>
 inline void
-remove_entry_from_hash_table(Hash_Table<T>& h, const typename Hash_Table<T>::Entry* e)
+remove_entry_from_hash_table(Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
 {
 	const auto fr = impl::find_result_in_hash_table(h, e);
 	if (fr.data_index >= 0)
@@ -1783,9 +1906,9 @@ f32 quaternion_yaw(const Quaternion& a);
 
 Euler_Angles quaternion_to_euler_angles(const Quaternion& a);
 Quaternion euler_angles_to_quaternion(const Euler_Angles& e,
-                                      const Vector3& x_axis = {1, 0, 0},
-                                      const Vector3& y_axis = {0, 1, 0},
-                                      const Vector3& z_axis = {0, 0, 1});
+									  const Vector3& x_axis = {1, 0, 0},
+									  const Vector3& y_axis = {0, 1, 0},
+									  const Vector3& z_axis = {0, 0, 1});
 
 // Spherical Linear Interpolation
 Quaternion slerp(const Quaternion& x, const Quaternion& y, f32 t);
@@ -1793,10 +1916,10 @@ Quaternion slerp(const Quaternion& x, const Quaternion& y, f32 t);
 // Shoemake's Quaternion Curves
 // Sqherical Cubic Interpolation
 Quaternion squad(const Quaternion& p,
-                 const Quaternion& a,
-                 const Quaternion& b,
-                 const Quaternion& q,
-                 f32 t);
+				 const Quaternion& a,
+				 const Quaternion& b,
+				 const Quaternion& q,
+				 f32 t);
 // Matrix2 functions
 Matrix2 transpose(const Matrix2& m);
 f32 determinant(const Matrix2& m);
@@ -1878,18 +2001,22 @@ enum Generator_Type
 {
 	MERSENNE_TWISTER_32,
 	MERSENNE_TWISTER_64,
+
+	RANDOM_DEVICE,
 };
 
 // NOTE(bill): Basic Definition of a Random Number Generator
-// NOTE(bill): C++(17)?? Concepts would be useful here
+// NOTE(bill): C++(17)?? Concepts might be useful here
 /*
 struct Generator
+// concept Generator<typename T, typename U>
 {
 	using Result_Type = T;
 	using Seed_Type   = U;
 
-	Seed_Type seed;
 	Generator_Type type;
+
+	u32 entropy();
 
 	Result_Type next();
 	u32 next_u32();
@@ -1901,17 +2028,23 @@ struct Generator
 };
 */
 
-struct Mt19937_32_Generator
+template <typename T, typename U>
+struct Generator_Base
 {
-	using Result_Type = s32;
-	using Seed_Type   = u32;
+	using Result_Type = T;
+	using Seed_Type   = U;
 
 	Seed_Type seed;
-	Generator_Type type = MERSENNE_TWISTER_32;
+	Generator_Type type;
+};
 
+struct Mt19937_32 : Generator_Base<s32, s32>
+{
 	u32 index;
 	s32 mt[624];
 
+	u32 entropy();
+
 	Result_Type next();
 	u32 next_u32();
 	s32 next_s32();
@@ -1921,17 +2054,13 @@ struct Mt19937_32_Generator
 	f64 next_f64();
 };
 
-struct Mt19937_64_Generator
+struct Mt19937_64 : Generator_Base<s64, s64>
 {
-	using Result_Type = s64;
-	using Seed_Type   = u64;
-
-	Seed_Type seed;
-	Generator_Type type = MERSENNE_TWISTER_64;
-
 	u32 index;
 	s64 mt[312];
 
+	u32 entropy();
+
 	Result_Type next();
 	u32 next_u32();
 	s32 next_s32();
@@ -1941,13 +2070,28 @@ struct Mt19937_64_Generator
 	f64 next_f64();
 };
 
-u32 random_device_value();
+struct Random_Device : Generator_Base<u32, u32>
+{
+	u32 entropy();
 
-Mt19937_32_Generator make_mt19937_32(Mt19937_32_Generator::Seed_Type seed);
-Mt19937_64_Generator make_mt19937_64(Mt19937_64_Generator::Seed_Type seed);
+	Result_Type next();
+	u32 next_u32();
+	s32 next_s32();
+	u64 next_u64();
+	s64 next_s64();
+	f32 next_f32();
+	f64 next_f64();
+};
 
-void set_seed(Mt19937_32_Generator& gen, Mt19937_32_Generator::Seed_Type seed);
-void set_seed(Mt19937_64_Generator& gen, Mt19937_64_Generator::Seed_Type seed);
+// Makers for Generators
+Mt19937_32    make_mt19937_32(Mt19937_32::Seed_Type seed);
+Mt19937_64    make_mt19937_64(Mt19937_64::Seed_Type seed);
+Random_Device make_random_device();
+
+void set_seed(Mt19937_32& gen, Mt19937_32::Seed_Type seed);
+void set_seed(Mt19937_64& gen, Mt19937_64::Seed_Type seed);
+
+template <typename Generator> typename Generator::Result_Type next(Generator&& gen);
 
 template <typename Generator> s32 uniform_s32_distribution(Generator& gen, s32 min_inc, s32 max_inc);
 template <typename Generator> s64 uniform_s64_distribution(Generator& gen, s64 min_inc, s64 max_inc);
@@ -1959,34 +2103,35 @@ template <typename Generator> f64 uniform_f64_distribution(Generator& gen, f64 m
 template <typename Generator> ssize uniform_ssize_distribution(Generator& gen, ssize min_inc, ssize max_inc);
 template <typename Generator> usize uniform_usize_distribution(Generator& gen, usize min_inc, usize max_inc);
 
-inline u32
-random_device_value()
-{
-	// TODO(bill): Actually return true random value
-	return 12;
-}
 
-
-inline Mt19937_32_Generator
-make_mt19937_32(Mt19937_32_Generator::Seed_Type seed)
+inline Mt19937_32
+make_mt19937_32(Mt19937_32::Seed_Type seed)
 {
-	Mt19937_32_Generator gen = {};
+	Mt19937_32 gen = {};
 	gen.type = MERSENNE_TWISTER_32;
 	set_seed(gen, seed);
 	return gen;
 }
 
-inline Mt19937_64_Generator
-make_mt19937_64(Mt19937_64_Generator::Seed_Type seed)
+inline Mt19937_64
+make_mt19937_64(Mt19937_64::Seed_Type seed)
 {
-	Mt19937_64_Generator gen = {};
+	Mt19937_64 gen = {};
 	gen.type = MERSENNE_TWISTER_64;
 	set_seed(gen, seed);
 	return gen;
 }
 
+inline Random_Device
+make_random_device()
+{
+	Random_Device gen = {};
+	gen.type = RANDOM_DEVICE;
+	return gen;
+}
+
 inline void
-set_seed(Mt19937_32_Generator& gen, Mt19937_32_Generator::Seed_Type seed)
+set_seed(Mt19937_32& gen, Mt19937_32::Seed_Type seed)
 {
 	gen.seed = seed;
 	gen.mt[0] = seed;
@@ -1995,13 +2140,22 @@ set_seed(Mt19937_32_Generator& gen, Mt19937_32_Generator::Seed_Type seed)
 }
 
 inline void
-set_seed(Mt19937_64_Generator& gen, Mt19937_64_Generator::Seed_Type seed)
+set_seed(Mt19937_64& gen, Mt19937_64::Seed_Type seed)
 {
 	gen.seed = seed;
 	gen.mt[0] = seed;
 	for (u32 i = 1; i < 312; i++)
 		gen.mt[i] = 6364136223846793005ull * (gen.mt[i-1] ^ gen.mt[i-1] >> 62) + i;
 }
+
+template <typename Generator>
+inline typename Generator::Result_Type
+next(Generator&& gen)
+{
+	return gen.next();
+}
+
+
 
 template <typename Generator>
 inline s32
@@ -2039,7 +2193,7 @@ inline f32
 uniform_f32_distribution(Generator& gen, f32 min_inc, f32 max_inc)
 {
 	f64 n = (gen.next_s64() >> 11) * (1.0/4503599627370495.0);
-	return (f32)(n * ((f64)max_inc - (f64)min_inc + 1.0) + (f64)min_inc);
+	return static_cast<f32>(n * (max_inc - min_inc + 1.0) + min_inc);
 }
 
 
@@ -2268,31 +2422,31 @@ store_32_relaxed(Atomic32* object, u32 value)
 inline u32
 compare_exchange_strong_32_relaxed(Atomic32* object, u32 expected, u32 desired)
 {
-	return _InterlockedCompareExchange((long*)object, desired, expected);
+	return _InterlockedCompareExchange(reinterpret_cast<long*>(object), desired, expected);
 }
 
 inline u32
 exchanged_32_relaxed(Atomic32* object, u32 desired)
 {
-	return _InterlockedExchange((long*)object, desired);
+	return _InterlockedExchange(reinterpret_cast<long*>(object), desired);
 }
 
 inline u32
 fetch_add_32_relaxed(Atomic32* object, s32 operand)
 {
-	return _InterlockedExchangeAdd((long*)object, operand);
+	return _InterlockedExchangeAdd(reinterpret_cast<long*>(object), operand);
 }
 
 inline u32
 fetch_and_32_relaxed(Atomic32* object, u32 operand)
 {
-	return _InterlockedAnd((long*)object, operand);
+	return _InterlockedAnd(reinterpret_cast<long*>(object), operand);
 }
 
 inline u32
 fetch_or_32_relaxed(Atomic32* object, u32 operand)
 {
-	return _InterlockedOr((long*)object, operand);
+	return _InterlockedOr(reinterpret_cast<long*>(object), operand);
 }
 
 inline u64
@@ -2308,9 +2462,9 @@ load_64_relaxed(const Atomic64* object)
 		mov esi, object;
 		mov ebx, eax;
 		mov ecx, edx;
-        lock cmpxchg8b [esi];
-        mov dword ptr result, eax;
-        mov dword ptr result[4], edx;
+		lock cmpxchg8b [esi];
+		mov dword ptr result, eax;
+		mov dword ptr result[4], edx;
 	}
 	return result;
 #endif
@@ -2338,19 +2492,19 @@ store_64_relaxed(Atomic64* object, u64 value)
 inline u64
 compare_exchange_strong_64_relaxed(Atomic64* object, u64 expected, u64 desired)
 {
-	_InterlockedCompareExchange64((s64*)object, desired, expected);
+	_InterlockedCompareExchange64(reinterpret_cast<s64*>(object), desired, expected);
 }
 
 inline u64
 exchanged_64_relaxed(Atomic64* object, u64 desired)
 {
 #if defined(GB_ARCH_64_BIT)
-	return _InterlockedExchange64((s64*)object, desired);
+	return _InterlockedExchange64(reinterpret_cast<s64*>(object), desired);
 #else
 	u64 expected = object->nonatomic;
 	while (true)
 	{
-		u64 original = _InterlockedCompareExchange64((s64*)object, desired, expected);
+		u64 original = _InterlockedCompareExchange64(reinterpret_cast<s64*>(object), desired, expected);
 		if (original == expected)
 			return original;
 		expected = original;
@@ -2362,12 +2516,12 @@ inline u64
 fetch_add_64_relaxed(Atomic64* object, s64 operand)
 {
 #if defined(GB_ARCH_64_BIT)
-	return _InterlockedExchangeAdd64((s64*)object, operand);
+	return _InterlockedExchangeAdd64(reinterpret_cast<s64*>(object), operand);
 #else
 	u64 expected = object->nonatomic;
 	while (true)
 	{
-		u64 original = _InterlockedExchange64((s64*)object, expected + operand, expected);
+		u64 original = _InterlockedExchange64(reinterpret_cast<s64*>(object), expected + operand, expected);
 		if (original == expected)
 			return original;
 		expected = original;
@@ -2379,12 +2533,12 @@ inline u64
 fetch_and_64_relaxed(Atomic64* object, u64 operand)
 {
 #if defined(GB_ARCH_64_BIT)
-	return _InterlockedAnd64((s64*)object, operand);
+	return _InterlockedAnd64(reinterpret_cast<s64*>(object), operand);
 #else
 	u64 expected = object->nonatomic;
 	while (true)
 	{
-		u64 original = _InterlockedCompareExchange64((s64*)object, expected & operand, expected);
+		u64 original = _InterlockedCompareExchange64(reinterpret_cast<s64*>(object), expected & operand, expected);
 		if (original == expected)
 			return original;
 		expected = original;
@@ -2396,12 +2550,12 @@ inline u64
 fetch_or_64_relaxed(Atomic64* object, u64 operand)
 {
 #if defined(GB_ARCH_64_BIT)
-	return _InterlockedAnd64((s64*)object, operand);
+	return _InterlockedAnd64(reinterpret_cast<s64*>(object), operand);
 #else
 	u64 expected = object->nonatomic;
 	while (true)
 	{
-		u64 original = _InterlockedCompareExchange64((s64*)object, expected | operand, expected);
+		u64 original = _InterlockedCompareExchange64(reinterpret_cast<s64*>(object), expected | operand, expected);
 		if (original == expected)
 			return original;
 		expected = original;
@@ -2418,8 +2572,8 @@ fetch_or_64_relaxed(Atomic64* object, u64 operand)
 Heap_Allocator::~Heap_Allocator()
 {
 	GB_ASSERT(allocation_count == 0 && total_allocated() == 0,
-	          "Heap Allocator: allocation count = %lld; total allocated = %lld",
-	          allocation_count, total_allocated());
+			  "Heap Allocator: allocation count = %lld; total allocated = %lld",
+			  allocation_count, total_allocated());
 }
 
 void*
@@ -2434,7 +2588,7 @@ Heap_Allocator::alloc(usize size, usize align)
 
 	void* data = memory::align_forward(h + 1, align);
 	{ // Pad header
-		usize* ptr = (usize*)(h+1);
+		usize* ptr = reinterpret_cast<usize*>(h+1);
 
 		while (ptr != data)
 			*ptr++ = GB_HEAP_ALLOCATOR_HEADER_PAD_VALUE;
@@ -2481,7 +2635,7 @@ Heap_Allocator::total_allocated()
 Heap_Allocator::Header*
 Heap_Allocator::get_header_ptr(const void* ptr)
 {
-	const usize* data = (usize*)ptr;
+	const usize* data = reinterpret_cast<const usize*>(ptr);
 	data--;
 
 	while (*data == GB_HEAP_ALLOCATOR_HEADER_PAD_VALUE)
@@ -2516,7 +2670,7 @@ Arena_Allocator::~Arena_Allocator()
 		backing->dealloc(physical_start);
 
 	GB_ASSERT(total_allocated_count == 0,
-	          "Memory leak of %ld bytes, maybe you forgot to call clear_arena()?", total_allocated_count);
+			  "Memory leak of %ld bytes, maybe you forgot to call clear_arena()?", total_allocated_count);
 }
 
 void* Arena_Allocator::alloc(usize size, usize align)
@@ -2526,7 +2680,7 @@ void* Arena_Allocator::alloc(usize size, usize align)
 	if (total_allocated_count + actual_size > total_size)
 		return nullptr;
 
-	void* ptr = memory::align_forward((u8*)physical_start + total_allocated_count, align);
+	void* ptr = memory::align_forward(static_cast<u8*>(physical_start) + total_allocated_count, align);
 
 	total_allocated_count += actual_size;
 
@@ -2559,7 +2713,7 @@ String make_string(Allocator& a, const void* init_str, String_Size len)
 	if (ptr == nullptr)
 		return nullptr;
 
-	String str = (char*)ptr + header_size;
+	String str = static_cast<char*>(ptr) + header_size;
 	String_Header* header = string_header(str);
 	header->allocator = &a;
 	header->len = len;
@@ -2613,12 +2767,12 @@ void clear_string(String str)
 
 void append_string(String& str, const String other)
 {
-	append_string(str, (const void*)other, string_length(other));
+	append_string(str, other, string_length(other));
 }
 
 void append_cstring(String& str, const char* other)
 {
-	append_string(str, (const void*)other, (String_Size)strlen(other));
+	append_string(str, other, (String_Size)strlen(other));
 }
 
 void append_string(String& str, const void* other, String_Size other_len)
@@ -2671,7 +2825,7 @@ void string_make_space_for(String& str, String_Size add_len)
 	if (available >= add_len) // Return if there is enough space left
 		return;
 
-	void* ptr = (String_Header*)str - 1;
+	void* ptr = reinterpret_cast<String_Header*>(str) - 1;
 	usize old_size = sizeof(String_Header) + string_length(str) + 1;
 	usize new_size = sizeof(String_Header) + new_len + 1;
 
@@ -2679,7 +2833,7 @@ void string_make_space_for(String& str, String_Size add_len)
 	void* new_ptr = impl::string_realloc(*a, ptr, old_size, new_size);
 	if (new_ptr == nullptr)
 		return;
-	str = (char*)new_ptr + sizeof(String_Header);
+	str = static_cast<char*>(new_ptr) + sizeof(String_Header);
 
 	string_header(str)->cap = new_len;
 }
@@ -2721,7 +2875,7 @@ void trim_string(String& str, const char* cut_set)
 	while (end_pos > start_pos && strchr(cut_set, *end_pos))
 		end_pos--;
 
-	String_Size len = (String_Size)((start_pos > end_pos) ? 0 : ((end_pos - start_pos)+1));
+	String_Size len = static_cast<String_Size>((start_pos > end_pos) ? 0 : ((end_pos - start_pos)+1));
 
 	if (str != start_pos)
 		memmove(str, start_pos, len);
@@ -2746,7 +2900,7 @@ u32 adler32(const void* key, u32 num_bytes)
 	u32 a = 1;
 	u32 b = 0;
 
-	const u8* bytes = (const u8*)key;
+	const u8* bytes = static_cast<const u8*>(key);
 	for (u32 i = 0; i < num_bytes; i++)
 	{
 		a = (a + bytes[i]) % MOD_ADLER;
@@ -2893,8 +3047,8 @@ global const u64 GB_CRC64_TABLE[256] = {
 
 u32 crc32(const void* key, u32 num_bytes)
 {
-	u32 result = (u32)~0;
-	u8* c = (u8*)key;
+	u32 result = static_cast<u32>(~0);
+	const u8* c = reinterpret_cast<const u8*>(key);
 	for (u32 remaining = num_bytes; remaining--; c++)
 		result = (result >> 8) ^ (GB_CRC32_TABLE[(result ^ *c) & 0xff]);
 
@@ -2904,7 +3058,7 @@ u32 crc32(const void* key, u32 num_bytes)
 u64 crc64(const void* key, usize num_bytes)
 {
 	u64 result = (u64)~0;
-	u8* c = (u8*)key;
+	const u8* c = reinterpret_cast<const u8*>(key);
 	for (usize remaining = num_bytes; remaining--; c++)
 		result = (result >> 8) ^ (GB_CRC64_TABLE[(result ^ *c) & 0xff]);
 
@@ -2943,7 +3097,7 @@ u32 murmur32(const void* key, u32 num_bytes, u32 seed)
 	u32 hash = seed;
 
 	const usize nblocks = num_bytes / 4;
-	const u32* blocks = (const u32*)key;
+	const u32* blocks = static_cast<const u32*>(key);
 	for (usize i = 0; i < nblocks; i++) {
 		u32 k = blocks[i];
 		k *= c1;
@@ -2954,7 +3108,7 @@ u32 murmur32(const void* key, u32 num_bytes, u32 seed)
 		hash = ((hash << r2) | (hash >> (32 - r2))) * m + n;
 	}
 
-	const u8* tail = ((const u8*)key) + nblocks * 4;
+	const u8* tail = (static_cast<const u8*>(key)) + nblocks * 4;
 	u32 k1 = 0;
 
 	switch (num_bytes & 3) {
@@ -2989,7 +3143,7 @@ u64 murmur64(const void* key, usize num_bytes, u64 seed)
 
 	u64 h = seed ^ (num_bytes * m);
 
-	const u64* data = (const u64*)key;
+	const u64* data = static_cast<const u64*>(key);
 	const u64* end = data + (num_bytes / 8);
 
 	while (data != end)
@@ -3004,7 +3158,7 @@ u64 murmur64(const void* key, usize num_bytes, u64 seed)
 		h *= m;
 	}
 
-	const u8* data2 = (const u8*)data;
+	const u8* data2 = reinterpret_cast<const u8*>(data);
 
 	switch (num_bytes & 7)
 	{
@@ -3030,10 +3184,10 @@ u64 murmur64(const void* key, usize num_bytes, u64 seed)
 	local_persist const u32 m = 0x5bd1e995;
 	local_persist const s32 r = 24;
 
-	u32 h1 = u32(seed) ^ num_bytes;
-	u32 h2 = u32(seed >> 32);
+	u32 h1 = static_cast<u32>(seed) ^ static_cast<u32>(num_bytes);
+	u32 h2 = static_cast<u32>(seed >> 32);
 
-	const u32* data = (const u32*)key;
+	const u32* data = static_cast<const u32*>(key);
 
 	while (num_bytes >= 8)
 	{
@@ -3067,9 +3221,9 @@ u64 murmur64(const void* key, usize num_bytes, u64 seed)
 
 	switch (num_bytes)
 	{
-	case 3: h2 ^= ((u8*)data)[2] << 16;
-	case 2: h2 ^= ((u8*)data)[1] << 8;
-	case 1: h2 ^= ((u8*)data)[0];
+	case 3: h2 ^= reinterpret_cast<const u8*>(data)[2] << 16;
+	case 2: h2 ^= reinterpret_cast<const u8*>(data)[1] <<  8;
+	case 1: h2 ^= reinterpret_cast<const u8*>(data)[0] <<  0;
 		h2 *= m;
 	};
 
@@ -3155,7 +3309,7 @@ void time_sleep(Time t)
 Time time_now()
 {
 #if defined(GB_SYSTEM_OSX)
-	s64 t = (s64)mach_absolute_time();
+	s64 t = static_cast<s64>(mach_absolute_time());
 	return microseconds(t);
 #else
 	struct timeval t;
@@ -3320,14 +3474,14 @@ const Vector4      VECTOR4_ZERO        = {0, 0, 0, 0};
 const Complex      COMPLEX_ZERO        = {0, 0};
 const Quaternion   QUATERNION_IDENTITY = {0, 0, 0, 1};
 const Matrix2      MATRIX2_IDENTITY    = {1, 0,
-                                          0, 1};
+										  0, 1};
 const Matrix3      MATRIX3_IDENTITY    = {1, 0, 0,
-                                          0, 1, 0,
-                                          0, 0, 1};
+										  0, 1, 0,
+										  0, 0, 1};
 const Matrix4      MATRIX4_IDENTITY    = {1, 0, 0, 0,
-                                          0, 1, 0, 0,
-                                          0, 0, 1, 0,
-                                          0, 0, 0, 1};
+										  0, 1, 0, 0,
+										  0, 0, 1, 0,
+										  0, 0, 0, 1};
 const Euler_Angles EULER_ANGLES_ZERO   = {0, 0, 0};
 const Transform    TRANSFORM_IDENTITY  = Transform{};
 
@@ -3754,7 +3908,7 @@ Matrix2 operator*(const Matrix2& a, const Matrix2& b)
 Vector2 operator*(const Matrix2& a, const Vector2& v)
 {
 	return Vector2{a[0][0] * v.x + a[1][0] * v.y,
-	               a[0][1] * v.x + a[1][1] * v.y};
+				   a[0][1] * v.x + a[1][1] * v.y};
 }
 
 Matrix2 operator*(const Matrix2& a, f32 scalar)
@@ -3843,8 +3997,8 @@ Matrix3 operator*(const Matrix3& a, const Matrix3& b)
 Vector3 operator*(const Matrix3& a, const Vector3& v)
 {
 	return Vector3{a[0][0] * v.x + a[1][0] * v.y + a[2][0] * v.z,
-	               a[0][1] * v.x + a[1][1] * v.y + a[2][1] * v.z,
-                   a[0][2] * v.x + a[1][2] * v.y + a[2][2] * v.z};
+				   a[0][1] * v.x + a[1][1] * v.y + a[2][1] * v.z,
+				   a[0][2] * v.x + a[1][2] * v.y + a[2][2] * v.z};
 }
 
 Matrix3 operator*(const Matrix3& a, f32 scalar)
@@ -3941,9 +4095,9 @@ Matrix4 operator*(const Matrix4& a, const Matrix4& b)
 Vector4 operator*(const Matrix4& a, const Vector4& v)
 {
 	return Vector4{a[0][0] * v.x + a[1][0] * v.y + a[2][0] * v.z + a[3][0] * v.w,
-	               a[0][1] * v.x + a[1][1] * v.y + a[2][1] * v.z + a[3][1] * v.w,
-                   a[0][2] * v.x + a[1][2] * v.y + a[2][2] * v.z + a[3][2] * v.w,
-                   a[0][3] * v.x + a[1][3] * v.y + a[2][3] * v.z + a[3][3] * v.w};
+				   a[0][1] * v.x + a[1][1] * v.y + a[2][1] * v.z + a[3][1] * v.w,
+				   a[0][2] * v.x + a[1][2] * v.y + a[2][2] * v.z + a[3][2] * v.w,
+				   a[0][3] * v.x + a[1][3] * v.y + a[2][3] * v.z + a[3][3] * v.w};
 }
 
 Matrix4 operator*(const Matrix4& a, f32 scalar)
@@ -4065,10 +4219,10 @@ fast_inv_sqrt(f32 x)
 
 	const f32 x2 = x * 0.5f;
 	f32 y  = x;
-	u32 i  = *(u32*)&y;                       // Evil floating point bit level hacking
+	u32 i  = pseudo_cast<u32>(y);             // Evil floating point bit level hacking
 	//	i = 0x5f3759df - (i >> 1);            // What the fuck? Old
 	i = 0x5f375a86 - (i >> 1);                // What the fuck? Improved!
-	y = *(f32*)&i;
+	y = pseudo_cast<f32>(i);
 	y = y * (THREE_HALFS - (x2 * y * y));     // 1st iteration
 	//	y = y * (THREE_HALFS - (x2 * y * y)); // 2nd iteration, this can be removed
 
@@ -4112,41 +4266,41 @@ inline f32 sign(f32 x) { return x >= 0.0f ? +1.0f : -1.0f; }
 inline f32
 abs(f32 x)
 {
-	u32 i = reinterpret_cast<const u32&>(x);
+	u32 i = pseudo_cast<u32>(x);
 	i &= 0x7FFFFFFFul;
-	return reinterpret_cast<const f32&>(i);
+	return pseudo_cast<f32>(i);
 }
 
 inline s8
 abs(s8 x)
 {
-	u8 i = reinterpret_cast<const u8&>(x);
+	u8 i = pseudo_cast<u8>(x);
 	i &= 0x7Fu;
-	return reinterpret_cast<const s8&>(i);
+	return pseudo_cast<s8>(i);
 }
 
 inline s16
 abs(s16 x)
 {
-	u16 i = reinterpret_cast<const u16&>(x);
+	u16 i = pseudo_cast<u16>(x);
 	i &= 0x7FFFu;
-	return reinterpret_cast<const s16&>(i);
+	return pseudo_cast<s16>(i);
 }
 
 inline s32
 abs(s32 x)
 {
-	u32 i = reinterpret_cast<const u32&>(x);
+	u32 i = pseudo_cast<u32>(x);
 	i &= 0x7FFFFFFFul;
-	return reinterpret_cast<const s32&>(i);
+	return pseudo_cast<s32>(i);
 }
 
 inline s64
 abs(s64 x)
 {
-	u64 i = reinterpret_cast<const u64&>(x);
+	u64 i = pseudo_cast<u64>(x);
 	i &= 0x7FFFFFFFFFFFFFFFull;
-	return reinterpret_cast<const s64&>(i);
+	return pseudo_cast<s64>(i);
 }
 
 inline bool
@@ -4285,9 +4439,9 @@ inline Vector3
 cross(const Vector3& a, const Vector3& b)
 {
 	return Vector3{
-	    a.y * b.z - b.y * a.z, // x
-	    a.z * b.x - b.z * a.x, // y
-	    a.x * b.y - b.x * a.y  // z
+		a.y * b.z - b.y * a.z, // x
+		a.z * b.x - b.z * a.x, // y
+		a.x * b.y - b.x * a.y  // z
 	};
 }
 
@@ -4424,9 +4578,9 @@ inline Quaternion
 cross(const Quaternion& a, const Quaternion& b)
 {
 	return Quaternion{a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
-                      a.w * b.y + a.y * b.w + a.z * b.x - a.x * b.z,
-                      a.w * b.z + a.z * b.w + a.x * b.y - a.y * b.x,
-                      a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z};
+					  a.w * b.y + a.y * b.w + a.z * b.x - a.x * b.z,
+					  a.w * b.z + a.z * b.w + a.x * b.y - a.y * b.x,
+					  a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z};
 }
 
 inline f32
@@ -4499,14 +4653,14 @@ inline f32
 quaternion_roll(const Quaternion& a)
 {
 	return math::atan2(2.0f * a.x * a.y + a.z * a.w,
-	                   a.x * a.x + a.w * a.w - a.y * a.y - a.z * a.z);
+					   a.x * a.x + a.w * a.w - a.y * a.y - a.z * a.z);
 }
 
 inline f32
 quaternion_pitch(const Quaternion& a)
 {
 	return math::atan2(2.0f * a.y * a.z + a.w * a.x,
-	                   a.w * a.w - a.x * a.x - a.y * a.y + a.z * a.z);
+					   a.w * a.w - a.x * a.x - a.y * a.y + a.z * a.z);
 }
 
 inline f32
@@ -4524,9 +4678,9 @@ quaternion_to_euler_angles(const Quaternion& a)
 
 inline Quaternion
 euler_angles_to_quaternion(const Euler_Angles& e,
-                           const Vector3& x_axis,
-                           const Vector3& y_axis,
-                           const Vector3& z_axis)
+						   const Vector3& x_axis,
+						   const Vector3& y_axis,
+						   const Vector3& z_axis)
 {
 	Quaternion p = axis_angle(x_axis, e.pitch);
 	Quaternion y = axis_angle(y_axis, e.yaw);
@@ -4553,9 +4707,9 @@ slerp(const Quaternion& x, const Quaternion& y, f32 t)
 	if (cos_theta > 1.0f)
 	{
 		return Quaternion{lerp(x.x, y.x, t),
-		                  lerp(x.y, y.y, t),
-		                  lerp(x.z, y.z, t),
-		                  lerp(x.w, y.w, t)};
+						  lerp(x.y, y.y, t),
+						  lerp(x.z, y.z, t),
+						  lerp(x.w, y.w, t)};
 	}
 
 	f32 angle = math::acos(cos_theta);
@@ -4568,10 +4722,10 @@ slerp(const Quaternion& x, const Quaternion& y, f32 t)
 // Sqherical Cubic Interpolation
 inline Quaternion
 squad(const Quaternion& p,
-      const Quaternion& a,
-      const Quaternion& b,
-      const Quaternion& q,
-      f32 t)
+	  const Quaternion& a,
+	  const Quaternion& b,
+	  const Quaternion& q,
+	  f32 t)
 {
 	return slerp(slerp(p, q, t), slerp(a, b, t), 2.0f * t * (1.0f - t));
 }
@@ -4634,8 +4788,8 @@ inline f32
 determinant(const Matrix3& m)
 {
 	return ( m[0][0] * (m[1][1] * m[2][2] - m[2][1] * m[1][2])
-	        -m[1][0] * (m[0][1] * m[2][2] - m[2][1] * m[0][2])
-	        +m[2][0] * (m[0][1] * m[1][2] - m[1][1] * m[0][2]));
+			-m[1][0] * (m[0][1] * m[2][2] - m[2][1] * m[0][2])
+			+m[2][0] * (m[0][1] * m[1][2] - m[1][1] * m[0][2]));
 }
 
 inline Matrix3
@@ -4809,10 +4963,11 @@ hadamard(const Matrix4& a, const Matrix4& b)
 inline bool
 is_affine(const Matrix4& m)
 {
+	// E.g. No translation
 	return (equals(m.columns[3].x, 0)) &
-	       (equals(m.columns[3].y, 0)) &
-	       (equals(m.columns[3].z, 0)) &
-	       (equals(m.columns[3].w, 1.0f));
+		   (equals(m.columns[3].y, 0)) &
+		   (equals(m.columns[3].z, 0)) &
+		   (equals(m.columns[3].w, 1.0f));
 }
 
 
@@ -4966,9 +5121,9 @@ inline Matrix4
 scale(const Vector3& v)
 {
 	return { v.x,   0,   0, 0,
-	           0, v.y,   0, 0,
-	           0,   0, v.z, 0,
-	           0,   0,   0, 1 };
+			   0, v.y,   0, 0,
+			   0,   0, v.z, 0,
+			   0,   0,   0, 1 };
 }
 
 inline Matrix4
@@ -5004,7 +5159,7 @@ inline Matrix4
 perspective(f32 fovy_radians, f32 aspect, f32 z_near, f32 z_far)
 {
 	GB_ASSERT(math::abs(aspect) > 0.0f,
-	          "math::perspective `fovy_radians` is %f", fovy_radians);
+			  "math::perspective `fovy_radians` is %f", fovy_radians);
 
 	f32 tan_half_fovy = math::tan(0.5f * fovy_radians);
 
@@ -5105,8 +5260,8 @@ inline Matrix4
 transform_to_matrix4(const Transform& t)
 {
 	return math::translate(t.position) *                //
-	       math::quaternion_to_matrix4(t.orientation) * //
-	       math::scale(t.scale);                        //
+		   math::quaternion_to_matrix4(t.orientation) * //
+		   math::scale(t.scale);                        //
 }
 
 
@@ -5116,9 +5271,9 @@ calculate_aabb(const void* vertices, usize num_vertices, usize stride, usize off
 {
 	Vector3 min;
 	Vector3 max;
-	u8* vertex = (u8*)vertices;
+	const u8* vertex = reinterpret_cast<const u8*>(vertices);
 	vertex += offset;
-	Vector3 position = *(Vector3*)vertex;
+	Vector3 position = pseudo_cast<Vector3>(vertex);
 	min.x = max.x = position.x;
 	min.y = max.y = position.y;
 	min.z = max.z = position.z;
@@ -5126,7 +5281,7 @@ calculate_aabb(const void* vertices, usize num_vertices, usize stride, usize off
 
 	for (usize i = 1; i < num_vertices; i++)
 	{
-		position = *(Vector3*)vertex;
+		position = pseudo_cast<Vector3>(vertex);
 		vertex += stride;
 
 		Vector3 p = position;
@@ -5182,8 +5337,8 @@ contains(const Aabb& aabb, const Vector3& point)
 
 	// NOTE(bill): & is faster than &&
 	return (math::abs(distance.x) <= aabb.half_size.x) &
-           (math::abs(distance.y) <= aabb.half_size.y) &
-           (math::abs(distance.z) <= aabb.half_size.z);
+		   (math::abs(distance.y) <= aabb.half_size.y) &
+		   (math::abs(distance.z) <= aabb.half_size.z);
 }
 
 inline bool
@@ -5193,8 +5348,8 @@ contains(const Aabb& a, const Aabb& b)
 
 	// NOTE(bill): & is faster than &&
 	return (math::abs(dist.x) + b.half_size.x <= a.half_size.x) &
-	       (math::abs(dist.y) + b.half_size.y <= a.half_size.y) &
-	       (math::abs(dist.z) + b.half_size.z <= a.half_size.z);
+		   (math::abs(dist.y) + b.half_size.y <= a.half_size.y) &
+		   (math::abs(dist.z) + b.half_size.z <= a.half_size.z);
 }
 
 
@@ -5206,15 +5361,15 @@ intersects(const Aabb& a, const Aabb& b)
 
 	// NOTE(bill): & is faster than &&
 	return (math::abs(dist.x) <= sum_half_sizes.x) &
-	       (math::abs(dist.y) <= sum_half_sizes.y) &
-	       (math::abs(dist.z) <= sum_half_sizes.z);
+		   (math::abs(dist.y) <= sum_half_sizes.y) &
+		   (math::abs(dist.z) <= sum_half_sizes.z);
 }
 
 inline Aabb
 aabb_transform_affine(const Aabb& aabb, const Matrix4& m)
 {
 	GB_ASSERT(math::is_affine(m),
-	          "Passed Matrix4 must be an affine matrix");
+			  "Passed Matrix4 must be an affine matrix");
 
 	Aabb result;
 	Vector4 ac;
@@ -5241,12 +5396,12 @@ calculate_min_bounding_sphere(const void* vertices, usize num_vertices, usize st
 {
 	auto gen = random::make_mt19937_64(1337); // TODO(bill): Initialize with random seed from random device
 
-	u8* vertex = (u8*)vertices;
+	const u8* vertex = reinterpret_cast<const u8*>(vertices);
 	vertex += offset;
 
-	Vector3 position = *(Vector3*)&vertex[0];;
+	Vector3 position = pseudo_cast<Vector3>(vertex[0]);
 	Vector3 center = position;
-	center += *(Vector3*)&vertex[1 * stride];
+	center += pseudo_cast<Vector3>(vertex[1 * stride]);
 	center *= 0.5f;
 
 	Vector3 d = position - center;
@@ -5258,10 +5413,10 @@ calculate_min_bounding_sphere(const void* vertices, usize num_vertices, usize st
 	{
 		done = true;
 		for (usize i = 0, index = random::uniform_usize_distribution(gen, 0, num_vertices-1);
-		     i < num_vertices;
-		     i++, index = (index + 1)%num_vertices)
+			 i < num_vertices;
+			 i++, index = (index + 1)%num_vertices)
 		{
-			Vector3 position = *(Vector3*)&vertex[index * stride];
+			Vector3 position = pseudo_cast<Vector3>(vertex[index * stride]);
 
 			d = position - center;
 			f32 dist_sq = math::dot(d, d);
@@ -5296,12 +5451,12 @@ calculate_max_bounding_sphere(const void* vertices, usize num_vertices, usize st
 	Vector3 center = aabb.center;
 
 	f32 max_dist_sq = 0.0f;
-	u8* vertex = (u8*)vertices;
+	const u8* vertex = reinterpret_cast<const u8*>(vertices);
 	vertex += offset;
 
 	for (usize i = 0; i < num_vertices; i++)
 	{
-		Vector3 position = *(Vector3*)vertex;
+		Vector3 position = pseudo_cast<Vector3>(vertex);
 		vertex += stride;
 
 		Vector3 d = position - center;
@@ -5331,7 +5486,8 @@ sphere_volume(const Sphere& s)
 inline Aabb
 sphere_to_aabb(const Sphere& s)
 {
-
+	// TODO(bill):
+	return Aabb{};
 }
 
 inline bool
@@ -5381,8 +5537,8 @@ plane_3_intersection(const Plane& p1, const Plane& p2, const Plane& p3, Vector3&
 		return false;
 
 	Vector3 res = p1.distance * math::cross(n2, n3)
-	            + p2.distance * math::cross(n3, n1)
-	            + p3.distance * math::cross(n1, n2);
+				+ p2.distance * math::cross(n3, n1)
+				+ p3.distance * math::cross(n1, n2);
 	ip = res / den;
 
 	return true;
@@ -5392,14 +5548,14 @@ plane_3_intersection(const Plane& p1, const Plane& p2, const Plane& p3, Vector3&
 
 namespace random
 {
-inline s32
-Mt19937_32_Generator::next()
+inline Mt19937_32::Result_Type
+Mt19937_32::next()
 {
 	if (index >= 624)
 	{
 		for (u32 i = 0; i < 624; i++)
 		{
-			s32 y = ((mt[i] & 0x80000000) + (mt[(i + 1) % 624] & 0x7fffffff)) & 0xFFFFFFFF;
+			s32 y = ((mt[i] & 0x80000000) + (mt[(i + 1) % 624] & 0x7fffffff)) & 0xffffffff;
 			mt[i] = mt[(i + 397) % 624] ^ y >> 1;
 
 			if (y % 2 != 0)
@@ -5421,59 +5577,61 @@ Mt19937_32_Generator::next()
 }
 
 inline u32
-Mt19937_32_Generator::next_u32()
+Mt19937_32::entropy()
+{
+	return 32;
+}
+
+inline u32
+Mt19937_32::next_u32()
 {
 	s32 n = next();
-	u32 x = *(u32*)&n;
-	return x;
+	return pseudo_cast<u32>(n);
 }
 
 inline s32
-Mt19937_32_Generator::next_s32()
+Mt19937_32::next_s32()
 {
 	return next();
 }
 
 inline u64
-Mt19937_32_Generator::next_u64()
+Mt19937_32::next_u64()
 {
 	s32 n = next();
-	u64 a = *(u64*)&n;
+	u64 a = n;
 	a = (u64)(a << 32) | (u64)next();
 	return a;
 }
 
 inline s64
-Mt19937_32_Generator::next_s64()
+Mt19937_32::next_s64()
 {
 	s32 n = next();
-	u64 a = *(u64*)&n;
+	u64 a = n;
 	a = (u64)(a << 32) | (u64)next();
-	s64 x = *(s64*)&a;
-	return x;
+	return pseudo_cast<s64>(n);
 }
 
 inline f32
-Mt19937_32_Generator::next_f32()
+Mt19937_32::next_f32()
 {
 	s32 n = next();
-	f32 x = *(f32*)&n;
-	return x;
+	return pseudo_cast<f32>(n);
 }
 
 inline f64
-Mt19937_32_Generator::next_f64()
+Mt19937_32::next_f64()
 {
 	s32 n = next();
-	u64 a = *(u64*)&n;
+	u64 a = n;
 	a = (u64)(a << 32) | (u64)next();
-	f64 x = *(f64*)&a;
-	return x;
+	return pseudo_cast<f64>(n);
 }
 
 
-inline Mt19937_64_Generator::Result_Type
-Mt19937_64_Generator::next()
+inline Mt19937_64::Result_Type
+Mt19937_64::next()
 {
 	local_persist u64 mag01[2] = {0ull, 0xB5026F5AA96619E9ull};
 
@@ -5504,55 +5662,118 @@ Mt19937_64_Generator::next()
 	x ^= (x << 37) & 0xfff7eee000000000ull;
 	x ^= (x >> 43);
 
-    return x;
+	return x;
 }
 
 inline u32
-Mt19937_64_Generator::next_u32()
+Mt19937_64::entropy()
+{
+	return 64;
+}
+
+inline u32
+Mt19937_64::next_u32()
 {
 	s64 n = next();
-	u32 x = *(u32*)&n;
-	return x;
+	return pseudo_cast<u32>(n);
 }
 
 inline s32
-Mt19937_64_Generator::next_s32()
+Mt19937_64::next_s32()
 {
 	s64 n = next();
-	s32 x = *(s32*)&n;
-	return x;
+	return pseudo_cast<s32>(n);
 }
 
 inline u64
-Mt19937_64_Generator::next_u64()
+Mt19937_64::next_u64()
 {
 	s64 n = next();
-	u64 x = *(u64*)&n;
-	return x;
+	return pseudo_cast<u64>(n);
 }
 
 inline s64
-Mt19937_64_Generator::next_s64()
+Mt19937_64::next_s64()
 {
 	s64 n = next();
 	return n;
 }
 
 inline f32
-Mt19937_64_Generator::next_f32()
+Mt19937_64::next_f32()
 {
 	s64 n = next();
-	f32 x = *(f32*)&n;
-	return x;
+	return pseudo_cast<f32>(n);
 }
 
 inline f64
-Mt19937_64_Generator::next_f64()
+Mt19937_64::next_f64()
 {
 	s64 n = next();
-	f64 x = *(f64*)&n;
-	return x;
+	return pseudo_cast<f64>(n);
 }
+
+inline Random_Device::Result_Type
+Random_Device::next()
+{
+	u32 result = 0;
+	// TODO(bill): Implenent Random_Device::next()
+	return result;
+}
+
+inline u32
+Random_Device::entropy()
+{
+	return 32;
+}
+
+inline u32
+Random_Device::next_u32()
+{
+	s32 n = next();
+	return pseudo_cast<u32>(n);
+}
+
+inline s32
+Random_Device::next_s32()
+{
+	return next();
+}
+
+inline u64
+Random_Device::next_u64()
+{
+	s32 n = next();
+	u64 a = n;
+	a = static_cast<u64>(a << 32) | static_cast<u64>(next());
+	return a;
+}
+
+inline s64
+Random_Device::next_s64()
+{
+	s32 n = next();
+	u64 a = n;
+	a = static_cast<u64>(a << 32) | static_cast<u64>(next());
+	return pseudo_cast<s64>(a);
+}
+
+inline f32
+Random_Device::next_f32()
+{
+	s32 n = next();
+	return pseudo_cast<f32>(n);
+}
+
+inline f64
+Random_Device::next_f64()
+{
+	s32 n = next();
+	u64 a = n;
+	a = static_cast<u64>(a << 32) | static_cast<u64>(next());
+	return pseudo_cast<f64>(a);
+}
+
 
 } // namespace random
 } // namespace gb
