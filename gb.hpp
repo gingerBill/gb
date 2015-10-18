@@ -1,8 +1,10 @@
-// gb.hpp - v0.13a - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.15 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
 Version History:
+	0.15  - Namespaced Types
+	0.14  - Casts and Quaternion Look At
 	0.13a - Fix Todos
 	0.13  - Basic Type Traits
 	0.12  - Random
@@ -32,8 +34,12 @@ Context:
 	- Common Macros
 	- Assert
 	- Types
+	- Type Traits
 	- C++11 Move Semantics
 	- Defer
+	- Casts
+		- pseudo_cast
+		- bit_cast
 	- Memory
 		- Mutex
 		- Atomics
@@ -73,7 +79,7 @@ Context:
 #define GB_INCLUDE_GB_HPP
 
 #if !defined(__cplusplus) && __cplusplus >= 201103L
-#error This library is only for C++11 and above
+	#error This library is only for C++11 and above
 #endif
 
 // NOTE(bill): Because static means three different things in C/C++
@@ -83,12 +89,11 @@ Context:
 #define local_persist static
 
 #if defined(_MSC_VER)
-#define _ALLOW_KEYWORD_MACROS
+	#define _ALLOW_KEYWORD_MACROS
+#endif
 
-	#if !defined(alignof) // Needed for MSVC 2013
+#if !defined(alignof) // Needed for MSVC 2013 'cause Microsoft "loves" standards
 	#define alignof(x) __alignof(x)
-	#endif
-	#define alignment_of(x) alignof(x)
 #endif
 
 ////////////////////////////////
@@ -97,23 +102,21 @@ Context:
 ///                          ///
 ////////////////////////////////
 #if defined(_WIN32) || defined(_WIN64)
-#define GB_SYSTEM_WINDOWS 1
-
+	#define GB_SYSTEM_WINDOWS 1
 #elif defined(__APPLE__) && defined(__MACH__)
-#define GB_SYSTEM_OSX 1
-
+	#define GB_SYSTEM_OSX 1
 #elif defined(__unix__)
-#define GB_SYSTEM_UNIX 1
+	#define GB_SYSTEM_UNIX 1
 
 	#if defined(__linux__)
-	#define GB_SYSTEM_LINUX 1
+		#define GB_SYSTEM_LINUX 1
 	#elif defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
-	#define GB_SYSTEM_FREEBSD 1
+		#define GB_SYSTEM_FREEBSD 1
 	#else
-	#error This UNIX operating system is not supported by gb.hpp
+		#error This UNIX operating system is not supported by gb.hpp
 	#endif
 #else
-#error This operating system is not supported by gb.hpp
+	#error This operating system is not supported by gb.hpp
 #endif
 
 ////////////////////////////////
@@ -122,23 +125,48 @@ Context:
 ///                          ///
 ////////////////////////////////
 #if defined(_WIN32) || defined(_WIN64)
-
 	#if defined(_WIN64)
-	#define GB_ARCH_64_BIT 1
+		#define GB_ARCH_64_BIT 1
 	#else
-	#define GB_ARCH_32_BIT 1
+		#define GB_ARCH_32_BIT 1
 	#endif
 #endif
 
 // TODO(bill): Check if this KEPLER_ENVIRONMENT works on clang
 #if defined(__GNUC__)
-
 	#if defined(__x86_64__) || defined(__ppc64__)
-	#define GB_ARCH_64_BIT 1
+		#define GB_ARCH_64_BIT 1
 	#else
-	#define GB_ARCH_32_BIT 1
+		#define GB_ARCH_32_BIT 1
 	#endif
 #endif
+
+// #if !defined(GB_LITTLE_EDIAN) && !defined(GB_BIG_EDIAN)
+
+// 	// Source: http://sourceforge.net/p/predef/wiki/Endianness/
+// 	#if defined(__BYTE_ORDER) && __BYTE_ORDER == __BIG_ENDIAN || \
+// 		defined(__BIG_ENDIAN__)                               || \
+// 		defined(__ARMEB__)                                    || \
+// 		defined(__THUMBEB__)                                  || \
+// 		defined(__AARCH64EB__)                                || \
+// 		defined(_MIBSEB) || defined(__MIBSEB) || defined(__MIBSEB__)
+// 	// It's a big-endian target architecture
+// 		#define GB_BIG_EDIAN 1
+
+// 	#elif defined(__BYTE_ORDER) && __BYTE_ORDER == __LITTLE_ENDIAN || \
+// 		defined(__LITTLE_ENDIAN__)                                 || \
+// 		defined(__ARMEL__)                                         || \
+// 		defined(__THUMBEL__)                                       || \
+// 		defined(__AARCH64EL__)                                     || \
+// 		defined(_MIPSEL) || defined(__MIPSEL) || defined(__MIPSEL__)
+// 	// It's a little-endian target architecture
+// 		#define GB_LITTLE_EDIAN 1
+
+// 	#else
+// 		#error I don't know what architecture this is!
+// 	#endif
+// #endif
+
 
 #define GB_IS_POWER_OF_TWO(x) ((x) != 0) && !((x) & ((x) - 1))
 
@@ -148,65 +176,72 @@ Context:
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
+
+#if defined(GB_SYSTEM_WINDOWS)
+	#define _CRT_RAND_S
+	#include <stdlib.h>
+	#undef _CRT_RAND_S
+#else
+	#include <stdlib.h>
+#endif
 #include <string.h>
 #include <time.h>
 
 #if !defined(GB_HAS_NO_CONSTEXPR)
 	#if defined(_GNUC_VER) && _GNUC_VER < 406  // Less than gcc 4.06
-	#define GB_HAS_NO_CONSTEXPR
+		#define GB_HAS_NO_CONSTEXPR
 	#elif defined(_MSC_VER) && _MSC_VER < 1900 // Less than Visual Studio 2015/MSVC++ 14.0
-	#define GB_HAS_NO_CONSTEXPR
+		#define GB_HAS_NO_CONSTEXPR
 	#elif !defined(__GXX_EXPERIMENTAL_CXX0X__) && __cplusplus < 201103L
-	#define GB_HAS_NO_CONSTEXPR
+		#define GB_HAS_NO_CONSTEXPR
 	#endif
 #endif
 
 #if defined(GB_HAS_NO_CONSTEXPR)
-#define GB_CONSTEXPR
+	#define GB_CONSTEXPR
 #else
-#define GB_CONSTEXPR constexpr
+	#define GB_CONSTEXPR constexpr
 #endif
 
 
 
 #ifndef GB_FORCE_INLINE
 	#if defined(_MSC_VER)
-	#define GB_FORCE_INLINE __forceinline
+		#define GB_FORCE_INLINE __forceinline
 	#else
-	#define __attribute__ ((__always_inline__))
+		#define __attribute__ ((__always_inline__))
 	#endif
 #endif
 
 #if defined(GB_SYSTEM_WINDOWS)
+	#define NOMINMAX            1
+	#define VC_EXTRALEAN        1
+	#define WIN32_EXTRA_LEAN    1
+	#define WIN32_LEAN_AND_MEAN 1
 
-#define NOMINMAX            1
-#define VC_EXTRALEAN        1
-#define WIN32_EXTRA_LEAN    1
-#define WIN32_LEAN_AND_MEAN 1
+	#include <windows.h>
+	#include <mmsystem.h> // Time functions
+	// #include <ntsecapi.h> // Random  generation functions
 
-#include <windows.h>
-#include <mmsystem.h> // Time functions
-// #include <ntsecapi.h> // Random  generation functions
+	#undef NOMINMAX
+	#undef VC_EXTRALEAN
+	#undef WIN32_EXTRA_LEAN
+	#undef WIN32_LEAN_AND_MEAN
 
-#undef NOMINMAX
-#undef VC_EXTRALEAN
-#undef WIN32_EXTRA_LEAN
-#undef WIN32_LEAN_AND_MEAN
-
-#include <intrin.h>
+	#include <intrin.h>
 #else
-
-#include <pthread.h>
-#include <sys/time.h>
+	#include <pthread.h>
+	#include <sys/time.h>
 #endif
 
 #ifndef NDEBUG
-#define GB_ASSERT(x, ...) ((void)(::gb__assert_handler((x), #x, __FILE__, __LINE__, ##__VA_ARGS__)))
+	#define GB_ASSERT(x, ...) ((void)(::gb__assert_handler((x), #x, __FILE__, __LINE__, ##__VA_ARGS__)))
 #else
-#define GB_ASSERT(x, ...) ((void)sizeof(x))
+	#define GB_ASSERT(x, ...) ((void)sizeof(x))
 #endif
 
+/// Helper function used as a better alternative to assert which allows for
+/// optional printf style error messages
 extern "C" inline void
 gb__assert_handler(bool condition, const char* condition_str,
 				   const char* filename, size_t line,
@@ -230,11 +265,61 @@ gb__assert_handler(bool condition, const char* condition_str,
 	abort(); // TODO(bill): is abort() portable and good?
 }
 
+////////////////////////////////
+///                          ///
+/// snprintf_msvc            ///
+///                          ///
+////////////////////////////////
+#if defined(_MSC_VER)
+
+extern "C" inline int
+gb__vsnprintf_compatible(char* buffer, size_t size, const char* format, va_list args)
+{
+	int result = -1;
+	if (size > 0)
+		result = _vsnprintf_s(buffer, size, _TRUNCATE, format, args);
+	if (result == -1)
+		return _vscprintf(format, args);
+
+	return result;
+}
+
+extern "C" inline int
+gb__snprintf_compatible(char* buffer, size_t size, const char* format, ...)
+{
+	va_list args;
+	va_start(args, format);
+	int result = gb__vsnprintf_compatible(buffer, size, format, args);
+	va_end(args);
+	return result;
+}
+
+#if !defined(GB_DO_NOT_USE_MSVC_SPRINTF_FIX)
+	#define snprintf  gb__snprintf_compatible
+	#define vsnprintf gb__vsnprintf_compatible
+#endif // GB_DO_NOT_USE_MSVC_SPRINTF_FIX
+
+#endif
+
+#if !defined(__GB_NAMESPACE_PREFIX) && !defined(GB_NO_GB_NAMESPACE)
+	#define __GB_NAMESPACE_PREFIX gb
+#else
+	#define __GB_NAMESPACE_PREFIX
+#endif
+
+#if defined(GB_NO_GB_NAMESPACE)
+	#define __GB_NAMESPACE_START
+	#define __GB_NAMESPACE_END
+#else
+	#define __GB_NAMESPACE_START namespace __GB_NAMESPACE_PREFIX {
+	#define __GB_NAMESPACE_END   } // namespace __GB_NAMESPACE_PREFIX
+#endif
+
 
 #if !defined(GB_BASIC_WITHOUT_NAMESPACE)
-namespace gb
-{
+__GB_NAMESPACE_START
 #endif // GB_BASIC_WITHOUT_NAMESPACE
+
 ////////////////////////////////
 ///                          ///
 /// Types                    ///
@@ -249,20 +334,20 @@ using u32 = uint32_t;
 using s32 =  int32_t;
 
 #if defined(_MSC_VER)
-using s64 = signed   __int64;
-using u64 = unsigned __int64;
+	using s64 = signed   __int64;
+	using u64 = unsigned __int64;
 #else
-using s64 =  int64_t;
-using u64 = uint64_t;
+	using s64 =  int64_t;
+	using u64 = uint64_t;
 #endif
 
 using f32 = float;
 using f64 = double;
 
 #if defined(GB_B8_AS_BOOL)
-using b8 = bool;
+	using b8 = bool;
 #else
-using b8 = s8;
+	using b8 = s8;
 #endif
 using b32 = s32;
 
@@ -274,13 +359,13 @@ using b32 = s32;
 // NOTE(bill): If (u)intptr is a better fit, please use that.
 // NOTE(bill): Also, I hate the `_t` suffix
 #if defined(GB_ARCH_64_BIT)
-using ssize = s64;
-using usize = u64;
+	using ssize = s64;
+	using usize = u64;
 #elif defined(GB_ARCH_32_BIT)
-using usize = s32;
-using usize = u32;
+	using usize = s32;
+	using usize = u32;
 #else
-#error Unknown architecture bit size
+	#error Unknown architecture bit size
 #endif
 
 static_assert(sizeof(usize) == sizeof(size_t),
@@ -293,108 +378,88 @@ using uintptr = uintptr_t;
 
 using ptrdiff = ptrdiff_t;
 
-#define GB_U8_MIN (0u)
-#define GB_U8_MAX (0xffu)
+#define GB_U8_MIN 0u
+#define GB_U8_MAX 0xffu
 #define GB_S8_MIN (-0x7f - 1)
-#define GB_S8_MAX (0x7f)
+#define GB_S8_MAX 0x7f
 
-#define GB_U16_MIN (0u)
-#define GB_U16_MAX (0xffffu)
+#define GB_U16_MIN 0u
+#define GB_U16_MAX 0xffffu
 #define GB_S16_MIN (-0x7fff - 1)
-#define GB_S16_MAX (0x7fff)
+#define GB_S16_MAX 0x7fff
 
-#define GB_U32_MIN (0u)
-#define GB_U32_MAX (0xffffffffu)
+#define GB_U32_MIN 0u
+#define GB_U32_MAX 0xffffffffu
 #define GB_S32_MIN (-0x7fffffff - 1)
-#define GB_S32_MAX (0x7fffffff)
+#define GB_S32_MAX 0x7fffffff
 
-#define GB_U64_MIN (0ull)
-#define GB_U64_MAX (0xffffffffffffffffull)
+#define GB_U64_MIN 0ull
+#define GB_U64_MAX 0xffffffffffffffffull
 #define GB_S64_MIN (-0x7fffffffffffffffll - 1)
-#define GB_S64_MAX (0x7fffffffffffffffll)
+#define GB_S64_MAX 0x7fffffffffffffffll
 
 #if defined(GB_ARCH_64_BIT)
-#define GB_USIZE_MIX U64_MIN
-#define GB_USIZE_MAX U64_MAX
+	#define GB_USIZE_MIX U64_MIN
+	#define GB_USIZE_MAX U64_MAX
 
-#define GB_SSIZE_MIX S64_MIN
-#define GB_SSIZE_MAX S64_MAX
-
+	#define GB_SSIZE_MIX S64_MIN
+	#define GB_SSIZE_MAX S64_MAX
 #elif defined(GB_ARCH_32_BIT)
-#define GB_USIZE_MIX U32_MIN
-#define GB_USIZE_MAX U32_MAX
+	#define GB_USIZE_MIX U32_MIN
+	#define GB_USIZE_MAX U32_MAX
 
-#define GB_SSIZE_MIX S32_MIN
-#define GB_SSIZE_MAX S32_MAX
-
+	#define GB_SSIZE_MIX S32_MIN
+	#define GB_SSIZE_MAX S32_MAX
 #endif
 
 #if defined(GB_BASIC_WITHOUT_NAMESPACE)
-#define U8_MIN 0u
-#define U8_MAX 0xffu
-#define S8_MIN (-0x7f - 1)
-#define S8_MAX 0x7f
+	#define U8_MIN 0u
+	#define U8_MAX 0xffu
+	#define S8_MIN (-0x7f - 1)
+	#define S8_MAX 0x7f
 
-#define U16_MIN 0u
-#define U16_MAX 0xffffu
-#define S16_MIN (-0x7fff - 1)
-#define S16_MAX 0x7fff
+	#define U16_MIN 0u
+	#define U16_MAX 0xffffu
+	#define S16_MIN (-0x7fff - 1)
+	#define S16_MAX 0x7fff
 
-#define U32_MIN 0u
-#define U32_MAX 0xffffffffu
-#define S32_MIN (-0x7fffffff - 1)
-#define S32_MAX 0x7fffffff
+	#define U32_MIN 0u
+	#define U32_MAX 0xffffffffu
+	#define S32_MIN (-0x7fffffff - 1)
+	#define S32_MAX 0x7fffffff
 
-#define U64_MIN 0ull
-#define U64_MAX 0xffffffffffffffffull
-#define S64_MIN (-0x7fffffffffffffffll - 1)
-#define S64_MAX 0x7fffffffffffffffll
+	#define U64_MIN 0ull
+	#define U64_MAX 0xffffffffffffffffull
+	#define S64_MIN (-0x7fffffffffffffffll - 1)
+	#define S64_MAX 0x7fffffffffffffffll
 
-#if defined(GB_ARCH_64_BIT)
-#define USIZE_MIX U64_MIN
-#define USIZE_MAX U64_MAX
+	#if defined(GB_ARCH_64_BIT)
+		#define USIZE_MIX U64_MIN
+		#define USIZE_MAX U64_MAX
 
-#define SSIZE_MIX S64_MIN
-#define SSIZE_MAX S64_MAX
+		#define SSIZE_MIX S64_MIN
+		#define SSIZE_MAX S64_MAX
+	#elif defined(GB_ARCH_32_BIT)
+		#define USIZE_MIX U32_MIN
+		#define USIZE_MAX U32_MAX
 
-#elif defined(GB_ARCH_32_BIT)
-#define USIZE_MIX U32_MIN
-#define USIZE_MAX U32_MAX
-
-#define SSIZE_MIX S32_MIN
-#define SSIZE_MAX S32_MAX
-
-#endif
+		#define SSIZE_MIX S32_MIN
+		#define SSIZE_MAX S32_MAX
+	#endif
 #endif
 
 
 
 #if !defined(GB_BASIC_WITHOUT_NAMESPACE)
-} // namespace gb
+__GB_NAMESPACE_END
 #endif // GB_BASIC_WITHOUT_NAMESPACE
 
-namespace gb
-{
+__GB_NAMESPACE_START
 ////////////////////////////////
 ///                          ///
 /// C++11 Types Traits       ///
 ///                          ///
 ////////////////////////////////
-
-template <typename T, T t>
-struct Integral_Constant
-{
-	global GB_CONSTEXPR const T VALUE = t;
-	using Value_Type = T;
-	using Type = Integral_Constant;
-
-	GB_FORCE_INLINE
-	GB_CONSTEXPR operator Value_Type() const { return VALUE; }
-	GB_CONSTEXPR Value_Type operator()() const { return VALUE; }
-};
-
-using True_Type  = Integral_Constant<bool, true>;
-using False_Type = Integral_Constant<bool, true>;
 
 template <typename T> struct Add_Const_Def { using Type = const T; };
 template <typename T> using  Add_Const = typename Add_Const_Def<T>::Type;
@@ -403,7 +468,6 @@ template <typename T> struct Add_Volatile_Def { using Type = volatile T; };
 template <typename T> using  Add_Volatile = typename Add_Volatile_Def<T>::Type;
 
 template <typename T> using  Add_Const_Volatile = Add_Const<Add_Volatile<T>>;
-
 
 template <typename T> struct Add_Lvalue_Reference_Def      { using Type = T&; };
 template <typename T> struct Add_Lvalue_Reference_Def<T&>  { using Type = T&; };
@@ -449,22 +513,6 @@ template <typename T> struct Remove_Reference_Def<T&>  { using Type = T; };
 template <typename T> struct Remove_Reference_Def<T&&> { using Type = T; };
 template <typename T> using  Remove_Reference = typename Remove_Reference_Def<T>::Type;
 
-
-template <typename T> struct Is_Integral_Def : False_Type {};
-template <> struct Is_Integral_Def<bool>     : True_Type {};
-template <> struct Is_Integral_Def<char>     : True_Type {};
-template <> struct Is_Integral_Def<wchar_t>  : True_Type {};
-template <> struct Is_Integral_Def<s8>       : True_Type {};
-template <> struct Is_Integral_Def<u8>       : True_Type {};
-template <> struct Is_Integral_Def<s16>      : True_Type {};
-template <> struct Is_Integral_Def<u16>      : True_Type {};
-template <> struct Is_Integral_Def<s32>      : True_Type {};
-template <> struct Is_Integral_Def<u32>      : True_Type {};
-template <> struct Is_Integral_Def<s64>      : True_Type {};
-template <> struct Is_Integral_Def<u64>      : True_Type {};
-template <typename T> struct Is_Integral : Is_Integral_Def<Remove_Const_Volatile<T>> {};
-
-
 ////////////////////////////////
 ///                          ///
 /// C++11 Move Semantics     ///
@@ -503,31 +551,30 @@ struct Defer
 {
 	Func func;
 
-	Defer(Func&& func) : func{gb::forward<Func>(func)} {}
+	Defer(Func&& func) : func{__GB_NAMESPACE_PREFIX::forward<Func>(func)} {}
 	~Defer() { func(); };
 };
 
 template <typename Func>
 Defer<Func>
-defer_func(Func&& func) { return Defer<Func>(gb::forward<Func>(func)); }
+defer_func(Func&& func) { return Defer<Func>(__GB_NAMESPACE_PREFIX::forward<Func>(func)); }
 } // namespace impl
-} // namespace gb
+__GB_NAMESPACE_END
 
-// NOTE(bill): These macros are in the global namespace thus, defer can be treated without a gb:: prefix
+// NOTE(bill): These macros are in the global namespace thus, defer can be treated without a __GB_NAMESPACE_PREFIX:: prefix
 #define GB_DEFER_1(x, y) x##y
 #define GB_DEFER_2(x, y) GB_DEFER_1(x, y)
 #define GB_DEFER_3(x)    GB_DEFER_2(GB_DEFER_2(GB_DEFER_2(x, __COUNTER__), _), __LINE__)
-#define defer(code) auto GB_DEFER_3(_defer_) = gb::impl::defer_func([&](){code;})
+#define defer(code) auto GB_DEFER_3(_defer_) = __GB_NAMESPACE_PREFIX::impl::defer_func([&](){code;})
 
 
 #if !defined(GB_CASTS_WITHOUT_NAMESPACE)
-namespace gb
-{
+__GB_NAMESPACE_START
 #endif // GB_CASTS_WITHOUT_NAMESPACE
 
-// NOTE(bill): Very similar to doing
-//             *(T*)(&u)
-//             But easier to write
+// IMPORTANT NOTE(bill): Very similar to doing `*(T*)(&u)` but easier/clearer to write
+// however, it can be dangerous if sizeof(T) > sizeof(U) e.g. unintialized memory, undefined behavior
+// *(T*)(&u) ~~ pseudo_cast<T>(u)
 template <typename T, typename U>
 inline T
 pseudo_cast(const U& u)
@@ -535,23 +582,34 @@ pseudo_cast(const U& u)
 	return reinterpret_cast<const T&>(u);
 }
 
-// NOTE(bill): There used to be a magic_cast that was equivalent to
-// a C-style cast but I removed it I could not get it work as intented
-// for everything
+// NOTE(bill): Very similar to doing `*(T*)(&u)`
+template <typename Dest, typename Source>
+inline Dest
+bit_cast(const Source& source)
+{
+	static_assert(sizeof(Dest) <= sizeof(Source),
+	              "bit_cast<Dest>(const Source&) - sizeof(Dest) <= sizeof(Source)");
+	Dest dest;
+	::memcpy(&dest, &source, sizeof(Dest));
+	return dest;
+}
+
+// FORENOTE(bill): There used to be a magic_cast that was equivalent to
+// a C-style cast but I removed it as I could not get it work as intented
+// for everything using only C++ style casts
 
 #if !defined(GB_CASTS_WITHOUT_NAMESPACE)
-} // namespace gb
+__GB_NAMESPACE_END
 #endif // GB_CASTS_WITHOUT_NAMESPACE
 
-namespace gb
-{
+__GB_NAMESPACE_START
 ////////////////////////////////
 ///                          ///
 /// Memory                   ///
 ///                          ///
 ////////////////////////////////
 
-// Mutex
+/// Mutex
 struct Mutex
 {
 #if defined(GB_SYSTEM_WINDOWS)
@@ -564,14 +622,16 @@ struct Mutex
 	~Mutex();
 };
 
-void lock_mutex(Mutex& mutex);
-bool try_lock_mutex(Mutex& mutex);
-void unlock_mutex(Mutex& mutex);
+namespace mutex
+{
+void lock(Mutex& mutex);
+bool try_lock(Mutex& mutex);
+void unlock(Mutex& mutex);
+} // namespace mutex
 
-// Atomics
-struct Atomic32   { u32   nonatomic; };
-struct Atomic64   { u64   nonatomic; };
-struct Atomic_Ptr { void* nonatomic; };
+/// Atomic Types
+struct Atomic32 { u32 nonatomic; };
+struct Atomic64 { u64 nonatomic; };
 
 namespace atomic
 {
@@ -592,57 +652,44 @@ u64 fetch_and_64_relaxed(Atomic64* object, u64 operand);
 u64 fetch_or_64_relaxed(Atomic64* object, u64 operand);
 } // namespace atomic
 
+/// Default alignment for memory allocations
 #ifndef GB_DEFAULT_ALIGNMENT
-#define GB_DEFAULT_ALIGNMENT 4
-#endif
+	#if defined(GB_ARCH_32_BIT)
+		#define GB_DEFAULT_ALIGNMENT 4
+	#elif defined(GB_ARCH_64_BIT)
+		#define GB_DEFAULT_ALIGNMENT 8
+	#else
+		#define GB_DEFAULT_ALIGNMENT 4
+	#endif
+#endif GB_DEFAULT_ALIGNMENT
 
-namespace memory
-{
-inline void*
-align_forward(void* ptr, usize align)
-{
-	GB_ASSERT(GB_IS_POWER_OF_TWO(align));
-
-	uintptr p = reinterpret_cast<uintptr>(ptr);
-
-	const usize modulo = p % align;
-	if (modulo)
-		p += (uintptr)(align - modulo);
-
-	return reinterpret_cast<void*>(p);
-}
-} // namespace memory
-
+/// Base class for memory allocators
 struct Allocator
 {
 	Allocator() {}
 	virtual ~Allocator() {}
 
+	/// Allocates the specified amount of memory aligned to the specified alignment
 	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT) = 0;
+	/// Deallocates/frees an allocation made with alloc()
 	virtual void dealloc(const void* ptr) = 0;
+	/// Returns the amount of usuable memory allocated at `ptr`.
+	///
+	/// If the allocator does not support tracking of the allocation size,
+	/// the function will return -1
 	virtual s64 allocated_size(const void* ptr) = 0;
+	/// Returns the total amount of memory allocated by this allocator
+	///
+	/// If the allocator does not track memory, the function will return -1
 	virtual s64 total_allocated() = 0;
 
-private:
 	// Delete copying
 	Allocator(const Allocator&) = delete;
 	Allocator& operator=(const Allocator&) = delete;
 };
 
-inline void* alloc(Allocator& a, usize size, usize align = GB_DEFAULT_ALIGNMENT) { return a.alloc(size, align); }
-inline void dealloc(Allocator& a, const void* ptr) { return a.dealloc(ptr); }
-
-template <typename T>
-inline T* alloc_struct(Allocator& a) { return static_cast<T*>(a.alloc(sizeof(T), alignof(T))); }
-
-template <typename T>
-inline T* alloc_array(Allocator& a, usize count) { return static_cast<T*>(alloc(a, count * sizeof(T), alignof(T))); }
-
-template <typename T, usize count>
-inline T* alloc_array(Allocator& a) { return static_cast<T*>(alloc(a, count * sizeof(T), alignof(T))); }
-
-#define GB_HEAP_ALLOCATOR_HEADER_PAD_VALUE (usize)(-1)
-
+/// An allocator that used the malloc(). Allocations are padded with the size of
+/// the allocation and align them to the desired alignment
 struct Heap_Allocator : Allocator
 {
 	struct Header
@@ -665,7 +712,6 @@ struct Heap_Allocator : Allocator
 	Header* get_header_ptr(const void* ptr);
 };
 
-
 struct Arena_Allocator : Allocator
 {
 	Allocator* backing;
@@ -684,6 +730,59 @@ struct Arena_Allocator : Allocator
 	virtual s64 total_allocated();
 };
 
+struct Temporary_Arena_Memory
+{
+	Arena_Allocator* arena;
+	s64              original_count;
+};
+
+template <usize BUFFER_SIZE>
+struct Temp_Allocator : Allocator
+{
+	u8 buffer[BUFFER_SIZE];
+	Allocator* backing;
+	u8*   physical_start;
+	u8*   current_pointer;
+	u8*   physical_end;
+	usize chunk_size; // Chunks to allocate from backing allocator
+
+	explicit Temp_Allocator(Allocator& backing);
+	virtual ~Temp_Allocator();
+
+	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT);
+	virtual void  dealloc(const void*) {}
+	virtual s64 allocated_size(const void*) { return -1; }
+	virtual s64 total_allocated() { return -1; }
+};
+
+
+namespace memory
+{
+void* align_forward(void* ptr, usize align);
+      void* pointer_add(      void* ptr, usize bytes);
+const void* pointer_add(const void* ptr, usize bytes);
+      void* pointer_sub(      void* ptr, usize bytes);
+const void* pointer_sub(const void* ptr, usize bytes);
+
+void* set(void* ptr, u8 value, usize bytes);
+void* zero(void* ptr, usize bytes);
+void* copy(void* dest, const void* src, usize bytes);
+void* move(void* dest, const void* src, usize bytes);
+bool  compare(const void* a, const void* b, usize bytes);
+} // namespace memory
+
+inline void* alloc(Allocator& a, usize size, usize align = GB_DEFAULT_ALIGNMENT) { return a.alloc(size, align); }
+inline void dealloc(Allocator& a, const void* ptr) { return a.dealloc(ptr); }
+
+template <typename T>
+inline T* alloc_struct(Allocator& a) { return static_cast<T*>(a.alloc(sizeof(T), alignof(T))); }
+
+template <typename T>
+inline T* alloc_array(Allocator& a, usize count) { return static_cast<T*>(alloc(a, count * sizeof(T), alignof(T))); }
+
+template <typename T, usize count>
+inline T* alloc_array(Allocator& a) { return static_cast<T*>(alloc(a, count * sizeof(T), alignof(T))); }
+
 inline void
 clear_arena(Arena_Allocator& arena)
 {
@@ -692,12 +791,6 @@ clear_arena(Arena_Allocator& arena)
 
 	arena.total_allocated_count = 0;
 }
-
-struct Temporary_Arena_Memory
-{
-	Arena_Allocator* arena;
-	s64              original_count;
-};
 
 inline Temporary_Arena_Memory
 make_temporary_arena_memory(Arena_Allocator& arena)
@@ -718,6 +811,129 @@ free_temporary_arena_memory(Temporary_Arena_Memory& tmp)
 	tmp.arena->temp_count--;
 }
 
+
+template <usize BUFFER_SIZE>
+Temp_Allocator<BUFFER_SIZE>::Temp_Allocator(Allocator& backing_)
+: backing(&backing_)
+, chunk_size(4 * 1024) // 4K
+{
+	current_pointer = physical_start = buffer;
+	physical_end = physical_start + BUFFER_SIZE;
+	*static_cast<void**>(physical_start) = 0;
+	current_pointer = memory::pointer_add(current_pointer, sizeof(void*));
+}
+
+template <usize BUFFER_SIZE>
+Temp_Allocator<BUFFER_SIZE>::~Temp_Allocator()
+{
+	void* ptr = *static_cast<void**>(buffer);
+	while (ptr)
+	{
+		void* next = *static_cast<void**>(ptr);
+		backing_->dealloc(ptr);
+		ptr = next;
+	}
+
+}
+
+template <usize BUFFER_SIZE>
+void*
+Temp_Allocator<BUFFER_SIZE>::alloc(usize size, usize align)
+{
+	current_pointer = (u8*)memory::align_forward(current_pointer, align);
+	if (size > (usize)physical_end - current_pointer)
+	{
+		usize to_allocate = sizeof(void*) + size + align;
+		if (to_allocate < chunk_size)
+			to_allocate = chunk_size;
+		chunk_size *= 2;
+		void* ptr = backing_->alloc(to_allocate);
+		*static_cast<void**>(physical_start) = ptr;
+		current_pointer = physical_start = (u8*)ptr;
+		*static_cast<void**>(physical_start) = 0;
+		current_pointer = memory::pointer_add(current_pointer, sizeof(void*));
+		current_pointer = (u8*)memory::align_forward(current_pointer, align);
+	}
+
+	void* result = current_pointer;
+	current_pointer += size;
+	return (result);
+}
+
+
+namespace memory
+{
+inline void*
+align_forward(void* ptr, usize align)
+{
+	GB_ASSERT(GB_IS_POWER_OF_TWO(align),
+	          "Alignment must be a power of two and not zero -- %llu", align);
+
+	uintptr p = uintptr(ptr);
+	const usize modulo = p % align;
+	if (modulo)
+		p += (align - modulo);
+	return reinterpret_cast<void*>(p);
+}
+
+inline void*
+pointer_add(void* ptr, usize bytes)
+{
+	return static_cast<void*>(static_cast<u8*>(ptr) + bytes);
+}
+
+inline const void*
+pointer_add(const void* ptr, usize bytes)
+{
+	return static_cast<const void*>(static_cast<const u8*>(ptr) + bytes);
+}
+
+inline void*
+pointer_sub(void* ptr, usize bytes)
+{
+	return static_cast<void*>(static_cast<u8*>(ptr) - bytes);
+}
+
+inline const void*
+pointer_sub(const void* ptr, usize bytes)
+{
+	return static_cast<const void*>(static_cast<const u8*>(ptr) - bytes);
+}
+
+inline void*
+set(void* ptr, u8 value, usize bytes)
+{
+	return memset(ptr, value, bytes);
+}
+
+inline void*
+zero(void* ptr, usize bytes)
+{
+	return memory::set(ptr, 0, bytes);
+}
+
+
+inline void*
+copy(void* dest, const void* src, usize bytes)
+{
+	return memcpy(dest, src, bytes);
+}
+
+inline void*
+move(void* dest, const void* src, usize bytes)
+{
+	return memmove(dest, src, bytes);
+}
+
+inline bool
+compare(const void* a, const void* b, usize bytes)
+{
+	return (memcmp(a, b, bytes) == 0);
+}
+
+
+} // namespace memory
+
 ////////////////////////////////
 ///                          ///
 /// String                   ///
@@ -725,40 +941,46 @@ free_temporary_arena_memory(Temporary_Arena_Memory& tmp)
 /// C compatible string      ///
 ///                          ///
 ////////////////////////////////
+
+/// A "better" string type that is compatible with C style read-only functions
 using String = char*;
-using String_Size = u32;
-struct String_Header
+
+namespace string
+{
+using Size = u32;
+
+struct Header
 {
 	Allocator* allocator;
-	String_Size len;
-	String_Size cap;
+	Size len;
+	Size cap;
 };
 
-inline String_Header* string_header(String str) { return (String_Header*)str - 1; }
+inline Header* header(String str) { return (Header*)str - 1; }
 
-String make_string(Allocator& a, const char* str = "");
-String make_string(Allocator& a, const void* str, String_Size len);
-void   free_string(String& str);
+String make(Allocator& a, const char* str = "");
+String make(Allocator& a, const void* str, Size len);
+void   free(String& str);
 
-String duplicate_string(Allocator& a, const String str);
+String duplicate(Allocator& a, const String str);
 
-String_Size string_length(const String str);
-String_Size string_capacity(const String str);
-String_Size string_available_space(const String str);
+Size length(const String str);
+Size capacity(const String str);
+Size available_space(const String str);
 
-void clear_string(String str);
+void clear(String str);
 
-void append_string(String& str, const String other);
+void append(String& str, const String other);
 void append_cstring(String& str, const char* other);
-void append_string(String& str, const void* other, String_Size len);
+void append(String& str, const void* other, Size len);
 
-void string_make_space_for(String& str, String_Size add_len);
-usize string_allocation_size(const String str);
+void make_space_for(String& str, Size add_len);
+usize allocation_size(const String str);
 
-bool strings_are_equal(const String lhs, const String rhs);
+bool equals(const String lhs, const String rhs);
 
-void trim_string(String& str, const char* cut_set);
-
+void trim(String& str, const char* cut_set);
+} // namespace string
 // TODO(bill): string libraries
 
 ////////////////////////////////
@@ -767,41 +989,57 @@ void trim_string(String& str, const char* cut_set);
 ///                          ///
 ////////////////////////////////
 
+/// Dynamic resizable array for POD types only
 template <typename T>
 struct Array
 {
 	Allocator* allocator;
 	s64        count;
-	s64        allocation;
+	s64        capacity;
 	T*         data;
 
 	Array() = default;
+	Array(const Array& array);
 	explicit Array(Allocator& a, usize count = 0);
-	virtual ~Array() { if (allocator) dealloc(*allocator, data); }
+	~Array();
+	Array& operator=(const Array& array);
+
 
 	const T& operator[](usize index) const { return data[index]; }
 		  T& operator[](usize index)       { return data[index]; }
 };
 
-template <typename T> Array<T> make_array(Allocator& allocator, usize count = 0);
-template <typename T> void     free_array(Array<T>& array);
+namespace array
+{
+/// Helper functions to make and free an array
+template <typename T> Array<T> make(Allocator& allocator, usize count = 0);
+template <typename T> void     free(Array<T>& array);
 
-template <typename T> void append_array(Array<T>& a, const T& item);
-template <typename T> void append_array(Array<T>& a, const T* items, usize count);
+/// Appends `item` to the end of the array
+template <typename T> void append(Array<T>& a, const T& item);
+/// Appends `items[count]` to the end of the array
+template <typename T> void append(Array<T>& a, const T* items, usize count);
 
-template <typename T> void pop_back_array(Array<T>& a);
+/// Pops the last item form the array. The array cannot be empty.
+template <typename T> void pop_back(Array<T>& a);
 
+/// Removes all items from the array - does not free memory
+template <typename T> void clear(Array<T>& a);
+/// Modify the size of a array - only reallocates when necessary
+template <typename T> void resize(Array<T>& a, usize count);
+/// Makes sure that the array has at least the specified capacity - or the array the grows
+template <typename T> void reserve(Array<T>& a, usize capacity);
+/// Reallocates the array to the specific capacity
+template <typename T> void set_capacity(Array<T>& a, usize capacity);
+/// Grows the array to keep append() to be O(1)
+template <typename T> void grow(Array<T>& a, usize min_capacity = 0);
+} // namespace array
+
+/// Used to iterate over the array with a C++11 for loop
 template <typename T> inline       T* begin(Array<T>& a)       { return a.data; }
 template <typename T> inline const T* begin(const Array<T>& a) { return a.data; }
-
 template <typename T> inline       T* end(Array<T>& a)         { return a.data + a.count; }
 template <typename T> inline const T* end(const Array<T>& a)   { return a.data + a.count; }
-
-template <typename T> void clear_array(Array<T>& a);
-template <typename T> void resize_array(Array<T>& a, usize count);
-template <typename T> void reserve_array(Array<T>& a, usize allocation);
-template <typename T> void set_array_allocation(Array<T>& a, usize allocation);
-template <typename T> void grow_array(Array<T>& a, usize min_allocation = 0);
 
 ////////////////////////////////
 ///                          ///
@@ -809,6 +1047,7 @@ template <typename T> void grow_array(Array<T>& a, usize min_allocation = 0);
 ///                          ///
 ////////////////////////////////
 
+/// Hash table for POD types only with a u64 key
 template <typename T>
 struct Hash_Table
 {
@@ -827,84 +1066,118 @@ struct Hash_Table
 	~Hash_Table() = default;
 };
 
-template <typename T>
-Hash_Table<T>::Hash_Table(Allocator& a)
+namespace hash_table
 {
-	hashes = make_array<s64>(a);
-	data = make_array<typename Hash_Table<T>::Entry>(a);
-}
+/// Helper function to make a hash table
+template <typename T> Hash_Table<T> make(Allocator& a);
 
-template <typename T>
-inline Hash_Table<T>
-make_hash_table(Allocator& a)
-{
-	Hash_Table<T> h = {};
-	h.hashes = make_array<s64>(a);
-	h.data   = make_array<typename Hash_Table<T>::Entry>(a);
-	return h;
-}
+/// Return `true` if the specified key exist in the hash table
+template <typename T> bool has(const Hash_Table<T>& h, u64 key);
+/// Returns the value stored at the key, or a `default_value` if the key is not found in the hash table
+template <typename T> const T& get(const Hash_Table<T>& h, u64 key, const T& default_value);
+/// Sets the value for the key in the hash table
+template <typename T> void set(Hash_Table<T>& h, u64 key, const T& value);
+/// Removes the key from the hash table if it exists
+template <typename T> void remove(Hash_Table<T>& h, u64 key);
+/// Resizes the hash table's lookup table to the specified size
+template <typename T> void reserve(Hash_Table<T>& h, usize capacity);
+/// Remove all elements from the hash table
+template <typename T> void clear(Hash_Table<T>& h);
+} // namespace hash_table
 
-template <typename T> bool hash_table_has(const Hash_Table<T>& h, u64 key);
-
-template <typename T> const T& hash_table_get(const Hash_Table<T>& h, u64 key, const T& default_value);
-template <typename T> void hash_table_set(Hash_Table<T>& h, u64 key, const T& value);
-
-template <typename T> void remove_from_hash_table(Hash_Table<T>& h, u64 key);
-template <typename T> void reserve_hash_table(Hash_Table<T>& h, usize capacity);
-template <typename T> void clear_hash_table(Hash_Table<T>& h);
-
-// Iterators (in random order)
+/// Used to iterate over the array with a C++11 for loop - in random order
 template <typename T> typename const Hash_Table<T>::Entry* begin(const Hash_Table<T>& h);
 template <typename T> typename const Hash_Table<T>::Entry* end(const Hash_Table<T>& h);
 
-// Mutli_Hash_Table
-template <typename T> void get_multiple_from_hash_table(const Hash_Table<T>& h, u64 key, Array<T>& items);
-template <typename T> usize multiple_count_from_hash_table(const Hash_Table<T>& h, u64 key);
+namespace multi_hash_table
+{
+/// Outputs all the items that with the specified key
+template <typename T> void get_multiple(const Hash_Table<T>& h, u64 key, Array<T>& items);
+/// Returns the count of entries with the specified key
+template <typename T> usize multiple_count(const Hash_Table<T>& h, u64 key);
 
-template <typename T> typename const Hash_Table<T>::Entry* find_first_in_hash_table(const Hash_Table<T>& h, u64 key);
-template <typename T> typename const Hash_Table<T>::Entry* find_next_in_hash_table(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e);
+/// Finds the first entry with specified key in the hash table
+template <typename T> typename const Hash_Table<T>::Entry* find_first(const Hash_Table<T>& h, u64 key);
+/// Finds the next entry with same key as `e`
+template <typename T> typename const Hash_Table<T>::Entry* find_next(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e);
 
-
-template <typename T> void insert_into_hash_table(Hash_Table<T>& h, u64 key, const T& value);
-template <typename T> void remove_entry_from_hash_table(Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e);
-template <typename T> void remove_all_from_hash_table(Hash_Table<T>& h, u64 key);
-
+/// Inserts the `value` as an additional value for the specified key
+template <typename T> void insert(Hash_Table<T>& h, u64 key, const T& value);
+/// Removes a specified entry `e` from the hash table
+template <typename T> void remove_entry(Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e);
+/// Removes all entries with from the hash table with the specified key
+template <typename T> void remove_all(Hash_Table<T>& h, u64 key);
+} // namespace multi_hash_table
 ////////////////////////////////
 ///                          ///
 /// Array                    ///
 ///                          ///
 ////////////////////////////////
 template <typename T>
-inline Array<T>::Array(Allocator& a, usize count_)
+inline
+Array<T>::Array(Allocator& a, usize count_)
+: allocator(&a)
+, count(0)
+, capacity(0)
+, data(nullptr)
 {
-	allocator = &a;
-	count = 0;
-	allocation = 0;
-	data = nullptr;
-	if (count > 0)
+	if (count_ > 0)
 	{
 		data = alloc_array<T>(a, count_);
 		if (data)
-			count = allocation = count_;
+			count = capacity = count_;
 	}
 }
 
 
+template <typename T>
+Array<T>::Array(const Array<T>& other)
+: allocator(other.allocator)
+, count(0)
+, capacity(0)
+, data(nullptr)
+{
+	const auto n = other.count;
+	array::set_capacity(*this, n);
+	memory::copy(data, other.data, n * sizeof(T));
+	count = n;
+}
 
 template <typename T>
+inline Array<T>~Array()
+{
+	if (allocator)
+		dealloc(*allocator, data);
+}
+
+
+template <typename T>
+Array<T>&
+Array<T>::operator=(const Array<T>& other)
+{
+	const auto n = other.count;
+	array::resize(*this, n);
+	memory::copy(data, other.data, n * sizeof(T));
+	return *this;
+}
+
+
+namespace array
+{
+template <typename T>
 inline Array<T>
-make_array(Allocator& allocator, usize count)
+make(Allocator& allocator, usize count)
 {
 	Array<T> array = {};
 	array.allocator = &allocator;
 	array.count = 0;
-	array.allocation = 0;
+	array.capacity = 0;
 	array.data = nullptr;
 	if (count > 0)
 	{
 		array.data = alloc_array<T>(allocator, count);
 		if (array.data)
-			array.count = array.allocation = count;
+			array.count = array.capacity = count;
 	}
 
 	return array;
@@ -912,7 +1185,7 @@ make_array(Allocator& allocator, usize count)
 
 template <typename T>
 inline void
-dealloc_array(Array<T>& array)
+dealloc(Array<T>& array)
 {
 	if (array.allocator)
 		dealloc(*array.allocator, array.data);
@@ -920,27 +1193,27 @@ dealloc_array(Array<T>& array)
 
 template <typename T>
 inline void
-append_array(Array<T>& a, const T& item)
+append(Array<T>& a, const T& item)
 {
-	if (a.allocation < a.count + 1)
-		grow_array(a);
+	if (a.capacity < a.count + 1)
+		grow(a);
 	a.data[a.count++] = item;
 }
 
 template <typename T>
 inline void
-append_array(Array<T>& a, const T* items, usize count)
+append(Array<T>& a, const T* items, usize count)
 {
-	if (a.allocation <= a.count + count)
-		grow_array(a, a.count + count);
+	if (a.capacity <= a.count + count)
+		grow(a, a.count + count);
 
-	memcpy(&a.data[a.count], items, count * sizeof(T));
+	memory::copy(&a.data[a.count], items, count * sizeof(T));
 	a.count += count;
 }
 
 template <typename T>
 inline void
-pop_back_array(Array<T>& a)
+pop_back(Array<T>& a)
 {
 	GB_ASSERT(a.count > 0);
 
@@ -949,64 +1222,85 @@ pop_back_array(Array<T>& a)
 
 template <typename T>
 inline void
-clear_array(Array<T>& a)
+clear(Array<T>& a)
 {
-	resize_array(a, 0);
+	resize(a, 0);
 }
 
 template <typename T>
 inline void
-resize_array(Array<T>& a, usize count)
+resize(Array<T>& a, usize count)
 {
-	if (a.allocation < static_cast<s64>(count))
-		grow_array(a, count);
+	if (a.capacity < static_cast<s64>(count))
+		grow(a, count);
 	a.count = count;
 }
 
 template <typename T>
 inline void
-reserve_array(Array<T>& a, usize allocation)
+reserve(Array<T>& a, usize capacity)
 {
-	if (a.allocation < static_cast<s64>(allocation))
-		set_array_allocation(a, allocation);
+	if (a.capacity < static_cast<s64>(capacity))
+		set_capacity(a, capacity);
 }
 
 template <typename T>
 inline void
-set_array_allocation(Array<T>& a, usize allocation)
+set_capacity(Array<T>& a, usize capacity)
 {
-	if (static_cast<s64>(allocation) == a.allocation)
+	if (static_cast<s64>(capacity) == a.capacity)
 		return;
 
-	if (static_cast<s64>(allocation) < a.count)
-		resize_array(a, allocation);
+	if (static_cast<s64>(capacity) < a.count)
+		resize(a, capacity);
 
 	T* data = nullptr;
-	if (allocation > 0)
+	if (capacity > 0)
 	{
-		data = alloc_array<T>(*a.allocator, allocation);
-		memcpy(data, a.data, a.count * sizeof(T));
+		data = alloc_array<T>(*a.allocator, capacity);
+		memory::copy(data, a.data, a.count * sizeof(T));
 	}
 	dealloc(*a.allocator, a.data);
 	a.data = data;
-	a.allocation = allocation;
+	a.capacity = capacity;
 }
 
 template <typename T>
 inline void
-grow_array(Array<T>& a, usize min_allocation)
+grow(Array<T>& a, usize min_capacity)
 {
-	usize allocation = 2 * a.allocation + 2;
-	if (allocation < min_allocation)
-		allocation = min_allocation;
-	set_array_allocation(a, allocation);
+	usize capacity = 2 * a.capacity + 2;
+	if (capacity < min_capacity)
+		capacity = min_capacity;
+	set_capacity(a, capacity);
 }
+} // namespace array
 
 ////////////////////////////////
 ///                          ///
 /// Hash Table               ///
 ///                          ///
 ////////////////////////////////
+
+template <typename T>
+inline Hash_Table<T>::Hash_Table(Allocator& a)
+{
+	hashes = array::make<s64>(a);
+	data = array::make<typename Hash_Table<T>::Entry>(a);
+}
+
+namespace hash_table
+{
+template <typename T>
+inline Hash_Table<T>
+make(Allocator& a)
+{
+	Hash_Table<T> h = {};
+	h.hashes = array::make<s64>(a);
+	h.data   = array::make<typename Hash_Table<T>::Entry>(a);
+	return h;
+}
+
 namespace impl
 {
 struct Find_Result
@@ -1016,36 +1310,48 @@ struct Find_Result
 	s64 data_index;
 };
 
+template <typename T> usize add_entry(Hash_Table<T>& h, u64 key);
+template <typename T> void erase(Hash_Table<T>& h, const Find_Result& fr);
+template <typename T> Find_Result find_result(const Hash_Table<T>& h, u64 key);
+template <typename T> Find_Result find_result(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e);
+template <typename T> s64 make_entry(Hash_Table<T>& h, u64 key);
+template <typename T> void find_and_erase_entry(Hash_Table<T>& h, u64 key);
+template <typename T> s64 find_entry_or_fail(const Hash_Table<T>& h, u64 key);
+template <typename T> s64 find_or_make_entry(Hash_Table<T>& h, u64 key);
+template <typename T> void rehash(Hash_Table<T>& h, usize new_capacity);
+template <typename T> void grow(Hash_Table<T>& h);
+template <typename T> bool is_full(Hash_Table<T>& h);
+
 template <typename T>
 usize
-add_hash_table_entry(Hash_Table<T>& h, u64 key)
+add_entry(Hash_Table<T>& h, u64 key)
 {
 	typename Hash_Table<T>::Entry e;
 	e.key  = key;
 	e.next = -1;
 	usize e_index = h.data.count;
-	append_array(h.data, e);
+	array::append(h.data, e);
 
 	return e_index;
 }
 
 template <typename T>
 void
-erase_from_hash_table(Hash_Table<T>& h, const Find_Result& fr)
+erase(Hash_Table<T>& h, const Find_Result& fr)
 {
 	if (fr.data_prev < 0)
 		h.hashes[fr.hash_index] = h.data[fr.data_index].next;
 	else
 		h.data[fr.data_prev].next = h.data[fr.data_index].next;
 
-	pop_back_array(h.data); // updated array count
+	array::pop_back(h.data); // updated array count
 
 	if (fr.data_index == h.data.count)
 		return;
 
 	h.data[fr.data_index] = h.data[h.data.count];
 
-	auto last = find_result_in_hash_table(h, h.data[fr.data_index].key);
+	auto last = impl::find_result(h, h.data[fr.data_index].key);
 
 	if (last.data_prev < 0)
 		h.hashes[last.hash_index] = fr.data_index;
@@ -1055,7 +1361,7 @@ erase_from_hash_table(Hash_Table<T>& h, const Find_Result& fr)
 
 template <typename T>
 Find_Result
-find_result_in_hash_table(const Hash_Table<T>& h, u64 key)
+find_result(const Hash_Table<T>& h, u64 key)
 {
 	Find_Result fr;
 	fr.hash_index = -1;
@@ -1081,7 +1387,7 @@ find_result_in_hash_table(const Hash_Table<T>& h, u64 key)
 
 template <typename T>
 Find_Result
-find_result_in_hash_table(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
+find_result(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
 {
 	Find_Result fr;
 	fr.hash_index = -1;
@@ -1105,10 +1411,11 @@ find_result_in_hash_table(const Hash_Table<T>& h, typename const Hash_Table<T>::
 }
 
 template <typename T>
-s64 make_entry_in_hash_table(Hash_Table<T>& h, u64 key)
+s64
+make_entry(Hash_Table<T>& h, u64 key)
 {
-	const Find_Result fr = impl::find_result_in_hash_table(h, key);
-	const s64 index    = impl::add_hash_table_entry(h, key);
+	const Find_Result fr = impl::find_result(h, key);
+	const s64 index      = impl::add_entry(h, key);
 
 	if (fr.data_prev < 0)
 		h.hashes[fr.hash_index] = index;
@@ -1122,29 +1429,29 @@ s64 make_entry_in_hash_table(Hash_Table<T>& h, u64 key)
 
 template <typename T>
 void
-find_and_erase_entry_from_hash_table(Hash_Table<T>& h, u64 key)
+find_and_erase_entry(Hash_Table<T>& h, u64 key)
 {
-	const Find_Result fr = impl::find_result_in_hash_table(h, key);
+	const Find_Result fr = impl::find_result(h, key);
 	if (fr.data_index >= 0)
-		erase_from_hash_table(h, fr);
+		hash_table::erase(h, fr);
 }
 
 template <typename T>
 s64
-find_entry_or_fail_in_hash_table(const Hash_Table<T>& h, u64 key)
+find_entry_or_fail(const Hash_Table<T>& h, u64 key)
 {
-	return find_result_in_hash_table(h, key).data_index;
+	return impl::find_result(h, key).data_index;
 }
 
 template <typename T>
 s64
-find_or_make_entry_in_hash_table(Hash_Table<T>& h, u64 key)
+find_or_make_entry(Hash_Table<T>& h, u64 key)
 {
-	const auto fr = find_result_in_hash_table(h, key);
+	const auto fr = find_result(h, key);
 	if (fr.data_index >= 0)
 		return fr.data_index;
 
-	s64 index = add_hash_table_entry(h, key);
+	s64 index = impl::add_entry(h, key);
 	if (fr.data_prev < 0)
 		h.hashes[fr.hash_index] = index;
 	else
@@ -1155,12 +1462,12 @@ find_or_make_entry_in_hash_table(Hash_Table<T>& h, u64 key)
 
 template <typename T>
 void
-rehash_hash_table(Hash_Table<T>& h, usize new_capacity)
+rehash(Hash_Table<T>& h, usize new_capacity)
 {
-	auto nh = make_hash_table<T>(*h.hashes.allocator);
-	resize_array(nh.hashes, new_capacity);
+	auto nh = hash_table::make<T>(*h.hashes.allocator);
+	array::resize(nh.hashes, new_capacity);
 	const usize old_count = h.data.count;
-	reserve_array(nh.data, old_count);
+	array::resize(nh.data, old_count);
 
 	for (usize i = 0; i < new_capacity; i++)
 		nh.hashes[i] = -1;
@@ -1168,27 +1475,27 @@ rehash_hash_table(Hash_Table<T>& h, usize new_capacity)
 	for (usize i = 0; i < old_count; i++)
 	{
 		auto& e = h.data[i];
-		insert_into_hash_table(nh, e.key, e.value);
+		multi_hash_table::insert(nh, e.key, e.value);
 	}
 
-	auto empty = make_hash_table<T>(*h.hashes.allocator);
+	auto empty = hash_table::make<T>(*h.hashes.allocator);
 	h.~Hash_Table<T>();
 
-	memcpy(&h,  &nh,    sizeof(Hash_Table<T>));
-	memcpy(&nh, &empty, sizeof(Hash_Table<T>));
+	memory::copy(&h,  &nh,    sizeof(Hash_Table<T>));
+	memory::copy(&nh, &empty, sizeof(Hash_Table<T>));
 }
 
 template <typename T>
 void
-grow_hash_table(Hash_Table<T>& h)
+grow(Hash_Table<T>& h)
 {
 	const usize new_capacity = 2 * h.data.count + 2;
-	rehash_hash_table(h, new_capacity);
+	impl::rehash(h, new_capacity);
 }
 
 template <typename T>
 bool
-is_hash_table_full(Hash_Table<T>& h)
+is_full(Hash_Table<T>& h)
 {
 	// Make sure that there is enough space
 	const f32 maximum_load_coefficient = 0.75f;
@@ -1198,16 +1505,16 @@ is_hash_table_full(Hash_Table<T>& h)
 
 template <typename T>
 inline bool
-hash_table_has(const Hash_Table<T>& h, u64 key)
+has(const Hash_Table<T>& h, u64 key)
 {
-	return impl::find_entry_or_fail_in_hash_table(h, key) >= 0;
+	return impl::find_entry_or_fail(h, key) >= 0;
 }
 
 template <typename T>
 inline const T&
-hash_table_get(const Hash_Table<T>& h, u64 key, const T& default_value)
+get(const Hash_Table<T>& h, u64 key, const T& default_value)
 {
-	const s64 index = impl::find_entry_or_fail_in_hash_table(h, key);
+	const s64 index = impl::find_entry_or_fail(h, key);
 
 	if (index < 0)
 		return default_value;
@@ -1216,38 +1523,39 @@ hash_table_get(const Hash_Table<T>& h, u64 key, const T& default_value)
 
 template <typename T>
 inline void
-hash_table_set(Hash_Table<T>& h, u64 key, const T& value)
+set(Hash_Table<T>& h, u64 key, const T& value)
 {
 	if (h.hashes.count == 0)
-		impl::grow_hash_table(h);
+		impl::grow(h);
 
-	const s64 index = impl::find_or_make_entry_in_hash_table(h, key);
+	const s64 index = impl::find_or_make_entry(h, key);
 	h.data[index].value = value;
-	if (impl::is_hash_table_full(h))
-		impl::grow_hash_table(h);
+	if (impl::is_full(h))
+		impl::grow(h);
 }
 
 template <typename T>
 inline void
-remove_from_hash_table(Hash_Table<T>& h, u64 key)
+remove(Hash_Table<T>& h, u64 key)
 {
-	impl::find_and_erase_entry_from_hash_table(h, key);
+	impl::find_and_erase_entry(h, key);
 }
 
 template <typename T>
 inline void
-reserve_hash_table(Hash_Table<T>& h, usize capacity)
+reserve(Hash_Table<T>& h, usize capacity)
 {
-	impl:;rehash_hash_table(h, capacity);
+	impl::rehash(h, capacity);
 }
 
 template <typename T>
 inline void
-clear_hash_table(Hash_Table<T>& h)
+clear(Hash_Table<T>& h)
 {
-	clear_array(h.hashes);
-	clear_array(h.data);
+	array::clear(h.hashes);
+	array::clear(h.data);
 }
+} // namespace hash_table
 
 template <typename T>
 inline typename const Hash_Table<T>::Entry*
@@ -1264,29 +1572,30 @@ end(const Hash_Table<T>& h)
 }
 
 
-// Mutli_Hash_Table
+namespace multi_hash_table
+{
 template <typename T>
 inline void
-get_multiple_from_hash_table(const Hash_Table<T>& h, u64 key, Array<T>& items)
+get_multiple(const Hash_Table<T>& h, u64 key, Array<T>& items)
 {
-	auto e = find_first_in_hash_table(h, key);
+	auto e = multi_hash_table::find_first(h, key);
 	while (e)
 	{
-		append_array(items, e->value);
-		e = find_next_in_hash_table(h, e);
+		array::append(items, e->value);
+		e = multi_hash_table::find_next(h, e);
 	}
 }
 
 template <typename T>
 inline usize
-multiple_count_from_hash_table(const Hash_Table<T>& h, u64 key)
+multiple_count(const Hash_Table<T>& h, u64 key)
 {
 	usize count = 0;
-	auto e = find_first_in_hash_table(h, key);
+	auto e = multi_hash_table::find_first(h, key);
 	while (e)
 	{
 		count++;
-		e = find_next_in_hash_table(h, e);
+		e = multi_hash_table::find_next(h, e);
 	}
 
 	return count;
@@ -1295,9 +1604,9 @@ multiple_count_from_hash_table(const Hash_Table<T>& h, u64 key)
 
 template <typename T>
 inline typename const Hash_Table<T>::Entry*
-find_first_in_hash_table(const Hash_Table<T>& h, u64 key)
+find_first(const Hash_Table<T>& h, u64 key)
 {
-	const s64 index = find_first_in_hash_table(h, key);
+	const s64 index = multi_hash_table::find_first(h, key);
 	if (index < 0)
 		return nullptr;
 	return &h.data[index];
@@ -1305,7 +1614,7 @@ find_first_in_hash_table(const Hash_Table<T>& h, u64 key)
 
 template <typename T>
 typename const Hash_Table<T>::Entry*
-find_next_in_hash_table(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
+find_next(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
 {
 	if (!e)
 		return nullptr;
@@ -1324,34 +1633,35 @@ find_next_in_hash_table(const Hash_Table<T>& h, typename const Hash_Table<T>::En
 
 template <typename T>
 inline void
-insert_into_hash_table(Hash_Table<T>& h, u64 key, const T& value)
+insert(Hash_Table<T>& h, u64 key, const T& value)
 {
 	if (h.hashes.count == 0)
-		impl::grow_hash_table(h);
+		hash_table::impl::grow(h);
 
-	auto next = impl::make_entry_in_hash_table(h, key);
+	auto next = hash_table::impl::make_entry(h, key);
 	h.data[next].value = value;
 
-	if (impl::is_hash_table_full(h))
-		impl::grow_hash_table(h);
+	if (hash_table::impl::is_full(h))
+		hash_table::impl::grow(h);
 }
 
 template <typename T>
 inline void
-remove_entry_from_hash_table(Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
+remove_entry(Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
 {
-	const auto fr = impl::find_result_in_hash_table(h, e);
+	const auto fr = hash_table::impl::find_result(h, e);
 	if (fr.data_index >= 0)
-		impl::erase_from_hash_table(h, fr);
+		hash_table::impl::erase(h, fr);
 }
 
 template <typename T>
 inline void
-remove_all_from_hash_table(Hash_Table<T>& h, u64 key)
+remove_all(Hash_Table<T>& h, u64 key)
 {
-	while (hash_table_has(h, key))
-		remove(h, key);
+	while (hash_table::has(h, key))
+		hash_table::remove(h, key);
 }
+} // namespace multi_hash_table
 
 ////////////////////////////////
 ///                          ///
@@ -1386,6 +1696,10 @@ struct Time
 {
 	s64 microseconds;
 };
+
+extern const Time TIME_ZERO;
+
+// NOTE(bill): namespace time cannot be used for numerous reasons
 
 Time time_now();
 void time_sleep(Time time);
@@ -1458,6 +1772,7 @@ struct Vector3
 	union
 	{
 		struct { f32 x, y, z; };
+		struct { f32 r, g, b; };
 		Vector2 xy;
 		f32     data[3];
 	};
@@ -1471,8 +1786,10 @@ struct Vector4
 	union
 	{
 		struct { f32 x, y, z, w; };
+		struct { f32 r, g, b, a; };
 		struct { Vector2 xy, zw; };
 		Vector3 xyz;
+		Vector3 rgb;
 		f32     data[4];
 	};
 
@@ -1549,22 +1866,25 @@ struct Matrix4
 struct Euler_Angles
 {
 	// NOTE(bill): All angles in radians
-	f32 pitch;
-	f32 yaw;
-	f32 roll;
+	f32 pitch, yaw, roll;
 };
 
 struct Transform
 {
-	Vector3    position    = Vector3{0, 0, 0};
-	Quaternion orientation = Quaternion{0, 0, 0, 1};
-	Vector3    scale       = Vector3{0, 0, 0};
+	Vector3    position;
+	Quaternion orientation;
+	Vector3    scale;
 };
 
 struct Aabb
 {
-	Vector3 center;
-	Vector3 half_size;
+	Vector3 center, half_size;
+};
+
+struct Oobb
+{
+	Matrix4 tm;
+	Aabb    aabb;
 };
 
 struct Sphere
@@ -1825,6 +2145,8 @@ s64 abs(s64 x);
 bool is_infinite(f32 x);
 bool is_nan(f32 x);
 
+#undef min
+#undef max
 s32 min(s32 a, s32 b);
 s64 min(s64 a, s64 b);
 f32 min(f32 a, f32 b);
@@ -1833,12 +2155,13 @@ s32 max(s32 a, s32 b);
 s64 max(s64 a, s64 b);
 f32 max(f32 a, f32 b);
 
+
 s32 clamp(s32 x, s32 min, s32 max);
 s64 clamp(s64 x, s64 min, s64 max);
 f32 clamp(f32 x, f32 min, f32 max);
 
 template <typename T>
-T lerp(const T& x, const T& y, const T& t);
+T lerp(const T& x, const T& y, f32 t);
 
 bool equals(f32 a, f32 b, f32 precision = F32_PRECISION);
 
@@ -1997,6 +2320,9 @@ f32 ray_plane_intersection(const Vector3& from, const Vector3& dir, const Plane&
 f32 ray_sphere_intersection(const Vector3& from, const Vector3& dir, const Sphere& s);
 
 bool plane_3_intersection(const Plane& p1, const Plane& p2, const Plane& p3, Vector3& ip);
+
+f32 perlin_noise3(f32 x, f32 y, f32 z, s32 x_wrap = 0, s32 y_wrap = 0, s32 z_wrap = 0);
+
 } // namespace math
 
 namespace random
@@ -2011,6 +2337,8 @@ enum Generator_Type
 
 // NOTE(bill): Basic Definition of a Random Number Generator
 // NOTE(bill): C++(17)?? Concepts might be useful here
+// NOTE(bill): A vtable could be used but would not have good performance
+// NOTE(bill): Just overload functions like mad?
 /*
 struct Generator
 // concept Generator<typename T, typename U>
@@ -2254,8 +2582,8 @@ struct Shader_Program
 	b32 is_linked;
 	Allocator* allocator;
 
-	const char* base_directory;
-
+	const char* base_file_path;
+	b32         watch_file;
 
 	u32         uniform_count;
 	const char* uniform_names[GB_MAX_UNIFORM_COUNT];
@@ -2263,11 +2591,11 @@ struct Shader_Program
 };
 
 
-Shader_Program make_shader_program(gb::Allocator& allocator);
+Shader_Program make_shader_program(Allocator& allocator);
 void destroy_shader_program(Shader_Program* program);
 
 b32 attach_shader_from_file(Shader_Program* program, Shader_Type type, const char* filename);
-b32 attach_shader_from_memory(Shader_Program* program, Shader_Type type, const char* source, usize len);
+b32 attach_shader_from_memory(Shader_Program* program, Shader_Type type, const char* source, usize length);
 
 void use_shader_program(const Shader_Program* program);
 b32 is_shader_program_in_use(const Shader_Program* program);
@@ -2281,7 +2609,7 @@ s32 get_uniform_location(Shader_Program* program, const char* name);
 
 #endif // GB_OPENGL_TOOLS
 #endif
-} // namespace gb
+__GB_NAMESPACE_END
 
 #endif // GB_INCLUDE_GB_HPP
 
@@ -2353,8 +2681,7 @@ s32 get_uniform_location(Shader_Program* program, const char* name);
 ///                          ///
 ////////////////////////////////
 #if defined(GB_IMPLEMENTATION)
-namespace gb
-{
+__GB_NAMESPACE_START
 ////////////////////////////////
 ///                          ///
 /// Memory                   ///
@@ -2379,7 +2706,9 @@ Mutex::~Mutex()
 #endif
 }
 
-void lock_mutex(Mutex& mutex)
+namespace mutex
+{
+void lock(Mutex& mutex)
 {
 #if defined(GB_SYSTEM_WINDOWS)
 	WaitForSingleObject(mutex.win32_mutex, INFINITE);
@@ -2388,7 +2717,7 @@ void lock_mutex(Mutex& mutex)
 #endif
 }
 
-bool try_lock_mutex(Mutex& mutex)
+bool try_lock(Mutex& mutex)
 {
 #if defined(GB_SYSTEM_WINDOWS)
 	return WaitForSingleObject(mutex.win32_mutex, 0) == WAIT_OBJECT_0;
@@ -2398,7 +2727,7 @@ bool try_lock_mutex(Mutex& mutex)
 }
 
 
-void unlock_mutex(Mutex& mutex)
+void unlock(Mutex& mutex)
 {
 #if defined(GB_SYSTEM_WINDOWS)
 	ReleaseMutex(mutex.win32_mutex);
@@ -2406,6 +2735,7 @@ void unlock_mutex(Mutex& mutex)
 	pthread_mutex_unlock(&mutex.posix_mutex);
 #endif
 }
+} // namespace mutex
 
 // Atomics
 namespace atomic
@@ -2572,22 +2902,24 @@ fetch_or_64_relaxed(Atomic64* object, u64 operand)
 #endif
 } // namespace atomic
 
-
+#define GB_HEAP_ALLOCATOR_HEADER_PAD_VALUE (usize)(-1)
 Heap_Allocator::~Heap_Allocator()
 {
+#if 0
 	GB_ASSERT(allocation_count == 0 && total_allocated() == 0,
 			  "Heap Allocator: allocation count = %lld; total allocated = %lld",
 			  allocation_count, total_allocated());
+#endif
 }
 
 void*
 Heap_Allocator::alloc(usize size, usize align)
 {
-	lock_mutex(mutex);
-	defer(unlock_mutex(mutex));
+	mutex::lock(mutex);
+	defer (mutex::unlock(mutex));
 
 	const usize total = size + align + sizeof(Header);
-	Header* h = (Header*)::malloc(total);
+	Header* h = static_cast<Header*>(::malloc(total));
 	h->size   = total;
 
 	void* data = memory::align_forward(h + 1, align);
@@ -2609,8 +2941,8 @@ Heap_Allocator::dealloc(const void* ptr)
 	if (!ptr)
 		return;
 
-	lock_mutex(mutex);
-	defer(unlock_mutex(mutex));
+	mutex::lock(mutex);
+	defer (mutex::unlock(mutex));
 
 
 	Header* h = get_header_ptr(ptr);
@@ -2618,14 +2950,14 @@ Heap_Allocator::dealloc(const void* ptr)
 	total_allocated_count -= h->size;
 	allocation_count--;
 
-	::free((void*)h);
+	::free(h);
 }
 
 s64
 Heap_Allocator::allocated_size(const void* ptr)
 {
-	lock_mutex(mutex);
-	defer(unlock_mutex(mutex));
+	mutex::lock(mutex);
+	defer (mutex::unlock(mutex));
 
 	return get_header_ptr(ptr)->size;
 }
@@ -2639,20 +2971,18 @@ Heap_Allocator::total_allocated()
 Heap_Allocator::Header*
 Heap_Allocator::get_header_ptr(const void* ptr)
 {
-	const usize* data = reinterpret_cast<const usize*>(ptr);
-	data--;
+	const usize* data = reinterpret_cast<const usize*>(ptr) - 1;
 
 	while (*data == GB_HEAP_ALLOCATOR_HEADER_PAD_VALUE)
 		data--;
 
-	return (Heap_Allocator::Header*)data;
+	return (Heap_Allocator::Header*)(data);
 }
-
 
 Arena_Allocator::Arena_Allocator(Allocator& backing_, usize size)
 : backing(&backing_)
 , physical_start(nullptr)
-, total_size((s64)size)
+, total_size(size)
 , temp_count(0)
 , total_allocated_count(0)
 {
@@ -2662,7 +2992,7 @@ Arena_Allocator::Arena_Allocator(Allocator& backing_, usize size)
 Arena_Allocator::Arena_Allocator(void* start, usize size)
 : backing(nullptr)
 , physical_start(start)
-, total_size((s64)size)
+, total_size(size)
 , temp_count(0)
 , total_allocated_count(0)
 {
@@ -2684,7 +3014,7 @@ void* Arena_Allocator::alloc(usize size, usize align)
 	if (total_allocated_count + actual_size > total_size)
 		return nullptr;
 
-	void* ptr = memory::align_forward(static_cast<u8*>(physical_start) + total_allocated_count, align);
+	void* ptr = memory::align_forward(memory::pointer_add(physical_start, total_allocated_count), align);
 
 	total_allocated_count += actual_size;
 
@@ -2702,39 +3032,41 @@ inline s64 Arena_Allocator::total_allocated() { return total_allocated_count; }
 /// String                   ///
 ///                          ///
 ////////////////////////////////
-String make_string(Allocator& a, const char* str)
+
+namespace string
 {
-	return make_string(a, str, (String_Size)strlen(str));
+String make(Allocator& a, const char* str)
+{
+	return string::make(a, str, (string::Size)strlen(str));
 }
 
-String make_string(Allocator& a, const void* init_str, String_Size len)
+String make(Allocator& a, const void* init_str, Size len)
 {
-	usize header_size = sizeof(String_Header);
+	usize header_size = sizeof(string::Header);
 	void* ptr = alloc(a, header_size + len + 1);
 	if (!init_str)
-		memset(ptr, 0, header_size + len + 1);
+		memory::zero(ptr, header_size + len + 1);
 
 	if (ptr == nullptr)
 		return nullptr;
 
 	String str = static_cast<char*>(ptr) + header_size;
-	String_Header* header = string_header(str);
+	string::Header* header = string::header(str);
 	header->allocator = &a;
 	header->len = len;
 	header->cap = len;
 	if (len && init_str)
-		memcpy(str, init_str, len);
+		memory::copy(str, init_str, len);
 	str[len] = '\0';
 
 	return str;
 }
 
-
-void free_string(String& str)
+void free(String& str)
 {
 	if (str == nullptr)
 		return;
-	String_Header* h = string_header(str);
+	string::Header* h = string::header(str);
 	Allocator* a = h->allocator;
 	if (a) dealloc(*a, h);
 	str = nullptr;
@@ -2742,56 +3074,55 @@ void free_string(String& str)
 
 String duplicate_string(Allocator& a, const String str)
 {
-	return make_string(a, str, string_length(str));
+	return string::make(a, str, string::length(str));
 }
 
-String_Size string_length(const String str)
+Size length(const String str)
 {
-	return string_header(str)->len;
+	return string::header(str)->len;
 }
 
-String_Size string_capacity(const String str)
+Size capacity(const String str)
 {
-	return string_header(str)->cap;
+	return string::header(str)->cap;
 }
 
-String_Size string_available_space(const String str)
+Size available_space(const String str)
 {
-	String_Header* h = string_header(str);
+	string::Header* h = string::header(str);
 	if (h->cap > h->len)
 		return h->cap - h->len;
 	return 0;
 }
 
-void clear_string(String str)
+void clear(String str)
 {
-	string_header(str)->len = 0;
+	string::header(str)->len = 0;
 	str[0] = '\0';
 }
 
-void append_string(String& str, const String other)
+void append(String& str, const String other)
 {
-	append_string(str, other, string_length(other));
+	string::append(str, other, string::length(other));
 }
 
 void append_cstring(String& str, const char* other)
 {
-	append_string(str, other, (String_Size)strlen(other));
+	string::append(str, other, (Size)strlen(other));
 }
 
-void append_string(String& str, const void* other, String_Size other_len)
+void append(String& str, const void* other, Size other_len)
 {
-	String_Size curr_len = string_length(str);
+	Size curr_len = string::length(str);
 
-	string_make_space_for(str, other_len);
+	string::make_space_for(str, other_len);
 	if (str == nullptr)
 		return;
 
-	memcpy(str + curr_len, other, other_len);
+	memory::copy(str + curr_len, other, other_len);
 	str[curr_len + other_len] = '\0';
-	string_header(str)->len = curr_len + other_len;
+	string::header(str)->len = curr_len + other_len;
 }
-
 
 namespace impl
 {
@@ -2812,7 +3143,7 @@ string_realloc(Allocator& a, void* ptr, usize old_size, usize new_size)
 	if (!new_ptr)
 		return nullptr;
 
-	memcpy(new_ptr, ptr, old_size);
+	memory::copy(new_ptr, ptr, old_size);
 
 	dealloc(a, ptr);
 
@@ -2820,42 +3151,42 @@ string_realloc(Allocator& a, void* ptr, usize old_size, usize new_size)
 }
 } // namespace impl
 
-void string_make_space_for(String& str, String_Size add_len)
+void make_space_for(String& str, Size add_len)
 {
-	String_Size len = string_length(str);
-	String_Size new_len = len + add_len;
+	Size len = string::length(str);
+	Size new_len = len + add_len;
 
-	String_Size available = string_available_space(str);
+	Size available = string::available_space(str);
 	if (available >= add_len) // Return if there is enough space left
 		return;
 
-	void* ptr = reinterpret_cast<String_Header*>(str) - 1;
-	usize old_size = sizeof(String_Header) + string_length(str) + 1;
-	usize new_size = sizeof(String_Header) + new_len + 1;
+	void* ptr = reinterpret_cast<string::Header*>(str) - 1;
+	usize old_size = sizeof(string::Header) + string::length(str) + 1;
+	usize new_size = sizeof(string::Header) + new_len + 1;
 
-	Allocator* a = string_header(str)->allocator;
+	Allocator* a = string::header(str)->allocator;
 	void* new_ptr = impl::string_realloc(*a, ptr, old_size, new_size);
 	if (new_ptr == nullptr)
 		return;
-	str = static_cast<char*>(new_ptr) + sizeof(String_Header);
+	str = static_cast<char*>(new_ptr) + sizeof(string::Header);
 
-	string_header(str)->cap = new_len;
+	string::header(str)->cap = new_len;
 }
 
-usize string_allocation_size(const String str)
+usize allocation_size(const String str)
 {
-	String_Size cap = string_capacity(str);
-	return sizeof(String_Header) + cap;
+	Size cap = string::capacity(str);
+	return sizeof(string::Header) + cap;
 }
 
-bool strings_are_equal(const String lhs, const String rhs)
+bool equals(const String lhs, const String rhs)
 {
-	String_Size lhs_len = string_length(lhs);
-	String_Size rhs_len = string_length(rhs);
+	Size lhs_len = string::length(lhs);
+	Size rhs_len = string::length(rhs);
 	if (lhs_len != rhs_len)
 		return false;
 
-	for (String_Size i = 0; i < lhs_len; i++)
+	for (Size i = 0; i < lhs_len; i++)
 	{
 		if (lhs[i] != rhs[i])
 			return false;
@@ -2864,7 +3195,7 @@ bool strings_are_equal(const String lhs, const String rhs)
 	return true;
 }
 
-void trim_string(String& str, const char* cut_set)
+void trim(String& str, const char* cut_set)
 {
 	char* start;
 	char* end;
@@ -2872,22 +3203,22 @@ void trim_string(String& str, const char* cut_set)
 	char* end_pos;
 
 	start_pos = start = str;
-	end_pos   = end   = str + string_length(str) - 1;
+	end_pos   = end   = str + string::length(str) - 1;
 
 	while (start_pos <= end && strchr(cut_set, *start_pos))
 		start_pos++;
 	while (end_pos > start_pos && strchr(cut_set, *end_pos))
 		end_pos--;
 
-	String_Size len = static_cast<String_Size>((start_pos > end_pos) ? 0 : ((end_pos - start_pos)+1));
+	Size len = static_cast<Size>((start_pos > end_pos) ? 0 : ((end_pos - start_pos)+1));
 
 	if (str != start_pos)
-		memmove(str, start_pos, len);
+		memory::move(str, start_pos, len);
 	str[len] = '\0';
 
-	string_header(str)->len = len;
+	string::header(str)->len = len;
 }
-
+} // namespace string
 
 ////////////////////////////////
 ///                          ///
@@ -3256,6 +3587,9 @@ u64 murmur64(const void* key, usize num_bytes, u64 seed)
 /// Time                     ///
 ///                          ///
 ////////////////////////////////
+
+const Time TIME_ZERO = seconds(0);
+
 #if defined(GB_SYSTEM_WINDOWS)
 
 internal LARGE_INTEGER
@@ -3337,11 +3671,11 @@ void time_sleep(Time t)
 
 #endif
 
-Time seconds(f32 s)              { return {(s64)(s * 1000000ll)}; }
-Time milliseconds(s32 ms)        { return {(s64)(ms * 1000l)}; }
+Time seconds(f32 s)              { return {static_cast<s64>(s * 1000000ll)}; }
+Time milliseconds(s32 ms)        { return {static_cast<s64>(ms * 1000l)}; }
 Time microseconds(s64 us)        { return {us}; }
-f32 time_as_seconds(Time t)      { return (f32)(t.microseconds / 1000000.0f); }
-s32 time_as_milliseconds(Time t) { return (s32)(t.microseconds / 1000l); }
+f32 time_as_seconds(Time t)      { return static_cast<f32>(t.microseconds / 1000000.0f); }
+s32 time_as_milliseconds(Time t) { return static_cast<s32>(t.microseconds / 1000l); }
 s64 time_as_microseconds(Time t) { return t.microseconds; }
 
 bool operator==(Time left, Time right)
@@ -4223,10 +4557,10 @@ fast_inv_sqrt(f32 x)
 
 	const f32 x2 = x * 0.5f;
 	f32 y  = x;
-	u32 i  = pseudo_cast<u32>(y);             // Evil floating point bit level hacking
+	u32 i  = bit_cast<u32>(y);             // Evil floating point bit level hacking
 	//	i = 0x5f3759df - (i >> 1);            // What the fuck? Old
 	i = 0x5f375a86 - (i >> 1);                // What the fuck? Improved!
-	y = pseudo_cast<f32>(i);
+	y = bit_cast<f32>(i);
 	y = y * (THREE_HALFS - (x2 * y * y));     // 1st iteration
 	//	y = y * (THREE_HALFS - (x2 * y * y)); // 2nd iteration, this can be removed
 
@@ -4270,41 +4604,41 @@ inline f32 sign(f32 x) { return x >= 0.0f ? +1.0f : -1.0f; }
 inline f32
 abs(f32 x)
 {
-	u32 i = pseudo_cast<u32>(x);
+	u32 i = bit_cast<u32>(x);
 	i &= 0x7FFFFFFFul;
-	return pseudo_cast<f32>(i);
+	return bit_cast<f32>(i);
 }
 
 inline s8
 abs(s8 x)
 {
-	u8 i = pseudo_cast<u8>(x);
+	u8 i = bit_cast<u8>(x);
 	i &= 0x7Fu;
-	return pseudo_cast<s8>(i);
+	return bit_cast<s8>(i);
 }
 
 inline s16
 abs(s16 x)
 {
-	u16 i = pseudo_cast<u16>(x);
+	u16 i = bit_cast<u16>(x);
 	i &= 0x7FFFu;
-	return pseudo_cast<s16>(i);
+	return bit_cast<s16>(i);
 }
 
 inline s32
 abs(s32 x)
 {
-	u32 i = pseudo_cast<u32>(x);
+	u32 i = bit_cast<u32>(x);
 	i &= 0x7FFFFFFFul;
-	return pseudo_cast<s32>(i);
+	return bit_cast<s32>(i);
 }
 
 inline s64
 abs(s64 x)
 {
-	u64 i = pseudo_cast<u64>(x);
+	u64 i = bit_cast<u64>(x);
 	i &= 0x7FFFFFFFFFFFFFFFull;
-	return pseudo_cast<s64>(i);
+	return bit_cast<s64>(i);
 }
 
 inline bool
@@ -4359,7 +4693,7 @@ clamp(f32 x, f32 min, f32 max)
 
 template <typename T>
 inline T
-lerp(const T& x, const T& y, const T& t)
+lerp(const T& x, const T& y, f32 t)
 {
 	return x + (y - x) * t;
 }
@@ -5133,15 +5467,7 @@ scale(const Vector3& v)
 inline Matrix4
 ortho(f32 left, f32 right, f32 bottom, f32 top)
 {
-	Matrix4 result = MATRIX4_IDENTITY;
-
-	result[0][0] = 2.0f / (right - left);
-	result[1][1] = 2.0f / (top - bottom);
-	result[2][2] = -1.0f;
-	result[3][1] = -(right + left) / (right - left);
-	result[3][1] = -(top + bottom) / (top - bottom);
-
-	return result;
+	return ortho(left, right, bottom, top, -1.0f, 1.0f);
 }
 
 inline Matrix4
@@ -5230,13 +5556,37 @@ look_at_matrix4(const Vector3& eye, const Vector3& center, const Vector3& up)
 inline Quaternion
 look_at_quaternion(const Vector3& eye, const Vector3& center, const Vector3& up)
 {
-	const f32 similar = 0.001f;
-
-	if (math::magnitude(center - eye) < similar)
+	if (math::equals(math::magnitude(center - eye), 0, 0.001f))
 		return QUATERNION_IDENTITY; // You cannot look at where you are!
 
-	// TODO(bill): Implement using just quaternions
+#if 0
 	return matrix4_to_quaternion(look_at_matrix4(eye, center, up));
+#else
+	// TODO(bill): Thoroughly test this look_at_quaternion!
+	// Is it more efficient that that a converting a Matrix4 to a Quaternion?
+	Vector3 forward_l = math::normalize(center - eye);
+	Vector3 forward_w = {1, 0, 0};
+	Vector3 axis = math::cross(forward_l, forward_w);
+
+	f32 angle = math::acos(math::dot(forward_l, forward_w));
+
+	Vector3 third = math::cross(axis, forward_w);
+	if (math::dot(third, forward_l) < 0)
+		angle = -angle;
+
+	Quaternion q1 = math::axis_angle(axis, angle);
+
+	Vector3 up_l  = q1 * math::normalize(up);
+	Vector3 right = math::normalize(math::cross(forward_l, up));
+	Vector3 up_w  = math::normalize(math::cross(right, forward_l));
+
+	Vector3 axis2  = math::cross(up_l, up_w);
+	f32     angle2 = math::acos(math::dot(up_l, up_w));
+
+	Quaternion q2 = math::axis_angle(axis2, angle2);
+
+	return q2 * q1;
+#endif
 }
 
 // Transform Functions
@@ -5551,6 +5901,127 @@ plane_3_intersection(const Plane& p1, const Plane& p2, const Plane& p3, Vector3&
 	return true;
 }
 
+global s32 g_perlin_randtab[512] =
+{
+   23, 125, 161, 52, 103, 117, 70, 37, 247, 101, 203, 169, 124, 126, 44, 123,
+   152, 238, 145, 45, 171, 114, 253, 10, 192, 136, 4, 157, 249, 30, 35, 72,
+   175, 63, 77, 90, 181, 16, 96, 111, 133, 104, 75, 162, 93, 56, 66, 240,
+   8, 50, 84, 229, 49, 210, 173, 239, 141, 1, 87, 18, 2, 198, 143, 57,
+   225, 160, 58, 217, 168, 206, 245, 204, 199, 6, 73, 60, 20, 230, 211, 233,
+   94, 200, 88, 9, 74, 155, 33, 15, 219, 130, 226, 202, 83, 236, 42, 172,
+   165, 218, 55, 222, 46, 107, 98, 154, 109, 67, 196, 178, 127, 158, 13, 243,
+   65, 79, 166, 248, 25, 224, 115, 80, 68, 51, 184, 128, 232, 208, 151, 122,
+   26, 212, 105, 43, 179, 213, 235, 148, 146, 89, 14, 195, 28, 78, 112, 76,
+   250, 47, 24, 251, 140, 108, 186, 190, 228, 170, 183, 139, 39, 188, 244, 246,
+   132, 48, 119, 144, 180, 138, 134, 193, 82, 182, 120, 121, 86, 220, 209, 3,
+   91, 241, 149, 85, 205, 150, 113, 216, 31, 100, 41, 164, 177, 214, 153, 231,
+   38, 71, 185, 174, 97, 201, 29, 95, 7, 92, 54, 254, 191, 118, 34, 221,
+   131, 11, 163, 99, 234, 81, 227, 147, 156, 176, 17, 142, 69, 12, 110, 62,
+   27, 255, 0, 194, 59, 116, 242, 252, 19, 21, 187, 53, 207, 129, 64, 135,
+   61, 40, 167, 237, 102, 223, 106, 159, 197, 189, 215, 137, 36, 32, 22, 5,
+
+// Copy
+   23, 125, 161, 52, 103, 117, 70, 37, 247, 101, 203, 169, 124, 126, 44, 123,
+   152, 238, 145, 45, 171, 114, 253, 10, 192, 136, 4, 157, 249, 30, 35, 72,
+   175, 63, 77, 90, 181, 16, 96, 111, 133, 104, 75, 162, 93, 56, 66, 240,
+   8, 50, 84, 229, 49, 210, 173, 239, 141, 1, 87, 18, 2, 198, 143, 57,
+   225, 160, 58, 217, 168, 206, 245, 204, 199, 6, 73, 60, 20, 230, 211, 233,
+   94, 200, 88, 9, 74, 155, 33, 15, 219, 130, 226, 202, 83, 236, 42, 172,
+   165, 218, 55, 222, 46, 107, 98, 154, 109, 67, 196, 178, 127, 158, 13, 243,
+   65, 79, 166, 248, 25, 224, 115, 80, 68, 51, 184, 128, 232, 208, 151, 122,
+   26, 212, 105, 43, 179, 213, 235, 148, 146, 89, 14, 195, 28, 78, 112, 76,
+   250, 47, 24, 251, 140, 108, 186, 190, 228, 170, 183, 139, 39, 188, 244, 246,
+   132, 48, 119, 144, 180, 138, 134, 193, 82, 182, 120, 121, 86, 220, 209, 3,
+   91, 241, 149, 85, 205, 150, 113, 216, 31, 100, 41, 164, 177, 214, 153, 231,
+   38, 71, 185, 174, 97, 201, 29, 95, 7, 92, 54, 254, 191, 118, 34, 221,
+   131, 11, 163, 99, 234, 81, 227, 147, 156, 176, 17, 142, 69, 12, 110, 62,
+   27, 255, 0, 194, 59, 116, 242, 252, 19, 21, 187, 53, 207, 129, 64, 135,
+   61, 40, 167, 237, 102, 223, 106, 159, 197, 189, 215, 137, 36, 32, 22, 5,
+};
+
+
+internal f32
+perlin_grad(s32 hash, f32 x, f32 y, f32 z)
+{
+	local_persist f32 basis[12][4] =
+	{
+		{ 1, 1, 0},
+		{-1, 1, 0},
+		{ 1,-1, 0},
+		{-1,-1, 0},
+		{ 1, 0, 1},
+		{-1, 0, 1},
+		{ 1, 0,-1},
+		{-1, 0,-1},
+		{ 0, 1, 1},
+		{ 0,-1, 1},
+		{ 0, 1,-1},
+		{ 0,-1,-1},
+	};
+
+	local_persist u8 indices[64] =
+	{
+		0,1,2,3,4,5,6,7,8,9,10,11,
+		0,9,1,11,
+		0,1,2,3,4,5,6,7,8,9,10,11,
+		0,1,2,3,4,5,6,7,8,9,10,11,
+		0,1,2,3,4,5,6,7,8,9,10,11,
+		0,1,2,3,4,5,6,7,8,9,10,11,
+	};
+
+	f32* grad = basis[indices[hash & 63]];
+	return grad[0]*x + grad[1]*y + grad[2]*z;
+}
+
+
+inline f32
+perlin_noise3(f32 x, f32 y, f32 z, s32 x_wrap, s32 y_wrap, s32 z_wrap)
+{
+	u32 x_mask = (x_wrap-1) & 255;
+	u32 y_mask = (y_wrap-1) & 255;
+	u32 z_mask = (z_wrap-1) & 255;
+	s32 px = (s32)math::floor(x);
+	s32 py = (s32)math::floor(y);
+	s32 pz = (s32)math::floor(z);
+	s32 x0 = px & x_mask, x1 = (px+1) & x_mask;
+	s32 y0 = py & y_mask, y1 = (py+1) & y_mask;
+	s32 z0 = pz & z_mask, z1 = (pz+1) & z_mask;
+
+#define GB__PERLIN_EASE(t) (((t*6-15)*t + 10) *t*t*t)
+	x -= px; f32 u = GB__PERLIN_EASE(x);
+	y -= py; f32 v = GB__PERLIN_EASE(y);
+	z -= pz; f32 w = GB__PERLIN_EASE(z);
+#undef GB__PERLIN_EASE
+
+	s32 r0 = g_perlin_randtab[x0];
+	s32 r1 = g_perlin_randtab[x1];
+
+	s32 r00 = g_perlin_randtab[r0+y0];
+	s32 r01 = g_perlin_randtab[r0+y1];
+	s32 r10 = g_perlin_randtab[r1+y0];
+	s32 r11 = g_perlin_randtab[r1+y1];
+
+	f32 n000 = perlin_grad(g_perlin_randtab[r00+z0], x  , y  , z   );
+	f32 n001 = perlin_grad(g_perlin_randtab[r00+z1], x  , y  , z-1 );
+	f32 n010 = perlin_grad(g_perlin_randtab[r01+z0], x  , y-1, z   );
+	f32 n011 = perlin_grad(g_perlin_randtab[r01+z1], x  , y-1, z-1 );
+	f32 n100 = perlin_grad(g_perlin_randtab[r10+z0], x-1, y  , z   );
+	f32 n101 = perlin_grad(g_perlin_randtab[r10+z1], x-1, y  , z-1 );
+	f32 n110 = perlin_grad(g_perlin_randtab[r11+z0], x-1, y-1, z   );
+	f32 n111 = perlin_grad(g_perlin_randtab[r11+z1], x-1, y-1, z-1 );
+
+	f32 n00 = math::lerp(n000,n001,w);
+	f32 n01 = math::lerp(n010,n011,w);
+	f32 n10 = math::lerp(n100,n101,w);
+	f32 n11 = math::lerp(n110,n111,w);
+
+	f32 n0 = math::lerp(n00,n01,v);
+	f32 n1 = math::lerp(n10,n11,v);
+
+	return math::lerp(n0,n1,u);
+}
+
+
 } // namespace math
 
 namespace random
@@ -5583,17 +6054,13 @@ Mt19937_32::next()
 	return y;
 }
 
-inline u32
-Mt19937_32::entropy()
-{
-	return 32;
-}
+inline u32 Mt19937_32::entropy() { return 32; }
 
 inline u32
 Mt19937_32::next_u32()
 {
 	s32 n = next();
-	return pseudo_cast<u32>(n);
+	return bit_cast<u32>(n);
 }
 
 inline s32
@@ -5617,14 +6084,14 @@ Mt19937_32::next_s64()
 	s32 n = next();
 	u64 a = n;
 	a = (u64)(a << 32) | (u64)next();
-	return pseudo_cast<s64>(n);
+	return bit_cast<s64>(a);
 }
 
 inline f32
 Mt19937_32::next_f32()
 {
 	s32 n = next();
-	return pseudo_cast<f32>(n);
+	return bit_cast<f32>(n);
 }
 
 inline f64
@@ -5633,14 +6100,14 @@ Mt19937_32::next_f64()
 	s32 n = next();
 	u64 a = n;
 	a = (u64)(a << 32) | (u64)next();
-	return pseudo_cast<f64>(n);
+	return bit_cast<f64>(a);
 }
 
 
 inline Mt19937_64::Result_Type
 Mt19937_64::next()
 {
-	local_persist u64 mag01[2] = {0ull, 0xB5026F5AA96619E9ull};
+	const u64 MAG01[2] = {0ull, 0xB5026F5AA96619E9ull};
 
 	u64 x;
 	if (index > 312)
@@ -5649,15 +6116,15 @@ Mt19937_64::next()
 		for (; i < 312-156; i++)
 		{
 			x = (mt[i] & 0xffffffff80000000ull) | (mt[i+1] & 0x7fffffffull);
-			mt[i] = mt[i+156] ^ (x>>1) ^ mag01[(u32)(x & 1ull)];
+			mt[i] = mt[i+156] ^ (x>>1) ^ MAG01[(u32)(x & 1ull)];
 		}
 		for (; i < 312-1; i++)
 		{
 			x = (mt[i] & 0xffffffff80000000ull) | (mt[i+1] & 0x7fffffffull);
-			mt[i] = mt[i + (312-156)] ^ (x >> 1) ^ mag01[(u32)(x & 1ull)];
+			mt[i] = mt[i + (312-156)] ^ (x >> 1) ^ MAG01[(u32)(x & 1ull)];
 		}
 		x = (mt[312-1] & 0xffffffff80000000ull) | (mt[0] & 0x7fffffffull);
-		mt[312-1] = mt[156-1] ^ (x>>1) ^ mag01[(u32)(x & 1ull)];
+		mt[312-1] = mt[156-1] ^ (x>>1) ^ MAG01[(u32)(x & 1ull)];
 
 		index = 0;
 	}
@@ -5672,31 +6139,27 @@ Mt19937_64::next()
 	return x;
 }
 
-inline u32
-Mt19937_64::entropy()
-{
-	return 64;
-}
+inline u32 Mt19937_64::entropy() { return 64; }
 
 inline u32
 Mt19937_64::next_u32()
 {
 	s64 n = next();
-	return pseudo_cast<u32>(n);
+	return bit_cast<u32>(n);
 }
 
 inline s32
 Mt19937_64::next_s32()
 {
 	s64 n = next();
-	return pseudo_cast<s32>(n);
+	return bit_cast<s32>(n);
 }
 
 inline u64
 Mt19937_64::next_u64()
 {
 	s64 n = next();
-	return pseudo_cast<u64>(n);
+	return bit_cast<u64>(n);
 }
 
 inline s64
@@ -5710,35 +6173,36 @@ inline f32
 Mt19937_64::next_f32()
 {
 	s64 n = next();
-	return pseudo_cast<f32>(n);
+	return bit_cast<f32>(n);
 }
 
 inline f64
 Mt19937_64::next_f64()
 {
 	s64 n = next();
-	return pseudo_cast<f64>(n);
+	return bit_cast<f64>(n);
 }
 
 inline Random_Device::Result_Type
 Random_Device::next()
 {
 	u32 result = 0;
+#if defined(GB_SYSTEM_WINDOWS)
+//	rand_s(&result); // TODO(bill): fix this
+#else
+	#error Implement Random_Device::next() for this platform
+#endif
 	// IMPORTANT TODO(bill): Implenent Random_Device::next()
 	return result;
 }
 
-inline u32
-Random_Device::entropy()
-{
-	return 32;
-}
+inline u32 Random_Device::entropy() { return 32; }
 
 inline u32
 Random_Device::next_u32()
 {
 	s32 n = next();
-	return pseudo_cast<u32>(n);
+	return bit_cast<u32>(n);
 }
 
 inline s32
@@ -5762,14 +6226,14 @@ Random_Device::next_s64()
 	s32 n = next();
 	u64 a = n;
 	a = static_cast<u64>(a << 32) | static_cast<u64>(next());
-	return pseudo_cast<s64>(a);
+	return bit_cast<s64>(a);
 }
 
 inline f32
 Random_Device::next_f32()
 {
 	s32 n = next();
-	return pseudo_cast<f32>(n);
+	return bit_cast<f32>(n);
 }
 
 inline f64
@@ -5778,11 +6242,11 @@ Random_Device::next_f64()
 	s32 n = next();
 	u64 a = n;
 	a = static_cast<u64>(a << 32) | static_cast<u64>(next());
-	return pseudo_cast<f64>(a);
+	return bit_cast<f64>(a);
 }
 
 
 } // namespace random
-} // namespace gb
+__GB_NAMESPACE_END
 
 #endif // GB_IMPLEMENTATION
