@@ -1,8 +1,9 @@
-// gb.hpp - v0.15 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.16 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
 Version History:
+	0.16  - All References are const convention
 	0.15  - Namespaced Types
 	0.14  - Casts and Quaternion Look At
 	0.13a - Fix Todos
@@ -624,9 +625,9 @@ struct Mutex
 
 namespace mutex
 {
-void lock(Mutex& mutex);
-bool try_lock(Mutex& mutex);
-void unlock(Mutex& mutex);
+void lock(Mutex* mutex);
+bool try_lock(Mutex* mutex);
+void unlock(Mutex* mutex);
 } // namespace mutex
 
 /// Atomic Types
@@ -720,7 +721,7 @@ struct Arena_Allocator : Allocator
 	s64        total_allocated_count;
 	s64        temp_count;
 
-	explicit Arena_Allocator(Allocator& backing, usize size);
+	explicit Arena_Allocator(Allocator* backing, usize size);
 	explicit Arena_Allocator(void* start, usize size);
 	virtual ~Arena_Allocator();
 
@@ -746,7 +747,7 @@ struct Temp_Allocator : Allocator
 	u8*   physical_end;
 	usize chunk_size; // Chunks to allocate from backing allocator
 
-	explicit Temp_Allocator(Allocator& backing);
+	explicit Temp_Allocator(Allocator* backing);
 	virtual ~Temp_Allocator();
 
 	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT);
@@ -771,50 +772,50 @@ void* move(void* dest, const void* src, usize bytes);
 bool  compare(const void* a, const void* b, usize bytes);
 } // namespace memory
 
-inline void* alloc(Allocator& a, usize size, usize align = GB_DEFAULT_ALIGNMENT) { return a.alloc(size, align); }
-inline void dealloc(Allocator& a, const void* ptr) { return a.dealloc(ptr); }
+inline void* alloc(Allocator* a, usize size, usize align = GB_DEFAULT_ALIGNMENT) { GB_ASSERT(a); return a->alloc(size, align); }
+inline void dealloc(Allocator* a, const void* ptr) { GB_ASSERT(a); return a->dealloc(ptr); }
 
 template <typename T>
-inline T* alloc_struct(Allocator& a) { return static_cast<T*>(a.alloc(sizeof(T), alignof(T))); }
+inline T* alloc_struct(Allocator* a) { return static_cast<T*>(alloc(a, sizeof(T), alignof(T))); }
 
 template <typename T>
-inline T* alloc_array(Allocator& a, usize count) { return static_cast<T*>(alloc(a, count * sizeof(T), alignof(T))); }
+inline T* alloc_array(Allocator* a, usize count) { return static_cast<T*>(alloc(a, count * sizeof(T), alignof(T))); }
 
 template <typename T, usize count>
-inline T* alloc_array(Allocator& a) { return static_cast<T*>(alloc(a, count * sizeof(T), alignof(T))); }
+inline T* alloc_array(Allocator* a) { return static_cast<T*>(alloc(a, count * sizeof(T), alignof(T))); }
 
 inline void
-clear_arena(Arena_Allocator& arena)
+clear_arena(Arena_Allocator* arena)
 {
-	GB_ASSERT(arena.temp_count == 0,
-			  "%ld Temporary_Arena_Memory have not be cleared", arena.temp_count);
+	GB_ASSERT(arena->temp_count == 0,
+			  "%ld Temporary_Arena_Memory have not be cleared", arena->temp_count);
 
-	arena.total_allocated_count = 0;
+	arena->total_allocated_count = 0;
 }
 
 inline Temporary_Arena_Memory
-make_temporary_arena_memory(Arena_Allocator& arena)
+make_temporary_arena_memory(Arena_Allocator* arena)
 {
 	Temporary_Arena_Memory tmp = {};
-	tmp.arena = &arena;
-	tmp.original_count = arena.total_allocated_count;
+	tmp.arena = arena;
+	tmp.original_count = arena->total_allocated_count;
 }
 
 inline void
-free_temporary_arena_memory(Temporary_Arena_Memory& tmp)
+free_temporary_arena_memory(Temporary_Arena_Memory* tmp)
 {
-	if (tmp.arena == nullptr)
+	if (tmp->arena == nullptr)
 		return;
-	GB_ASSERT(tmp.arena->total_allocated() >= tmp.original_count);
-	tmp.arena->total_allocated_count = tmp.original_count;
-	GB_ASSERT(tmp.arena->temp_count > 0);
-	tmp.arena->temp_count--;
+	GB_ASSERT(tmp->arena->total_allocated() >= tmp->original_count);
+	tmp->arena->total_allocated_count = tmp->original_count;
+	GB_ASSERT(tmp->arena->temp_count > 0);
+	tmp->arena->temp_count--;
 }
 
 
 template <usize BUFFER_SIZE>
-Temp_Allocator<BUFFER_SIZE>::Temp_Allocator(Allocator& backing_)
-: backing(&backing_)
+Temp_Allocator<BUFFER_SIZE>::Temp_Allocator(Allocator* backing_)
+: backing(backing_)
 , chunk_size(4 * 1024) // 4K
 {
 	current_pointer = physical_start = buffer;
@@ -958,11 +959,11 @@ struct Header
 
 inline Header* header(String str) { return (Header*)str - 1; }
 
-String make(Allocator& a, const char* str = "");
-String make(Allocator& a, const void* str, Size len);
-void   free(String& str);
+String make(Allocator* a, const char* str = "");
+String make(Allocator* a, const void* str, Size len);
+void   free(String* str);
 
-String duplicate(Allocator& a, const String str);
+String duplicate(Allocator* a, const String str);
 
 Size length(const String str);
 Size capacity(const String str);
@@ -970,16 +971,16 @@ Size available_space(const String str);
 
 void clear(String str);
 
-void append(String& str, const String other);
-void append_cstring(String& str, const char* other);
-void append(String& str, const void* other, Size len);
+void append(String* str, const String other);
+void append_cstring(String* str, const char* other);
+void append(String* str, const void* other, Size len);
 
-void make_space_for(String& str, Size add_len);
+void make_space_for(String* str, Size add_len);
 usize allocation_size(const String str);
 
 bool equals(const String lhs, const String rhs);
 
-void trim(String& str, const char* cut_set);
+void trim(String* str, const char* cut_set);
 } // namespace string
 // TODO(bill): string libraries
 
@@ -1000,7 +1001,7 @@ struct Array
 
 	Array() = default;
 	Array(const Array& array);
-	explicit Array(Allocator& a, usize count = 0);
+	explicit Array(Allocator* a, usize count = 0);
 	~Array();
 	Array& operator=(const Array& array);
 
@@ -1012,27 +1013,27 @@ struct Array
 namespace array
 {
 /// Helper functions to make and free an array
-template <typename T> Array<T> make(Allocator& allocator, usize count = 0);
-template <typename T> void     free(Array<T>& array);
+template <typename T> Array<T> make(Allocator* allocator, usize count = 0);
+template <typename T> void     free(Array<T>* array);
 
 /// Appends `item` to the end of the array
-template <typename T> void append(Array<T>& a, const T& item);
+template <typename T> void append(Array<T>* a, const T& item);
 /// Appends `items[count]` to the end of the array
-template <typename T> void append(Array<T>& a, const T* items, usize count);
+template <typename T> void append(Array<T>* a, const T* items, usize count);
 
 /// Pops the last item form the array. The array cannot be empty.
-template <typename T> void pop_back(Array<T>& a);
+template <typename T> void pop_back(Array<T>* a);
 
 /// Removes all items from the array - does not free memory
-template <typename T> void clear(Array<T>& a);
+template <typename T> void clear(Array<T>* a);
 /// Modify the size of a array - only reallocates when necessary
-template <typename T> void resize(Array<T>& a, usize count);
+template <typename T> void resize(Array<T>* a, usize count);
 /// Makes sure that the array has at least the specified capacity - or the array the grows
-template <typename T> void reserve(Array<T>& a, usize capacity);
+template <typename T> void reserve(Array<T>* a, usize capacity);
 /// Reallocates the array to the specific capacity
-template <typename T> void set_capacity(Array<T>& a, usize capacity);
+template <typename T> void set_capacity(Array<T>* a, usize capacity);
 /// Grows the array to keep append() to be O(1)
-template <typename T> void grow(Array<T>& a, usize min_capacity = 0);
+template <typename T> void grow(Array<T>* a, usize min_capacity = 0);
 } // namespace array
 
 /// Used to iterate over the array with a C++11 for loop
@@ -1059,30 +1060,32 @@ struct Hash_Table
 	};
 
 	Array<s64>   hashes;
-	Array<Entry> data;
+	Array<Entry> entries;
 
 	Hash_Table() = default;
-	explicit Hash_Table(Allocator& a);
+	explicit Hash_Table(Allocator* a);
+	Hash_Table(const Hash_Table<T>& other);
+	Hash_Table<T>& operator=(const Hash_Table<T>& other);
 	~Hash_Table() = default;
 };
 
 namespace hash_table
 {
 /// Helper function to make a hash table
-template <typename T> Hash_Table<T> make(Allocator& a);
+template <typename T> Hash_Table<T> make(Allocator* a);
 
 /// Return `true` if the specified key exist in the hash table
 template <typename T> bool has(const Hash_Table<T>& h, u64 key);
 /// Returns the value stored at the key, or a `default_value` if the key is not found in the hash table
 template <typename T> const T& get(const Hash_Table<T>& h, u64 key, const T& default_value);
 /// Sets the value for the key in the hash table
-template <typename T> void set(Hash_Table<T>& h, u64 key, const T& value);
+template <typename T> void set(Hash_Table<T>* h, u64 key, const T& value);
 /// Removes the key from the hash table if it exists
-template <typename T> void remove(Hash_Table<T>& h, u64 key);
+template <typename T> void remove(Hash_Table<T>* h, u64 key);
 /// Resizes the hash table's lookup table to the specified size
-template <typename T> void reserve(Hash_Table<T>& h, usize capacity);
+template <typename T> void reserve(Hash_Table<T>* h, usize capacity);
 /// Remove all elements from the hash table
-template <typename T> void clear(Hash_Table<T>& h);
+template <typename T> void clear(Hash_Table<T>* h);
 } // namespace hash_table
 
 /// Used to iterate over the array with a C++11 for loop - in random order
@@ -1102,11 +1105,11 @@ template <typename T> typename const Hash_Table<T>::Entry* find_first(const Hash
 template <typename T> typename const Hash_Table<T>::Entry* find_next(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e);
 
 /// Inserts the `value` as an additional value for the specified key
-template <typename T> void insert(Hash_Table<T>& h, u64 key, const T& value);
+template <typename T> void insert(Hash_Table<T>* h, u64 key, const T& value);
 /// Removes a specified entry `e` from the hash table
-template <typename T> void remove_entry(Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e);
+template <typename T> void remove_entry(Hash_Table<T>* h, typename const Hash_Table<T>::Entry* e);
 /// Removes all entries with from the hash table with the specified key
-template <typename T> void remove_all(Hash_Table<T>& h, u64 key);
+template <typename T> void remove_all(Hash_Table<T>* h, u64 key);
 } // namespace multi_hash_table
 ////////////////////////////////
 ///                          ///
@@ -1115,12 +1118,13 @@ template <typename T> void remove_all(Hash_Table<T>& h, u64 key);
 ////////////////////////////////
 template <typename T>
 inline
-Array<T>::Array(Allocator& a, usize count_)
-: allocator(&a)
+Array<T>::Array(Allocator* a, usize count_)
+: allocator(a)
 , count(0)
 , capacity(0)
 , data(nullptr)
 {
+
 	if (count_ > 0)
 	{
 		data = alloc_array<T>(a, count_);
@@ -1138,16 +1142,16 @@ Array<T>::Array(const Array<T>& other)
 , data(nullptr)
 {
 	const auto n = other.count;
-	array::set_capacity(*this, n);
+	array::set_capacity(this, n);
 	memory::copy(data, other.data, n * sizeof(T));
 	count = n;
 }
 
 template <typename T>
-inline Array<T>~Array()
+inline Array<T>::~Array()
 {
 	if (allocator)
-		dealloc(*allocator, data);
+		dealloc(allocator, data);
 }
 
 
@@ -1156,7 +1160,7 @@ Array<T>&
 Array<T>::operator=(const Array<T>& other)
 {
 	const auto n = other.count;
-	array::resize(*this, n);
+	array::resize(this, n);
 	memory::copy(data, other.data, n * sizeof(T));
 	return *this;
 }
@@ -1166,10 +1170,10 @@ namespace array
 {
 template <typename T>
 inline Array<T>
-make(Allocator& allocator, usize count)
+make(Allocator* allocator, usize count)
 {
 	Array<T> array = {};
-	array.allocator = &allocator;
+	array.allocator = allocator;
 	array.count = 0;
 	array.capacity = 0;
 	array.data = nullptr;
@@ -1185,91 +1189,91 @@ make(Allocator& allocator, usize count)
 
 template <typename T>
 inline void
-dealloc(Array<T>& array)
+dealloc(Array<T>* array)
 {
 	if (array.allocator)
-		dealloc(*array.allocator, array.data);
+		dealloc(array.allocator, array.data);
 }
 
 template <typename T>
 inline void
-append(Array<T>& a, const T& item)
+append(Array<T>* a, const T& item)
 {
-	if (a.capacity < a.count + 1)
-		grow(a);
-	a.data[a.count++] = item;
+	if (a->capacity < a->count + 1)
+		array::grow(a);
+	a->data[a->count++] = item;
 }
 
 template <typename T>
 inline void
-append(Array<T>& a, const T* items, usize count)
+append(Array<T>* a, const T* items, usize count)
 {
-	if (a.capacity <= a.count + count)
-		grow(a, a.count + count);
+	if (a->capacity <= a->count + count)
+		grow(a, a->count + count);
 
-	memory::copy(&a.data[a.count], items, count * sizeof(T));
-	a.count += count;
+	memory::copy(&a->data[a->count], items, count * sizeof(T));
+	a->count += count;
 }
 
 template <typename T>
 inline void
-pop_back(Array<T>& a)
+pop_back(Array<T>* a)
 {
-	GB_ASSERT(a.count > 0);
+	GB_ASSERT(a->count > 0);
 
-	a.count--;
+	a->count--;
 }
 
 template <typename T>
 inline void
-clear(Array<T>& a)
+clear(Array<T>* a)
 {
-	resize(a, 0);
+	array::resize(a, 0);
 }
 
 template <typename T>
 inline void
-resize(Array<T>& a, usize count)
+resize(Array<T>* a, usize count)
 {
-	if (a.capacity < static_cast<s64>(count))
-		grow(a, count);
-	a.count = count;
+	if (a->capacity < static_cast<s64>(count))
+		array::grow(a, count);
+	a->count = count;
 }
 
 template <typename T>
 inline void
-reserve(Array<T>& a, usize capacity)
+reserve(Array<T>* a, usize capacity)
 {
-	if (a.capacity < static_cast<s64>(capacity))
-		set_capacity(a, capacity);
+	if (a->capacity < static_cast<s64>(capacity))
+		array::set_capacity(a, capacity);
 }
 
 template <typename T>
 inline void
-set_capacity(Array<T>& a, usize capacity)
+set_capacity(Array<T>* a, usize capacity)
 {
-	if (static_cast<s64>(capacity) == a.capacity)
+	if (static_cast<s64>(capacity) == a->capacity)
 		return;
 
-	if (static_cast<s64>(capacity) < a.count)
-		resize(a, capacity);
+	if (static_cast<s64>(capacity) < a->count)
+		array::resize(a, capacity);
 
 	T* data = nullptr;
 	if (capacity > 0)
 	{
-		data = alloc_array<T>(*a.allocator, capacity);
-		memory::copy(data, a.data, a.count * sizeof(T));
+		data = alloc_array<T>(a->allocator, capacity);
+		memory::copy(data, a->data, a->count * sizeof(T));
 	}
-	dealloc(*a.allocator, a.data);
-	a.data = data;
-	a.capacity = capacity;
+	dealloc(a->allocator, a->data);
+	a->data = data;
+	a->capacity = capacity;
 }
 
 template <typename T>
 inline void
-grow(Array<T>& a, usize min_capacity)
+grow(Array<T>* a, usize min_capacity)
 {
-	usize capacity = 2 * a.capacity + 2;
+	usize capacity = 2 * a->capacity + 2;
 	if (capacity < min_capacity)
 		capacity = min_capacity;
 	set_capacity(a, capacity);
@@ -1283,22 +1287,37 @@ grow(Array<T>& a, usize min_capacity)
 ////////////////////////////////
 
 template <typename T>
-inline Hash_Table<T>::Hash_Table(Allocator& a)
+inline
+Hash_Table<T>::Hash_Table(Allocator* a)
+: hashes(a)
+, entries(a)
 {
-	hashes = array::make<s64>(a);
-	data = array::make<typename Hash_Table<T>::Entry>(a);
 }
+
+template <typename T>
+Hash_Table<T>::Hash_Table(const Hash_Table<T>& other)
+: hashes(other.hashes)
+, entries(other.entries)
+{
+}
+
+template <typename T>
+inline Hash_Table<T>&
+Hash_Table<T>::operator=(const Hash_Table<T>& other)
+{
+	hashes = other.hashes;
+	entries   = other.entries;
+	return *this;
+}
+
 
 namespace hash_table
 {
 template <typename T>
 inline Hash_Table<T>
-make(Allocator& a)
+make(Allocator* a)
 {
-	Hash_Table<T> h = {};
-	h.hashes = array::make<s64>(a);
-	h.data   = array::make<typename Hash_Table<T>::Entry>(a);
-	return h;
+	return Hash_Table<T>(a);
 }
 
 namespace impl
@@ -1307,56 +1326,56 @@ struct Find_Result
 {
 	s64 hash_index;
 	s64 data_prev;
-	s64 data_index;
+	s64 entry_index;
 };
 
-template <typename T> usize add_entry(Hash_Table<T>& h, u64 key);
-template <typename T> void erase(Hash_Table<T>& h, const Find_Result& fr);
+template <typename T> usize add_entry(Hash_Table<T>* h, u64 key);
+template <typename T> void erase(Hash_Table<T>* h, const Find_Result& fr);
 template <typename T> Find_Result find_result(const Hash_Table<T>& h, u64 key);
 template <typename T> Find_Result find_result(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e);
-template <typename T> s64 make_entry(Hash_Table<T>& h, u64 key);
-template <typename T> void find_and_erase_entry(Hash_Table<T>& h, u64 key);
+template <typename T> s64 make_entry(Hash_Table<T>* h, u64 key);
+template <typename T> void find_and_erase_entry(Hash_Table<T>* h, u64 key);
 template <typename T> s64 find_entry_or_fail(const Hash_Table<T>& h, u64 key);
-template <typename T> s64 find_or_make_entry(Hash_Table<T>& h, u64 key);
-template <typename T> void rehash(Hash_Table<T>& h, usize new_capacity);
-template <typename T> void grow(Hash_Table<T>& h);
-template <typename T> bool is_full(Hash_Table<T>& h);
+template <typename T> s64 find_or_make_entry(Hash_Table<T>* h, u64 key);
+template <typename T> void rehash(Hash_Table<T>* h, usize new_capacity);
+template <typename T> void grow(Hash_Table<T>* h);
+template <typename T> bool is_full(Hash_Table<T>* h);
 
 template <typename T>
 usize
-add_entry(Hash_Table<T>& h, u64 key)
+add_entry(Hash_Table<T>* h, u64 key)
 {
 	typename Hash_Table<T>::Entry e;
 	e.key  = key;
 	e.next = -1;
-	usize e_index = h.data.count;
-	array::append(h.data, e);
+	usize e_index = h->entries.count;
+	array::append(&h->entries, e);
 
 	return e_index;
 }
 
 template <typename T>
 void
-erase(Hash_Table<T>& h, const Find_Result& fr)
+erase(Hash_Table<T>* h, const Find_Result& fr)
 {
 	if (fr.data_prev < 0)
-		h.hashes[fr.hash_index] = h.data[fr.data_index].next;
+		h->hashes[fr.hash_index] = h->entries[fr.entry_index].next;
 	else
-		h.data[fr.data_prev].next = h.data[fr.data_index].next;
+		h->entries[fr.data_prev].next = h->entries[fr.entry_index].next;
 
-	array::pop_back(h.data); // updated array count
+	array::pop_back(h->entries); // updated array count
 
-	if (fr.data_index == h.data.count)
+	if (fr.entry_index == h->entries.count)
 		return;
 
-	h.data[fr.data_index] = h.data[h.data.count];
+	h->entries[fr.entry_index] = h->entries[h->entries.count];
 
-	auto last = impl::find_result(h, h.data[fr.data_index].key);
+	auto last = impl::find_result(h, h->entries[fr.entry_index].key);
 
 	if (last.data_prev < 0)
-		h.hashes[last.hash_index] = fr.data_index;
+		h->hashes[last.hash_index] = fr.entry_index;
 	else
-		h.data[last.data_index].next = fr.data_index;
+		h->entries[last.entry_index].next = fr.entry_index;
 }
 
 template <typename T>
@@ -1366,19 +1385,19 @@ find_result(const Hash_Table<T>& h, u64 key)
 	Find_Result fr;
 	fr.hash_index = -1;
 	fr.data_prev  = -1;
-	fr.data_index = -1;
+	fr.entry_index = -1;
 
 	if (h.hashes.count == 0)
 		return fr;
 
 	fr.hash_index = key % h.hashes.count;
-	fr.data_index = h.hashes[fr.hash_index];
-	while (fr.data_index >= 0)
+	fr.entry_index = h.hashes[fr.hash_index];
+	while (fr.entry_index >= 0)
 	{
-		if (h.data[fr.data_index].key == key)
+		if (h.entries[fr.entry_index].key == key)
 			return fr;
-		fr.data_prev  = fr.data_index;
-		fr.data_index = h.data[fr.data_index].next;
+		fr.data_prev  = fr.entry_index;
+		fr.entry_index = h.entries[fr.entry_index].next;
 	}
 
 	return fr;
@@ -1392,19 +1411,19 @@ find_result(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
 	Find_Result fr;
 	fr.hash_index = -1;
 	fr.data_prev  = -1;
-	fr.data_index = -1;
+	fr.entry_index = -1;
 
 	if (h.hashes.count == 0 || !e)
 		return fr;
 
 	fr.hash_index = key % h.hashes.count;
-	fr.data_index = h.hashes[fr.hash_index];
-	while (fr.data_index >= 0)
+	fr.entry_index = h.hashes[fr.hash_index];
+	while (fr.entry_index >= 0)
 	{
-		if (&h.data[fr.data_index] == e)
+		if (&h.entries[fr.entry_index] == e)
 			return fr;
-		fr.data_prev  = fr.data_index;
-		fr.data_index = h.data[fr.data_index].next;
+		fr.data_prev  = fr.entry_index;
+		fr.entry_index = h.entries[fr.entry_index].next;
 	}
 
 	return fr;
@@ -1412,27 +1431,27 @@ find_result(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
 
 template <typename T>
 s64
-make_entry(Hash_Table<T>& h, u64 key)
+make_entry(Hash_Table<T>* h, u64 key)
 {
-	const Find_Result fr = impl::find_result(h, key);
+	const Find_Result fr = impl::find_result(*h, key);
 	const s64 index      = impl::add_entry(h, key);
 
 	if (fr.data_prev < 0)
-		h.hashes[fr.hash_index] = index;
+		h->hashes[fr.hash_index] = index;
 	else
-		h.data[fr.data_prev].next = index;
+		h->entries[fr.data_prev].next = index;
 
-	h.data[index].next = fr.data_index;
+	h->entries[index].next = fr.entry_index;
 
 	return index;
 }
 
 template <typename T>
 void
-find_and_erase_entry(Hash_Table<T>& h, u64 key)
+find_and_erase_entry(Hash_Table<T>* h, u64 key)
 {
 	const Find_Result fr = impl::find_result(h, key);
-	if (fr.data_index >= 0)
+	if (fr.entry_index >= 0)
 		hash_table::erase(h, fr);
 }
 
@@ -1440,46 +1459,46 @@ template <typename T>
 s64
 find_entry_or_fail(const Hash_Table<T>& h, u64 key)
 {
-	return impl::find_result(h, key).data_index;
+	return impl::find_result(h, key).entry_index;
 }
 
 template <typename T>
 s64
-find_or_make_entry(Hash_Table<T>& h, u64 key)
+find_or_make_entry(Hash_Table<T>* h, u64 key)
 {
-	const auto fr = find_result(h, key);
-	if (fr.data_index >= 0)
-		return fr.data_index;
+	const auto fr = find_result(*h, key);
+	if (fr.entry_index >= 0)
+		return fr.entry_index;
 
 	s64 index = impl::add_entry(h, key);
 	if (fr.data_prev < 0)
-		h.hashes[fr.hash_index] = index;
+		h->hashes[fr.hash_index] = index;
 	else
-		h.data[fr.data_prev].next = index;
+		h->entries[fr.data_prev].next = index;
 
 	return index;
 }
 
 template <typename T>
 void
-rehash(Hash_Table<T>& h, usize new_capacity)
+rehash(Hash_Table<T>* h, usize new_capacity)
 {
-	auto nh = hash_table::make<T>(*h.hashes.allocator);
-	array::resize(nh.hashes, new_capacity);
-	const usize old_count = h.data.count;
-	array::resize(nh.data, old_count);
+	auto nh = hash_table::make<T>(h->hashes.allocator);
+	array::resize(&nh.hashes, new_capacity);
+	const usize old_count = h->entries.count;
+	array::resize(&nh.entries, old_count);
 
 	for (usize i = 0; i < new_capacity; i++)
 		nh.hashes[i] = -1;
 
 	for (usize i = 0; i < old_count; i++)
 	{
-		auto& e = h.data[i];
-		multi_hash_table::insert(nh, e.key, e.value);
+		auto& e = h->entries[i];
+		multi_hash_table::insert(&nh, e.key, e.value);
 	}
 
-	auto empty = hash_table::make<T>(*h.hashes.allocator);
-	h.~Hash_Table<T>();
+	auto empty = hash_table::make<T>(h->hashes.allocator);
+	h->~Hash_Table<T>();
 
 	memory::copy(&h,  &nh,    sizeof(Hash_Table<T>));
 	memory::copy(&nh, &empty, sizeof(Hash_Table<T>));
@@ -1487,19 +1506,19 @@ rehash(Hash_Table<T>& h, usize new_capacity)
 
 template <typename T>
 void
-grow(Hash_Table<T>& h)
+grow(Hash_Table<T>* h)
 {
-	const usize new_capacity = 2 * h.data.count + 2;
+	const usize new_capacity = 2 * h->entries.count + 2;
 	impl::rehash(h, new_capacity);
 }
 
 template <typename T>
 bool
-is_full(Hash_Table<T>& h)
+is_full(Hash_Table<T>* h)
 {
 	// Make sure that there is enough space
 	const f32 maximum_load_coefficient = 0.75f;
-	return h.data.count >= maximum_load_coefficient * h.hashes.count;
+	return h->entries.count >= maximum_load_coefficient * h->hashes.count;
 }
 } // namespace impl
 
@@ -1518,42 +1537,42 @@ get(const Hash_Table<T>& h, u64 key, const T& default_value)
 
 	if (index < 0)
 		return default_value;
-	return h.data[index].value;
+	return h.entries[index].value;
 }
 
 template <typename T>
 inline void
-set(Hash_Table<T>& h, u64 key, const T& value)
+set(Hash_Table<T>* h, u64 key, const T& value)
 {
-	if (h.hashes.count == 0)
+	if (h->hashes.count == 0)
 		impl::grow(h);
 
 	const s64 index = impl::find_or_make_entry(h, key);
-	h.data[index].value = value;
+	h->entries[index].value = value;
 	if (impl::is_full(h))
 		impl::grow(h);
 }
 
 template <typename T>
 inline void
-remove(Hash_Table<T>& h, u64 key)
+remove(Hash_Table<T>* h, u64 key)
 {
 	impl::find_and_erase_entry(h, key);
 }
 
 template <typename T>
 inline void
-reserve(Hash_Table<T>& h, usize capacity)
+reserve(Hash_Table<T>* h, usize capacity)
 {
 	impl::rehash(h, capacity);
 }
 
 template <typename T>
 inline void
-clear(Hash_Table<T>& h)
+clear(Hash_Table<T>* h)
 {
-	array::clear(h.hashes);
-	array::clear(h.data);
+	array::clear(&h->hashes);
+	array::clear(&h->entries);
 }
 } // namespace hash_table
 
@@ -1561,14 +1580,14 @@ template <typename T>
 inline typename const Hash_Table<T>::Entry*
 begin(const Hash_Table<T>& h)
 {
-	return begin(h.data);
+	return begin(h.entries);
 }
 
 template <typename T>
 inline typename const Hash_Table<T>::Entry*
 end(const Hash_Table<T>& h)
 {
-	return end(h.data);
+	return end(h.entries);
 }
 
 
@@ -1609,7 +1628,7 @@ find_first(const Hash_Table<T>& h, u64 key)
 	const s64 index = multi_hash_table::find_first(h, key);
 	if (index < 0)
 		return nullptr;
-	return &h.data[index];
+	return &h.entries[index];
 }
 
 template <typename T>
@@ -1622,9 +1641,9 @@ find_next(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
 	auto index = e->next;
 	while (index >= 0)
 	{
-		if (h.data[index].ley == e->key)
-			return &h.data[index];
-		index = h.data[index].next;
+		if (h.entries[index].ley == e->key)
+			return &h.entries[index];
+		index = h.entries[index].next;
 	}
 
 	return nullptr;
@@ -1633,13 +1652,13 @@ find_next(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
 
 template <typename T>
 inline void
-insert(Hash_Table<T>& h, u64 key, const T& value)
+insert(Hash_Table<T>* h, u64 key, const T& value)
 {
-	if (h.hashes.count == 0)
+	if (h->hashes.count == 0)
 		hash_table::impl::grow(h);
 
 	auto next = hash_table::impl::make_entry(h, key);
-	h.data[next].value = value;
+	h->entries[next].value = value;
 
 	if (hash_table::impl::is_full(h))
 		hash_table::impl::grow(h);
@@ -1647,16 +1666,16 @@ insert(Hash_Table<T>& h, u64 key, const T& value)
 
 template <typename T>
 inline void
-remove_entry(Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
+remove_entry(Hash_Table<T>* h, typename const Hash_Table<T>::Entry* e)
 {
 	const auto fr = hash_table::impl::find_result(h, e);
-	if (fr.data_index >= 0)
+	if (fr.entry_index >= 0)
 		hash_table::impl::erase(h, fr);
 }
 
 template <typename T>
 inline void
-remove_all(Hash_Table<T>& h, u64 key)
+remove_all(Hash_Table<T>* h, u64 key)
 {
 	while (hash_table::has(h, key))
 		hash_table::remove(h, key);
@@ -2060,7 +2079,7 @@ Matrix4& operator*=(Matrix4& a, const Matrix4& b);
 // Transform Operators
 // World = Parent * Local
 Transform operator*(const Transform& ps, const Transform& ls);
-Transform& operator*=(Transform& ps, const Transform& ls);
+Transform& operator*=(Transform* ps, const Transform& ls);
 // Local = World / Parent
 Transform operator/(const Transform& ws, const Transform& ps);
 Transform& operator/=(Transform& ws, const Transform& ps);
@@ -2420,20 +2439,20 @@ Mt19937_32    make_mt19937_32(Mt19937_32::Seed_Type seed);
 Mt19937_64    make_mt19937_64(Mt19937_64::Seed_Type seed);
 Random_Device make_random_device();
 
-void set_seed(Mt19937_32& gen, Mt19937_32::Seed_Type seed);
-void set_seed(Mt19937_64& gen, Mt19937_64::Seed_Type seed);
+void set_seed(Mt19937_32* gen, Mt19937_32::Seed_Type seed);
+void set_seed(Mt19937_64* gen, Mt19937_64::Seed_Type seed);
 
-template <typename Generator> typename Generator::Result_Type next(Generator&& gen);
+template <typename Generator> typename Generator::Result_Type next(Generator& gen);
 
-template <typename Generator> s32 uniform_s32_distribution(Generator& gen, s32 min_inc, s32 max_inc);
-template <typename Generator> s64 uniform_s64_distribution(Generator& gen, s64 min_inc, s64 max_inc);
-template <typename Generator> u32 uniform_u32_distribution(Generator& gen, u32 min_inc, u32 max_inc);
-template <typename Generator> u64 uniform_u64_distribution(Generator& gen, u64 min_inc, u64 max_inc);
-template <typename Generator> f32 uniform_f32_distribution(Generator& gen, f32 min_inc, f32 max_inc);
-template <typename Generator> f64 uniform_f64_distribution(Generator& gen, f64 min_inc, f64 max_inc);
+template <typename Generator> s32 uniform_s32_distribution(Generator* gen, s32 min_inc, s32 max_inc);
+template <typename Generator> s64 uniform_s64_distribution(Generator* gen, s64 min_inc, s64 max_inc);
+template <typename Generator> u32 uniform_u32_distribution(Generator* gen, u32 min_inc, u32 max_inc);
+template <typename Generator> u64 uniform_u64_distribution(Generator* gen, u64 min_inc, u64 max_inc);
+template <typename Generator> f32 uniform_f32_distribution(Generator* gen, f32 min_inc, f32 max_inc);
+template <typename Generator> f64 uniform_f64_distribution(Generator* gen, f64 min_inc, f64 max_inc);
 
-template <typename Generator> ssize uniform_ssize_distribution(Generator& gen, ssize min_inc, ssize max_inc);
-template <typename Generator> usize uniform_usize_distribution(Generator& gen, usize min_inc, usize max_inc);
+template <typename Generator> ssize uniform_ssize_distribution(Generator* gen, ssize min_inc, ssize max_inc);
+template <typename Generator> usize uniform_usize_distribution(Generator* gen, usize min_inc, usize max_inc);
 
 
 inline Mt19937_32
@@ -2441,7 +2460,7 @@ make_mt19937_32(Mt19937_32::Seed_Type seed)
 {
 	Mt19937_32 gen = {};
 	gen.type = MERSENNE_TWISTER_32;
-	set_seed(gen, seed);
+	set_seed(&gen, seed);
 	return gen;
 }
 
@@ -2450,7 +2469,7 @@ make_mt19937_64(Mt19937_64::Seed_Type seed)
 {
 	Mt19937_64 gen = {};
 	gen.type = MERSENNE_TWISTER_64;
-	set_seed(gen, seed);
+	set_seed(&gen, seed);
 	return gen;
 }
 
@@ -2463,88 +2482,88 @@ make_random_device()
 }
 
 inline void
-set_seed(Mt19937_32& gen, Mt19937_32::Seed_Type seed)
+set_seed(Mt19937_32* gen, Mt19937_32::Seed_Type seed)
 {
-	gen.seed = seed;
-	gen.mt[0] = seed;
+	gen->seed = seed;
+	gen->mt[0] = seed;
 	for (u32 i = 1; i < 624; i++)
-		gen.mt[i] = 1812433253 * (gen.mt[i-1] ^ gen.mt[i-1] >> 30) + i;
+		gen->mt[i] = 1812433253 * (gen->mt[i-1] ^ gen->mt[i-1] >> 30) + i;
 }
 
 inline void
-set_seed(Mt19937_64& gen, Mt19937_64::Seed_Type seed)
+set_seed(Mt19937_64* gen, Mt19937_64::Seed_Type seed)
 {
-	gen.seed = seed;
-	gen.mt[0] = seed;
+	gen->seed = seed;
+	gen->mt[0] = seed;
 	for (u32 i = 1; i < 312; i++)
-		gen.mt[i] = 6364136223846793005ull * (gen.mt[i-1] ^ gen.mt[i-1] >> 62) + i;
+		gen->mt[i] = 6364136223846793005ull * (gen->mt[i-1] ^ gen->mt[i-1] >> 62) + i;
 }
 
 template <typename Generator>
 inline typename Generator::Result_Type
-next(Generator&& gen)
+next(Generator* gen)
 {
-	return gen.next();
+	return gen->next();
 }
 
 
 
 template <typename Generator>
 inline s32
-uniform_s32_distribution(Generator& gen, s32 min_inc, s32 max_inc)
+uniform_s32_distribution(Generator* gen, s32 min_inc, s32 max_inc)
 {
-	return (gen.next_s32() % (max_inc - min_inc + 1)) + min_inc;
+	return (gen->next_s32() % (max_inc - min_inc + 1)) + min_inc;
 }
 
 template <typename Generator>
 inline s64
-uniform_s64_distribution(Generator& gen, s64 min_inc, s64 max_inc)
+uniform_s64_distribution(Generator* gen, s64 min_inc, s64 max_inc)
 {
-	return (gen.next_s64() % (max_inc - min_inc + 1)) + min_inc;
+	return (gen->next_s64() % (max_inc - min_inc + 1)) + min_inc;
 }
 
 
 template <typename Generator>
 inline u32
-uniform_u32_distribution(Generator& gen, u32 min_inc, u32 max_inc)
+uniform_u32_distribution(Generator* gen, u32 min_inc, u32 max_inc)
 {
-	return (gen.next_u64() % (max_inc - min_inc + 1)) + min_inc;
+	return (gen->next_u64() % (max_inc - min_inc + 1)) + min_inc;
 }
 
 
 template <typename Generator>
 inline u64
-uniform_u64_distribution(Generator& gen, u64 min_inc, u64 max_inc)
+uniform_u64_distribution(Generator* gen, u64 min_inc, u64 max_inc)
 {
-	return (gen.next_u64() % (max_inc - min_inc + 1)) + min_inc;
+	return (gen->next_u64() % (max_inc - min_inc + 1)) + min_inc;
 }
 
 
 template <typename Generator>
 inline f32
-uniform_f32_distribution(Generator& gen, f32 min_inc, f32 max_inc)
+uniform_f32_distribution(Generator* gen, f32 min_inc, f32 max_inc)
 {
-	f64 n = (gen.next_s64() >> 11) * (1.0/4503599627370495.0);
+	f64 n = (gen->next_s64() >> 11) * (1.0/4503599627370495.0);
 	return static_cast<f32>(n * (max_inc - min_inc + 1.0) + min_inc);
 }
 
 
 template <typename Generator>
 inline f64
-uniform_f64_distribution(Generator& gen, f64 min_inc, f64 max_inc)
+uniform_f64_distribution(Generator* gen, f64 min_inc, f64 max_inc)
 {
-	f64 n = (gen.next_s64() >> 11) * (1.0/4503599627370495.0);
+	f64 n = (gen->next_s64() >> 11) * (1.0/4503599627370495.0);
 	return n * (max_inc - min_inc + 1.0) + min_inc;
 }
 
 template <typename Generator>
 inline ssize
-uniform_ssize_distribution(Generator& gen, ssize min_inc, ssize max_inc)
+uniform_ssize_distribution(Generator* gen, ssize min_inc, ssize max_inc)
 {
 #if GB_ARCH_32_BIT
-	return (gen.next_s32() % (max_inc - min_inc + 1)) + min_inc;
+	return (gen->next_s32() % (max_inc - min_inc + 1)) + min_inc;
 #elif GB_ARCH_64_BIT
-	return (gen.next_s64() % (max_inc - min_inc + 1)) + min_inc;
+	return (gen->next_s64() % (max_inc - min_inc + 1)) + min_inc;
 #else
 #error Bit size not supported
 #endif
@@ -2553,62 +2572,18 @@ uniform_ssize_distribution(Generator& gen, ssize min_inc, ssize max_inc)
 
 template <typename Generator>
 inline usize
-uniform_usize_distribution(Generator& gen, usize min_inc, usize max_inc)
+uniform_usize_distribution(Generator* gen, usize min_inc, usize max_inc)
 {
 #if GB_ARCH_32_BIT
-	return (gen.next_u32() % (max_inc - min_inc + 1)) + min_inc;
+	return (gen->next_u32() % (max_inc - min_inc + 1)) + min_inc;
 #elif GB_ARCH_64_BIT
-	return (gen.next_u64() % (max_inc - min_inc + 1)) + min_inc;
+	return (gen->next_u64() % (max_inc - min_inc + 1)) + min_inc;
 #else
 #error Bit size not supported
 #endif
 }
 
 } // namespace random
-
-#if 0
-#if defined(GB_OPENGL_TOOLS)
-
-enum class Shader_Type
-{
-	VERTEX,
-	FRAGMENT,
-};
-
-struct Shader_Program
-{
-#define GB_MAX_UNIFORM_COUNT 32
-	u32 handle;
-	b32 is_linked;
-	Allocator* allocator;
-
-	const char* base_file_path;
-	b32         watch_file;
-
-	u32         uniform_count;
-	const char* uniform_names[GB_MAX_UNIFORM_COUNT];
-	s32         uniform_locations[GB_MAX_UNIFORM_COUNT];
-};
-
-
-Shader_Program make_shader_program(Allocator& allocator);
-void destroy_shader_program(Shader_Program* program);
-
-b32 attach_shader_from_file(Shader_Program* program, Shader_Type type, const char* filename);
-b32 attach_shader_from_memory(Shader_Program* program, Shader_Type type, const char* source, usize length);
-
-void use_shader_program(const Shader_Program* program);
-b32 is_shader_program_in_use(const Shader_Program* program);
-void stop_using_shader_program(const Shader_Program* program);
-
-b32 link_shader_program(Shader_Program* program);
-
-void bind_attrib_location(Shader_Program* program, const char* name);
-
-s32 get_uniform_location(Shader_Program* program, const char* name);
-
-#endif // GB_OPENGL_TOOLS
-#endif
 __GB_NAMESPACE_END
 
 #endif // GB_INCLUDE_GB_HPP
@@ -2979,8 +2954,8 @@ Heap_Allocator::get_header_ptr(const void* ptr)
 	return (Heap_Allocator::Header*)(data);
 }
 
-Arena_Allocator::Arena_Allocator(Allocator& backing_, usize size)
-: backing(&backing_)
+Arena_Allocator::Arena_Allocator(Allocator* backing_, usize size)
+: backing(backing_)
 , physical_start(nullptr)
 , total_size(size)
 , temp_count(0)
@@ -3035,12 +3010,12 @@ inline s64 Arena_Allocator::total_allocated() { return total_allocated_count; }
 
 namespace string
 {
-String make(Allocator& a, const char* str)
+String make(Allocator* a, const char* str)
 {
 	return string::make(a, str, (string::Size)strlen(str));
 }
 
-String make(Allocator& a, const void* init_str, Size len)
+String make(Allocator* a, const void* init_str, Size len)
 {
 	usize header_size = sizeof(string::Header);
 	void* ptr = alloc(a, header_size + len + 1);
@@ -3052,7 +3027,7 @@ String make(Allocator& a, const void* init_str, Size len)
 
 	String str = static_cast<char*>(ptr) + header_size;
 	string::Header* header = string::header(str);
-	header->allocator = &a;
+	header->allocator = a;
 	header->len = len;
 	header->cap = len;
 	if (len && init_str)
@@ -3068,11 +3043,11 @@ void free(String& str)
 		return;
 	string::Header* h = string::header(str);
 	Allocator* a = h->allocator;
-	if (a) dealloc(*a, h);
+	if (a) dealloc(a, h);
 	str = nullptr;
 }
 
-String duplicate_string(Allocator& a, const String str)
+String duplicate_string(Allocator* a, const String str)
 {
 	return string::make(a, str, string::length(str));
 }
@@ -3101,19 +3076,19 @@ void clear(String str)
 	str[0] = '\0';
 }
 
-void append(String& str, const String other)
+void append(String* str, const String other)
 {
 	string::append(str, other, string::length(other));
 }
 
-void append_cstring(String& str, const char* other)
+void append_cstring(String* str, const char* other)
 {
 	string::append(str, other, (Size)strlen(other));
 }
 
-void append(String& str, const void* other, Size other_len)
+void append(String* str, const void* other, Size other_len)
 {
-	Size curr_len = string::length(str);
+	Size curr_len = string::length(*str);
 
 	string::make_space_for(str, other_len);
 	if (str == nullptr)
@@ -3121,14 +3096,14 @@ void append(String& str, const void* other, Size other_len)
 
 	memory::copy(str + curr_len, other, other_len);
 	str[curr_len + other_len] = '\0';
-	string::header(str)->len = curr_len + other_len;
+	string::header(*str)->len = curr_len + other_len;
 }
 
 namespace impl
 {
-// NOTE(bill): ptr _must_ be allocated with Allocator& a
+// NOTE(bill): ptr _must_ be allocated with Allocator* a
 internal inline void*
-string_realloc(Allocator& a, void* ptr, usize old_size, usize new_size)
+string_realloc(Allocator* a, void* ptr, usize old_size, usize new_size)
 {
 	if (!ptr)
 		return alloc(a, new_size);
@@ -3151,26 +3126,26 @@ string_realloc(Allocator& a, void* ptr, usize old_size, usize new_size)
 }
 } // namespace impl
 
-void make_space_for(String& str, Size add_len)
+void make_space_for(String* str, Size add_len)
 {
-	Size len = string::length(str);
+	Size len = string::length(*str);
 	Size new_len = len + add_len;
 
-	Size available = string::available_space(str);
+	Size available = string::available_space(*str);
 	if (available >= add_len) // Return if there is enough space left
 		return;
 
 	void* ptr = reinterpret_cast<string::Header*>(str) - 1;
-	usize old_size = sizeof(string::Header) + string::length(str) + 1;
+	usize old_size = sizeof(string::Header) + string::length(*str) + 1;
 	usize new_size = sizeof(string::Header) + new_len + 1;
 
-	Allocator* a = string::header(str)->allocator;
-	void* new_ptr = impl::string_realloc(*a, ptr, old_size, new_size);
+	Allocator* a = string::header(*str)->allocator;
+	void* new_ptr = impl::string_realloc(a, ptr, old_size, new_size);
 	if (new_ptr == nullptr)
 		return;
-	str = static_cast<char*>(new_ptr) + sizeof(string::Header);
+	*str = static_cast<char*>(new_ptr) + sizeof(string::Header);
 
-	string::header(str)->cap = new_len;
+	string::header(*str)->cap = new_len;
 }
 
 usize allocation_size(const String str)
@@ -5748,7 +5723,8 @@ aabb_transform_affine(const Aabb& aabb, const Matrix4& m)
 inline Sphere
 calculate_min_bounding_sphere(const void* vertices, usize num_vertices, usize stride, usize offset, f32 step)
 {
-	auto gen = random::make_mt19937_64(random::next(random::make_random_device()));
+	auto ran_gen = random::make_random_device();
+	auto gen = random::make_mt19937_64(random::next(&ran_gen));
 
 	const u8* vertex = reinterpret_cast<const u8*>(vertices);
 	vertex += offset;
@@ -5766,7 +5742,7 @@ calculate_min_bounding_sphere(const void* vertices, usize num_vertices, usize st
 	do
 	{
 		done = true;
-		for (usize i = 0, index = random::uniform_usize_distribution(gen, 0, num_vertices-1);
+		for (usize i = 0, index = random::uniform_usize_distribution(&gen, 0, num_vertices-1);
 			 i < num_vertices;
 			 i++, index = (index + 1)%num_vertices)
 		{

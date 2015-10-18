@@ -1,18 +1,5 @@
 #include "../gb.hpp"
 
-struct Global_Allocators
-{
-	gb::Heap_Allocator heap = {};
-
-	gb::Allocator* default_allocator = &heap;
-};
-
-global Global_Allocators g_allocators;
-gb::Allocator& default_allocator()
-{
-	return *g_allocators.default_allocator;
-}
-
 int main(int argc, char** argv)
 {
 	// "Use" variables
