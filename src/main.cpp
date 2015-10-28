@@ -1,5 +1,13 @@
 #include "../gb.hpp"
 
+global gb::Heap_Allocator g_heap = {};
+
+inline gb::Allocator*
+default_allocator()
+{
+	return &g_heap;
+}
+
 int main(int argc, char** argv)
 {
 	// "Use" variables
@@ -17,11 +25,11 @@ int main(int argc, char** argv)
 		printf("0x%x%x%x%x\n", fb[0], fb[1], fb[2], fb[3]);
 
 	}
-#if 1
+
 	{
-		auto table = make_hash_table<f32>(default_allocator());
-		hash_table::set(table, 123, 321.0f);
-		hash_table::set(table, 456, 654.0f);
+		auto table = hash_table::make<f32>(default_allocator());
+		hash_table::set(&table, 123, 321.0f);
+		hash_table::set(&table, 456, 654.0f);
 
 		#define PGET(key, d) printf("%7d : %7f \n", key, hash_table::get(table, (key), (f32)(d)))
 
@@ -39,18 +47,19 @@ int main(int argc, char** argv)
 		defer(string::free(hello));
 		defer(string::free(world));
 
-		string::append(hello, world);
+		string::append(&hello, world);
 		printf("%s\n", hello);
 	}
 
 	for (u32 i = 0; i < 8; i++)
 	{
 		u64 bins[10] = {};
-		auto gen = random::make_mt19937_64(random::next(random::make_random_device()));
+		auto gen_rand = random::make_random_device();
+		auto gen = random::make_mt19937_64(random::next(&gen_rand));
 
 		for (usize i = 0; i < 200000; i++)
 		{
-			u64 result = random::uniform_u64_distribution(gen, 0, 9);
+			u64 result = random::uniform_u64_distribution(&gen, 0, 9);
 			bins[result]++;
 		}
 
@@ -63,9 +72,9 @@ int main(int argc, char** argv)
 			printf("\n");
 		}
 
-		time_sleep(seconds(1));
+		time::sleep(time::seconds(1));
 	}
-#endif
+
 	while (getchar() != '\n')
 		;
 

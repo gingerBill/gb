@@ -3,6 +3,7 @@
 
 /*
 Version History:
+	0.17  - Death to OOP
 	0.16  - All References are const convention
 	0.15  - Namespaced Types
 	0.14  - Casts and Quaternion Look At
@@ -44,11 +45,13 @@ Context:
 	- Memory
 		- Mutex
 		- Atomics
-		- Functions
+		- Semaphore
+		- Thread
 		- Allocator
 		- Heap Allocator
 		- Arena Allocator
 		- Temporary Arena Memory
+		- Functions
 	- String
 	- Array
 	- Hash Table
@@ -171,30 +174,16 @@ Context:
 
 #define GB_IS_POWER_OF_TWO(x) ((x) != 0) && !((x) & ((x) - 1))
 
-#include <float.h>
 #include <math.h>
-#include <stdarg.h>
-#include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
-
-#if defined(GB_SYSTEM_WINDOWS)
-	#define _CRT_RAND_S
-	#include <stdlib.h>
-	#undef _CRT_RAND_S
-#else
-	#include <stdlib.h>
-#endif
-#include <string.h>
-#include <time.h>
 
 #if !defined(GB_HAS_NO_CONSTEXPR)
 	#if defined(_GNUC_VER) && _GNUC_VER < 406  // Less than gcc 4.06
-		#define GB_HAS_NO_CONSTEXPR
+		#define GB_HAS_NO_CONSTEXPR 1
 	#elif defined(_MSC_VER) && _MSC_VER < 1900 // Less than Visual Studio 2015/MSVC++ 14.0
-		#define GB_HAS_NO_CONSTEXPR
+		#define GB_HAS_NO_CONSTEXPR 1
 	#elif !defined(__GXX_EXPERIMENTAL_CXX0X__) && __cplusplus < 201103L
-		#define GB_HAS_NO_CONSTEXPR
+		#define GB_HAS_NO_CONSTEXPR 1
 	#endif
 #endif
 
@@ -204,13 +193,11 @@ Context:
 	#define GB_CONSTEXPR constexpr
 #endif
 
-
-
 #ifndef GB_FORCE_INLINE
 	#if defined(_MSC_VER)
 		#define GB_FORCE_INLINE __forceinline
 	#else
-		#define __attribute__ ((__always_inline__))
+		#define GB_FORCE_INLINE __attribute__ ((__always_inline__))
 	#endif
 #endif
 
@@ -235,11 +222,24 @@ Context:
 	#include <sys/time.h>
 #endif
 
-#ifndef NDEBUG
+#if !defined(NDEBUG)
 	#define GB_ASSERT(x, ...) ((void)(::gb__assert_handler((x), #x, __FILE__, __LINE__, ##__VA_ARGS__)))
 #else
 	#define GB_ASSERT(x, ...) ((void)sizeof(x))
 #endif
+
+#if !defined(GB_ARRAY_BOUND_CHECKING)
+#define GB_ARRAY_BOUND_CHECKING 1
+#endif
+
+
+extern "C" inline void
+gb__abort(void)
+{
+	// TODO(bill): Get a better way to abort
+	*(int*)0 = 0;
+	// raise(SIGABRT);
+}
 
 /// Helper function used as a better alternative to assert which allows for
 /// optional printf style error messages
@@ -262,8 +262,7 @@ gb__assert_handler(bool condition, const char* condition_str,
 		va_end(args);
 	}
 	fprintf(stderr, "\n");
-
-	abort(); // TODO(bill): is abort() portable and good?
+	gb__abort();
 }
 
 ////////////////////////////////
@@ -327,20 +326,32 @@ __GB_NAMESPACE_START
 ///                          ///
 ////////////////////////////////
 
-using u8  =  uint8_t;
-using s8  =   int8_t;
-using u16 = uint16_t;
-using s16 =  int16_t;
-using u32 = uint32_t;
-using s32 =  int32_t;
+
 
 #if defined(_MSC_VER)
-	using s64 = signed   __int64;
+	using u8  = unsigned __int8;
+	using s8  =   signed __int8;
+	using u16 = unsigned __int16;
+	using s16 =   signed __int16;
+	using u32 = unsigned __int32;
+	using s32 =   signed __int32;
 	using u64 = unsigned __int64;
+	using s64 =   signed __int64;
 #else
-	using s64 =  int64_t;
-	using u64 = uint64_t;
+	using u8  = unsigned char;
+	using s8  =   signed char;
+	using u16 = unsigned short;
+	using s16 =   signed short;
+	using u32 = unsigned int;
+	using s32 =   signed int;
+	using u64 = unsigned long long;
+	using s64 =   signed long long;
 #endif
+
+static_assert( sizeof(u8) == 1,  "u8 is not  8 bits");
+static_assert(sizeof(u16) == 2, "u16 is not 16 bits");
+static_assert(sizeof(u32) == 4, "u32 is not 32 bits");
+static_assert(sizeof(u64) == 8, "u64 is not 64 bits");
 
 using f32 = float;
 using f64 = double;
@@ -400,17 +411,17 @@ using ptrdiff = ptrdiff_t;
 #define GB_S64_MAX 0x7fffffffffffffffll
 
 #if defined(GB_ARCH_64_BIT)
-	#define GB_USIZE_MIX U64_MIN
-	#define GB_USIZE_MAX U64_MAX
+	#define GB_USIZE_MIX GB_U64_MIN
+	#define GB_USIZE_MAX GB_U64_MAX
 
-	#define GB_SSIZE_MIX S64_MIN
-	#define GB_SSIZE_MAX S64_MAX
+	#define GB_SSIZE_MIX GB_S64_MIN
+	#define GB_SSIZE_MAX GB_S64_MAX
 #elif defined(GB_ARCH_32_BIT)
-	#define GB_USIZE_MIX U32_MIN
-	#define GB_USIZE_MAX U32_MAX
+	#define GB_USIZE_MIX GB_U32_MIN
+	#define GB_USIZE_MAX GB_U32_MAX
 
-	#define GB_SSIZE_MIX S32_MIN
-	#define GB_SSIZE_MAX S32_MAX
+	#define GB_SSIZE_MIX GB_S32_MIN
+	#define GB_SSIZE_MAX GB_S32_MAX
 #endif
 
 #if defined(GB_BASIC_WITHOUT_NAMESPACE)
@@ -477,7 +488,7 @@ template <> struct Add_Lvalue_Reference_Def<void>                { using Type = 
 template <> struct Add_Lvalue_Reference_Def<const void>          { using Type = const void;          };
 template <> struct Add_Lvalue_Reference_Def<volatile void>       { using Type = volatile void;       };
 template <> struct Add_Lvalue_Reference_Def<const volatile void> { using Type = const volatile void; };
-template <typename T> using  Add_Lvalue_Reference = typename Add_Lvalue_Reference_Def<T>::Type;
+template <typename T> using Add_Lvalue_Reference = typename Add_Lvalue_Reference_Def<T>::Type;
 
 template <typename T> struct Add_Rvalue_Reference_Def      { using Type = T&&; };
 template <typename T> struct Add_Rvalue_Reference_Def<T&>  { using Type = T&; };
@@ -550,15 +561,15 @@ namespace impl
 template <typename Func>
 struct Defer
 {
-	Func func;
+	Func f;
 
-	Defer(Func&& func) : func{__GB_NAMESPACE_PREFIX::forward<Func>(func)} {}
-	~Defer() { func(); };
+	Defer(Func&& f) : f{forward<Func>(f)} {}
+	~Defer() { f(); };
 };
 
 template <typename Func>
 Defer<Func>
-defer_func(Func&& func) { return Defer<Func>(__GB_NAMESPACE_PREFIX::forward<Func>(func)); }
+defer_func(Func&& f) { return Defer<Func>(forward<Func>(f)); }
 } // namespace impl
 __GB_NAMESPACE_END
 
@@ -567,7 +578,6 @@ __GB_NAMESPACE_END
 #define GB_DEFER_2(x, y) GB_DEFER_1(x, y)
 #define GB_DEFER_3(x)    GB_DEFER_2(GB_DEFER_2(GB_DEFER_2(x, __COUNTER__), _), __LINE__)
 #define defer(code) auto GB_DEFER_3(_defer_) = __GB_NAMESPACE_PREFIX::impl::defer_func([&](){code;})
-
 
 #if !defined(GB_CASTS_WITHOUT_NAMESPACE)
 __GB_NAMESPACE_START
@@ -618,13 +628,12 @@ struct Mutex
 #else
 	pthread_mutex_t posix_mutex;
 #endif
-
-	Mutex();
-	~Mutex();
 };
 
 namespace mutex
 {
+Mutex make();
+void destroy(Mutex* mutex);
 void lock(Mutex* mutex);
 bool try_lock(Mutex* mutex);
 void unlock(Mutex* mutex);
@@ -636,22 +645,70 @@ struct Atomic64 { u64 nonatomic; };
 
 namespace atomic
 {
-u32 load_32_relaxed(const Atomic32* object);
-void store_32_relaxed(Atomic32* object, u32 value);
-u32 compare_exchange_strong_32_relaxed(Atomic32* object, u32 expected, u32 desired);
-u32 exchanged_32_relaxed(Atomic32* object, u32 desired);
-u32 fetch_add_32_relaxed(Atomic32* object, s32 operand);
-u32 fetch_and_32_relaxed(Atomic32* object, u32 operand);
-u32 fetch_or_32_relaxed(Atomic32* object, u32 operand);
+// TODO(bill): Should these functions have suffixes or is the overloading fine?
+u32 load(const Atomic32* object);
+void store(Atomic32* object, u32 value);
+u32 compare_exchange_strong(Atomic32* object, u32 expected, u32 desired);
+u32 exchanged(Atomic32* object, u32 desired);
+u32 fetch_add(Atomic32* object, s32 operand);
+u32 fetch_and(Atomic32* object, u32 operand);
+u32 fetch_or(Atomic32* object, u32 operand);
 
-u64 load_64_relaxed(const Atomic64* object);
-void store_64_relaxed(Atomic64* object, u64 value);
-u64 compare_exchange_strong_64_relaxed(Atomic64* object, u64 expected, u64 desired);
-u64 exchanged_64_relaxed(Atomic64* object, u64 desired);
-u64 fetch_add_64_relaxed(Atomic64* object, s64 operand);
-u64 fetch_and_64_relaxed(Atomic64* object, u64 operand);
-u64 fetch_or_64_relaxed(Atomic64* object, u64 operand);
+u64 load(const Atomic64* object);
+void store(Atomic64* object, u64 value);
+u64 compare_exchange_strong(Atomic64* object, u64 expected, u64 desired);
+u64 exchanged(Atomic64* object, u64 desired);
+u64 fetch_add(Atomic64* object, s64 operand);
+u64 fetch_and(Atomic64* object, u64 operand);
+u64 fetch_or(Atomic64* object, u64 operand);
 } // namespace atomic
+
+struct Semaphore
+{
+#if defined(GB_SYSTEM_WINDOWS)
+	HANDLE win32_handle;
+#else
+	Mutex          mutex;
+	pthread_cond_t cond;
+	s32            count;
+#endif
+};
+
+namespace semaphore
+{
+Semaphore make();
+void destroy(Semaphore* semaphore);
+void post(Semaphore* semaphore, u32 count = 1);
+void wait(Semaphore* semaphore);
+} // namespace semaphore
+
+using Thread_Function = s32(void*);
+
+struct Thread
+{
+#if defined(GB_SYSTEM_WINDOWS)
+	HANDLE win32_handle;
+#else
+	pthread_t posix_handle;
+#endif
+
+	Thread_Function* function;
+	void*            data;
+
+	Semaphore semaphore;
+	usize     stack_size;
+	b32       is_running;
+};
+
+namespace thread
+{
+Thread make();
+void destroy(Thread* thread);
+void start(Thread* thread, Thread_Function* func, void* data = nullptr, usize stack_size = 0);
+void stop(Thread* thread);
+bool is_running(const Thread& thread);
+} // namespace thread
+
 
 /// Default alignment for memory allocations
 #ifndef GB_DEFAULT_ALIGNMENT
@@ -698,9 +755,9 @@ struct Heap_Allocator : Allocator
 		s64 size;
 	};
 
-	Mutex mutex               = Mutex{};
-	s64 total_allocated_count = 0;
-	s64 allocation_count      = 0;
+	Mutex mutex                 = mutex::make();
+	s64   total_allocated_count = 0;
+	s64   allocation_count      = 0;
 
 	Heap_Allocator() = default;
 	virtual ~Heap_Allocator();
@@ -760,20 +817,20 @@ struct Temp_Allocator : Allocator
 namespace memory
 {
 void* align_forward(void* ptr, usize align);
-      void* pointer_add(      void* ptr, usize bytes);
+void* pointer_add(void* ptr, usize bytes);
+void* pointer_sub(void* ptr, usize bytes);
 const void* pointer_add(const void* ptr, usize bytes);
-      void* pointer_sub(      void* ptr, usize bytes);
 const void* pointer_sub(const void* ptr, usize bytes);
 
 void* set(void* ptr, u8 value, usize bytes);
 void* zero(void* ptr, usize bytes);
 void* copy(void* dest, const void* src, usize bytes);
 void* move(void* dest, const void* src, usize bytes);
-bool  compare(const void* a, const void* b, usize bytes);
+bool equals(const void* a, const void* b, usize bytes);
 } // namespace memory
 
-inline void* alloc(Allocator* a, usize size, usize align = GB_DEFAULT_ALIGNMENT) { GB_ASSERT(a); return a->alloc(size, align); }
-inline void dealloc(Allocator* a, const void* ptr) { GB_ASSERT(a); return a->dealloc(ptr); }
+inline void* alloc(Allocator* a, usize size, usize align = GB_DEFAULT_ALIGNMENT) { GB_ASSERT(a != nullptr); return a->alloc(size, align); }
+inline void dealloc(Allocator* a, const void* ptr) { GB_ASSERT(a != nullptr); return a->dealloc(ptr); }
 
 template <typename T>
 inline T* alloc_struct(Allocator* a) { return static_cast<T*>(alloc(a, sizeof(T), alignof(T))); }
@@ -927,11 +984,10 @@ move(void* dest, const void* src, usize bytes)
 }
 
 inline bool
-compare(const void* a, const void* b, usize bytes)
+equals(const void* a, const void* b, usize bytes)
 {
 	return (memcmp(a, b, bytes) == 0);
 }
-
 
 } // namespace memory
 
@@ -961,7 +1017,7 @@ inline Header* header(String str) { return (Header*)str - 1; }
 
 String make(Allocator* a, const char* str = "");
 String make(Allocator* a, const void* str, Size len);
-void   free(String* str);
+void   free(String str);
 
 String duplicate(Allocator* a, const String str);
 
@@ -979,10 +1035,39 @@ void make_space_for(String* str, Size add_len);
 usize allocation_size(const String str);
 
 bool equals(const String lhs, const String rhs);
+int compare(const String lhs, const String rhs); // NOTE(bill): three-way comparison
 
 void trim(String* str, const char* cut_set);
 } // namespace string
 // TODO(bill): string libraries
+
+namespace strconv
+{
+// Inspired by the golang strconv library but not exactly due to numerous reasons
+// TODO(bill): Should this use gb::String or just plain old C Strings?
+bool parse_bool(const char* str, bool* value);
+
+bool parse_f32(const char* str, f32* value);
+bool parse_f64(const char* str, f64* value);
+
+bool parse_int(const char* str, int base, s8* value);
+bool parse_int(const char* str, int base, s16* value);
+bool parse_int(const char* str, int base, s32* value);
+bool parse_int(const char* str, int base, s64* value);
+
+bool parse_uint(const char* str, int base, u8* value);
+bool parse_uint(const char* str, int base, u16* value);
+bool parse_uint(const char* str, int base, u32* value);
+bool parse_uint(const char* str, int base, u64* value);
+
+void format_bool(bool value, char* buffer, usize len);
+
+void format_f32(f32 value, char* buffer, usize len);
+void format_f64(f64 value, char* buffer, usize len);
+
+void format_int(s64 value, char* buffer, usize len);
+void format_uint(u64 value, char* buffer, usize len);
+} // namespace strconv
 
 ////////////////////////////////
 ///                          ///
@@ -1005,9 +1090,23 @@ struct Array
 	~Array();
 	Array& operator=(const Array& array);
 
+	inline const T&
+	operator[](usize index) const
+	{
+#if GB_ARRAY_BOUND_CHECKING
+		GB_ASSERT(index < static_cast<usize>(capacity), "Array out of bounds");
+#endif
+		return data[index];
+	}
 
-	const T& operator[](usize index) const { return data[index]; }
-		  T& operator[](usize index)       { return data[index]; }
+	inline T&
+	operator[](usize index)
+	{
+#if GB_ARRAY_BOUND_CHECKING
+		GB_ASSERT(index < static_cast<usize>(capacity), "Array out of bounds");
+#endif
+		return data[index];
+	}
 };
 
 namespace array
@@ -1095,9 +1194,9 @@ template <typename T> typename const Hash_Table<T>::Entry* end(const Hash_Table<
 namespace multi_hash_table
 {
 /// Outputs all the items that with the specified key
-template <typename T> void get_multiple(const Hash_Table<T>& h, u64 key, Array<T>& items);
+template <typename T> void get(const Hash_Table<T>& h, u64 key, Array<T>& items);
 /// Returns the count of entries with the specified key
-template <typename T> usize multiple_count(const Hash_Table<T>& h, u64 key);
+template <typename T> usize count(const Hash_Table<T>& h, u64 key);
 
 /// Finds the first entry with specified key in the hash table
 template <typename T> typename const Hash_Table<T>::Entry* find_first(const Hash_Table<T>& h, u64 key);
@@ -1111,6 +1210,9 @@ template <typename T> void remove_entry(Hash_Table<T>* h, typename const Hash_Ta
 /// Removes all entries with from the hash table with the specified key
 template <typename T> void remove_all(Hash_Table<T>* h, u64 key);
 } // namespace multi_hash_table
+
+
+
 ////////////////////////////////
 ///                          ///
 /// Array                    ///
@@ -1135,6 +1237,7 @@ Array<T>::Array(Allocator* a, usize count_)
 
 
 template <typename T>
+inline
 Array<T>::Array(const Array<T>& other)
 : allocator(other.allocator)
 , count(0)
@@ -1148,7 +1251,8 @@ Array<T>::Array(const Array<T>& other)
 }
 
 template <typename T>
-inline Array<T>::~Array()
+inline
+Array<T>::~Array()
 {
 	if (allocator)
 		dealloc(allocator, data);
@@ -1209,7 +1313,7 @@ inline void
 append(Array<T>* a, const T* items, usize count)
 {
 	if (a->capacity <= a->count + count)
-		grow(a, a->count + count);
+		array::grow(a, a->count + count);
 
 	memory::copy(&a->data[a->count], items, count * sizeof(T));
 	a->count += count;
@@ -1295,6 +1399,7 @@ Hash_Table<T>::Hash_Table(Allocator* a)
 }
 
 template <typename T>
+inline
 Hash_Table<T>::Hash_Table(const Hash_Table<T>& other)
 : hashes(other.hashes)
 , entries(other.entries)
@@ -1595,7 +1700,7 @@ namespace multi_hash_table
 {
 template <typename T>
 inline void
-get_multiple(const Hash_Table<T>& h, u64 key, Array<T>& items)
+get(const Hash_Table<T>& h, u64 key, Array<T>& items)
 {
 	auto e = multi_hash_table::find_first(h, key);
 	while (e)
@@ -1607,7 +1712,7 @@ get_multiple(const Hash_Table<T>& h, u64 key, Array<T>& items)
 
 template <typename T>
 inline usize
-multiple_count(const Hash_Table<T>& h, u64 key)
+count(const Hash_Table<T>& h, u64 key)
 {
 	usize count = 0;
 	auto e = multi_hash_table::find_first(h, key);
@@ -1720,16 +1825,19 @@ extern const Time TIME_ZERO;
 
 // NOTE(bill): namespace time cannot be used for numerous reasons
 
-Time time_now();
-void time_sleep(Time time);
+namespace time
+{
+Time now();
+void sleep(Time time);
 
 Time seconds(f32 s);
 Time milliseconds(s32 ms);
 Time microseconds(s64 us);
 
-f32 time_as_seconds(Time t);
-s32 time_as_milliseconds(Time t);
-s64 time_as_microseconds(Time t);
+f32 as_seconds(Time t);
+s32 as_milliseconds(Time t);
+s64 as_microseconds(Time t);
+} // namespace time
 
 bool operator==(Time left, Time right);
 bool operator!=(Time left, Time right);
@@ -1768,11 +1876,68 @@ Time  operator%(Time left, Time right);
 Time& operator%=(Time& left, Time right);
 
 
+
+
+////////////////////////////////
+///                          ///
+/// OS                       ///
+///                          ///
+////////////////////////////////
+
+#if 0
+// TODO(bill): still in development
+struct File
+{
+#if defined(GB_SYSTEM_WINDOWS)
+	HANDLE win32_handle;
+	Mutex mutex;
+
+	char* name; // TODO(bill): uses malloc
+
+	b32 is_console;
+#else
+	#error Implement file system
+#endif
+};
+
+namespace file
+{
+enum Flag : u32
+{
+	READ  = 0x1,
+	WRITE = 0x2,
+};
+
+uintptr fd(const File* file);
+
+bool new_from_fd(File* file, uintptr fd, const char* name);
+
+bool open(File* file, const char* filename, u32 flag, u32 perm);
+bool close(File* file);
+
+bool create(File* file, const char* filename, u32 flag);
+
+bool read(File* file, void* buffer, u32 bytes_to_read);
+bool write(File* file, const void* memory, u32 bytes_to_write);
+
+bool read_at(File* file, void* buffer, u32 bytes_to_read, s64 offset);
+bool write_at(File* file, const void* memory, u32 bytes_to_write, s64 offset);
+
+s64 size(File* file);
+
+bool set_pos(File* file, s64 pos);
+bool get_pos(File* file, s64* pos);
+} // namespace file
+#endif
+
+
 ////////////////////////////////
 ///                          ///
 /// Math Types               ///
 ///                          ///
 ////////////////////////////////
+
+// TODO(bill): Should the math part be a separate library?
 
 struct Vector2
 {
@@ -1854,7 +2019,6 @@ struct Matrix2
 	inline const Vector2& operator[](usize index) const { return columns[index]; }
 	inline       Vector2& operator[](usize index)       { return columns[index]; }
 };
-
 
 struct Matrix3
 {
@@ -2102,7 +2266,6 @@ extern const Transform    TRANSFORM_IDENTITY;
 
 namespace math
 {
-extern const f32 EPSILON;
 extern const f32 ZERO;
 extern const f32 ONE;
 extern const f32 THIRD;
@@ -2185,7 +2348,7 @@ T lerp(const T& x, const T& y, f32 t);
 bool equals(f32 a, f32 b, f32 precision = F32_PRECISION);
 
 template <typename T>
-void swap(T& a, T& b);
+void swap(T* a, T* b);
 
 template <typename T, usize N>
 void swap(T (& a)[N], T (& b)[N]);
@@ -2309,40 +2472,48 @@ Vector3 transform_point(const Transform& transform, const Vector3& point);
 Transform inverse(const Transform& t);
 Matrix4 transform_to_matrix4(const Transform& t);
 
-// Aabb Functions
-Aabb calculate_aabb(const void* vertices, usize num_vertices, usize stride, usize offset);
+f32 perlin_noise3(f32 x, f32 y, f32 z, s32 x_wrap = 0, s32 y_wrap = 0, s32 z_wrap = 0);
+} // namespace math
 
-f32 aabb_surface_area(const Aabb& aabb);
-f32 aabb_volume(const Aabb& aabb);
+namespace aabb
+{
+Aabb calculate(const void* vertices, usize num_vertices, usize stride, usize offset);
 
-Sphere aabb_to_sphere(const Aabb& aabb);
+f32 surface_area(const Aabb& aabb);
+f32 volume(const Aabb& aabb);
+
+Sphere to_sphere(const Aabb& aabb);
 
 bool contains(const Aabb& aabb, const Vector3& point);
 bool contains(const Aabb& a, const Aabb& b);
 bool intersects(const Aabb& a, const Aabb& b);
 
-Aabb aabb_transform_affine(const Aabb& aabb, const Matrix4& m);
+Aabb transform_affine(const Aabb& aabb, const Matrix4& m);
+} // namespace aabb
 
-// Sphere Functions
+namespace sphere
+{
 Sphere calculate_min_bounding_sphere(const void* vertices, usize num_vertices, usize stride, usize offset, f32 step);
 Sphere calculate_max_bounding_sphere(const void* vertices, usize num_vertices, usize stride, usize offset);
 
-f32 sphere_surface_area(const Sphere& s);
-f32 sphere_volume(const Sphere& s);
+f32 surface_area(const Sphere& s);
+f32 volume(const Sphere& s);
 
-Aabb sphere_to_aabb(const Sphere& sphere);
+Aabb to_aabb(const Sphere& sphere);
 
-bool sphere_contains_point(const Sphere& s, const Vector3& point);
+bool contains_point(const Sphere& s, const Vector3& point);
 
-// Plane Functions
-f32 ray_plane_intersection(const Vector3& from, const Vector3& dir, const Plane& p);
-f32 ray_sphere_intersection(const Vector3& from, const Vector3& dir, const Sphere& s);
+f32 ray_intersection(const Vector3& from, const Vector3& dir, const Sphere& s);
+} // namespace sphere
 
-bool plane_3_intersection(const Plane& p1, const Plane& p2, const Plane& p3, Vector3& ip);
+namespace plane
+{
+f32 ray_intersection(const Vector3& from, const Vector3& dir, const Plane& p);
 
-f32 perlin_noise3(f32 x, f32 y, f32 z, s32 x_wrap = 0, s32 y_wrap = 0, s32 z_wrap = 0);
+bool intersection3(const Plane& p1, const Plane& p2, const Plane& p3, Vector3* ip);
+} // namespace plane
 
-} // namespace math
+
 
 namespace random
 {
@@ -2442,7 +2613,7 @@ Random_Device make_random_device();
 void set_seed(Mt19937_32* gen, Mt19937_32::Seed_Type seed);
 void set_seed(Mt19937_64* gen, Mt19937_64::Seed_Type seed);
 
-template <typename Generator> typename Generator::Result_Type next(Generator& gen);
+template <typename Generator> typename Generator::Result_Type next(Generator* gen);
 
 template <typename Generator> s32 uniform_s32_distribution(Generator* gen, s32 min_inc, s32 max_inc);
 template <typename Generator> s64 uniform_s64_distribution(Generator* gen, s64 min_inc, s64 max_inc);
@@ -2506,8 +2677,6 @@ next(Generator* gen)
 	return gen->next();
 }
 
-
-
 template <typename Generator>
 inline s32
 uniform_s32_distribution(Generator* gen, s32 min_inc, s32 max_inc)
@@ -2529,7 +2698,6 @@ uniform_u32_distribution(Generator* gen, u32 min_inc, u32 max_inc)
 {
 	return (gen->next_u64() % (max_inc - min_inc + 1)) + min_inc;
 }
-
 
 template <typename Generator>
 inline u64
@@ -2663,51 +2831,56 @@ __GB_NAMESPACE_START
 ///                          ///
 ////////////////////////////////
 
-Mutex::Mutex()
-{
-#if defined(GB_SYSTEM_WINDOWS)
-	win32_mutex = CreateMutex(0, 0, 0);
-#else
-	pthread_mutex_init(&posix_mutex, nullptr);
-#endif
-}
-
-Mutex::~Mutex()
-{
-#if defined(GB_SYSTEM_WINDOWS)
-	CloseHandle(win32_mutex);
-#else
-	pthread_mutex_destroy(&posix_mutex);
-#endif
-}
-
 namespace mutex
 {
-void lock(Mutex& mutex)
+Mutex
+make()
+{
+	Mutex m = {};
+#if defined(GB_SYSTEM_WINDOWS)
+	m.win32_mutex = CreateMutex(0, false, 0);
+#else
+	pthread_mutex_init(&m.posix_mutex, nullptr);
+#endif
+	return m;
+}
+
+void
+destroy(Mutex* m)
 {
 #if defined(GB_SYSTEM_WINDOWS)
-	WaitForSingleObject(mutex.win32_mutex, INFINITE);
+	CloseHandle(m->win32_mutex);
 #else
-	pthread_mutex_lock(&mutex.posix_mutex);
+	pthread_mutex_destroy(&m->posix_mutex);
 #endif
 }
 
-bool try_lock(Mutex& mutex)
+
+void lock(Mutex* m)
 {
 #if defined(GB_SYSTEM_WINDOWS)
-	return WaitForSingleObject(mutex.win32_mutex, 0) == WAIT_OBJECT_0;
+	WaitForSingleObject(m->win32_mutex, INFINITE);
 #else
-	return pthread_mutex_trylock(&mutex.posix_mutex) == 0;
+	pthread_mutex_lock(&m->posix_mutex);
+#endif
+}
+
+bool try_lock(Mutex* m)
+{
+#if defined(GB_SYSTEM_WINDOWS)
+	return WaitForSingleObject(m->win32_mutex, 0) == WAIT_OBJECT_0;
+#else
+	return pthread_mutex_trylock(&m->posix_mutex) == 0;
 #endif
 }
 
 
-void unlock(Mutex& mutex)
+void unlock(Mutex* m)
 {
 #if defined(GB_SYSTEM_WINDOWS)
-	ReleaseMutex(mutex.win32_mutex);
+	ReleaseMutex(m->win32_mutex);
 #else
-	pthread_mutex_unlock(&mutex.posix_mutex);
+	pthread_mutex_unlock(&m->posix_mutex);
 #endif
 }
 } // namespace mutex
@@ -2717,49 +2890,49 @@ namespace atomic
 {
 #if defined(_MSC_VER)
 inline u32
-load_32_relaxed(const Atomic32* object)
+load(const Atomic32* object)
 {
 	return object->nonatomic;
 }
 
 inline void
-store_32_relaxed(Atomic32* object, u32 value)
+store(Atomic32* object, u32 value)
 {
 	object->nonatomic = value;
 }
 
 inline u32
-compare_exchange_strong_32_relaxed(Atomic32* object, u32 expected, u32 desired)
+compare_exchange_strong(Atomic32* object, u32 expected, u32 desired)
 {
 	return _InterlockedCompareExchange(reinterpret_cast<long*>(object), desired, expected);
 }
 
 inline u32
-exchanged_32_relaxed(Atomic32* object, u32 desired)
+exchanged(Atomic32* object, u32 desired)
 {
 	return _InterlockedExchange(reinterpret_cast<long*>(object), desired);
 }
 
 inline u32
-fetch_add_32_relaxed(Atomic32* object, s32 operand)
+fetch_add(Atomic32* object, s32 operand)
 {
 	return _InterlockedExchangeAdd(reinterpret_cast<long*>(object), operand);
 }
 
 inline u32
-fetch_and_32_relaxed(Atomic32* object, u32 operand)
+fetch_and(Atomic32* object, u32 operand)
 {
 	return _InterlockedAnd(reinterpret_cast<long*>(object), operand);
 }
 
 inline u32
-fetch_or_32_relaxed(Atomic32* object, u32 operand)
+fetch_or_32(Atomic32* object, u32 operand)
 {
 	return _InterlockedOr(reinterpret_cast<long*>(object), operand);
 }
 
 inline u64
-load_64_relaxed(const Atomic64* object)
+load(const Atomic64* object)
 {
 #if defined(GB_ARCH_64_BIT)
 	return object->nonatomic;
@@ -2780,7 +2953,7 @@ load_64_relaxed(const Atomic64* object)
 }
 
 inline void
-store_64_relaxed(Atomic64* object, u64 value)
+store(Atomic64* object, u64 value)
 {
 #if defined(GB_ARCH_64_BIT)
 	object->nonatomic = value;
@@ -2799,13 +2972,13 @@ store_64_relaxed(Atomic64* object, u64 value)
 }
 
 inline u64
-compare_exchange_strong_64_relaxed(Atomic64* object, u64 expected, u64 desired)
+compare_exchange_strong(Atomic64* object, u64 expected, u64 desired)
 {
 	_InterlockedCompareExchange64(reinterpret_cast<s64*>(object), desired, expected);
 }
 
 inline u64
-exchanged_64_relaxed(Atomic64* object, u64 desired)
+exchanged(Atomic64* object, u64 desired)
 {
 #if defined(GB_ARCH_64_BIT)
 	return _InterlockedExchange64(reinterpret_cast<s64*>(object), desired);
@@ -2822,7 +2995,7 @@ exchanged_64_relaxed(Atomic64* object, u64 desired)
 }
 
 inline u64
-fetch_add_64_relaxed(Atomic64* object, s64 operand)
+fetch_add(Atomic64* object, s64 operand)
 {
 #if defined(GB_ARCH_64_BIT)
 	return _InterlockedExchangeAdd64(reinterpret_cast<s64*>(object), operand);
@@ -2839,7 +3012,7 @@ fetch_add_64_relaxed(Atomic64* object, s64 operand)
 }
 
 inline u64
-fetch_and_64_relaxed(Atomic64* object, u64 operand)
+fetch_and(Atomic64* object, u64 operand)
 {
 #if defined(GB_ARCH_64_BIT)
 	return _InterlockedAnd64(reinterpret_cast<s64*>(object), operand);
@@ -2856,7 +3029,7 @@ fetch_and_64_relaxed(Atomic64* object, u64 operand)
 }
 
 inline u64
-fetch_or_64_relaxed(Atomic64* object, u64 operand)
+fetch_or(Atomic64* object, u64 operand)
 {
 #if defined(GB_ARCH_64_BIT)
 	return _InterlockedAnd64(reinterpret_cast<s64*>(object), operand);
@@ -2877,6 +3050,206 @@ fetch_or_64_relaxed(Atomic64* object, u64 operand)
 #endif
 } // namespace atomic
 
+namespace semaphore
+{
+Semaphore
+make()
+{
+	Semaphore semaphore = {};
+#if defined(GB_SYSTEM_WINDOWS)
+	semaphore.win32_handle = CreateSemaphore(nullptr, 0, GB_S32_MAX, nullptr);
+	GB_ASSERT(semaphore.win32_handle != nullptr, "CreateSemaphore: GetLastError = %d", GetLastError());
+
+#else
+	semaphore.count = 0;
+	s32 result = pthread_cond_init(&semaphore.cond, nullptr);
+	GB_ASSERT(result == 0, "pthread_cond_init: errno = %d", result);
+
+	semaphore.mutex = mutex::make();
+#endif
+
+	return semaphore;
+}
+
+void
+destroy(Semaphore* semaphore)
+{
+#if defined(GB_SYSTEM_WINDOWS)
+	BOOL err = CloseHandle(semaphore->win32_handle);
+	GB_ASSERT(err != 0, "CloseHandle: GetLastError = %d", GetLastError());
+#else
+	s32 result = pthread_cond_destroy(&semaphore->cond);
+	GB_ASSERT(result == 0, "pthread_cond_destroy: errno = %d", result);
+	mutex::destroy(&semaphore->mutex);
+#endif
+}
+
+void
+post(Semaphore* semaphore, u32 count)
+{
+#if defined(GB_SYSTEM_WINDOWS)
+	BOOL err = ReleaseSemaphore(semaphore->win32_handle, count, nullptr);
+	GB_ASSERT(err != 0, "ReleaseSemaphore: GetLastError = %d", GetLastError());
+#else
+	mutex::lock(semaphore->mutex);
+	defer (mutex::unlock(semaphore->mutex));
+
+	for (u32 i = 0; i < count; i++)
+	{
+		s32 result = pthread_cond_signal(&semaphore->cond);
+		GB_ASSERT(result == 0, "pthread_cond_signal: errno = %d", result);
+	}
+
+	semaphore->count += count;
+#endif
+}
+
+void
+wait(Semaphore* semaphore)
+{
+#if defined(GB_SYSTEM_WINDOWS)
+	DWORD result = WaitForSingleObject(semaphore->win32_handle, INFINITE);
+	GB_ASSERT(result == WAIT_OBJECT_0, "WaitForSingleObject: GetLastError = %d", GetLastError());
+#else
+	mutex::lock(semaphore->mutex);
+	defer (mutex::unlock(semaphore->mutex));
+
+	while (count <= 0)
+	{
+		s32 result = pthread_cond_wait(&semaphore->cond, &semaphore->mutex.posix_mutex);
+		GB_ASSERT(result == 0, "pthread_cond_wait: errno = %d", result);
+	}
+
+	count--;
+#endif
+}
+} // namespace semaphore
+
+namespace thread
+{
+Thread
+make()
+{
+	Thread thread = {};
+#if defined(GB_SYSTEM_WINDOWS)
+	thread.win32_handle = INVALID_HANDLE_VALUE;
+#else
+	thread.posix_handle = 0;
+#endif
+	thread.function = nullptr;
+	thread.data = nullptr;
+	thread.stack_size = 0;
+	thread.is_running = false;
+	thread.semaphore = semaphore::make();
+
+	return thread;
+}
+
+void
+destroy(Thread* thread)
+{
+	if (thread->is_running)
+		thread::stop(thread);
+
+	semaphore::destroy(&thread->semaphore);
+}
+
+internal s32
+run(Thread* thread)
+{
+	semaphore::post(&thread->semaphore);
+	return thread->function(thread->data);
+}
+
+#if defined(GB_SYSTEM_WINDOWS)
+internal DWORD WINAPI
+thread_proc(void* arg)
+{
+	Thread* thread = static_cast<Thread*>(arg);
+	s32 result = thread::run(thread);
+	return result;
+}
+
+#else
+internal void*
+thread_proc(void* arg)
+{
+	local_persist s32 result = -1;
+	result = thread::run(static_cast<Thread*>(arg));
+	return (void*)&result;
+}
+
+#endif
+
+void
+start(Thread* thread, Thread_Function* func, void* data, usize stack_size)
+{
+	GB_ASSERT(!thread->is_running);
+	GB_ASSERT(func != nullptr);
+	thread->function = func;
+	thread->data = data;
+	thread->stack_size = stack_size;
+
+#if defined(GB_SYSTEM_WINDOWS)
+	thread->win32_handle = CreateThread(nullptr, stack_size, thread_proc, thread, 0, nullptr);
+	GB_ASSERT(thread->win32_handle != nullptr,
+	          "CreateThread: GetLastError = %d", GetLastError());
+
+#else
+	pthread_attr_t attr;
+	s32 result = pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+	GB_ASSERT(result == 0, "pthread_attr_init: errno = %d", result);
+
+	if (thread->stack_size != 0)
+	{
+		result = pthread_attr_setstacksize(&attr, thread->stack_size);
+		GB_ASSERT(result == 0, "pthread_attr_setstacksize: errno = %d", result);
+	}
+
+	result = pthread_create(&thread->posix_handle, &attr, thread_proc, thread);
+	GB_ASSERT(result == 0, "pthread_create: errno = %d", result);
+
+	// NOTE(bill): Free attr memory
+	result = pthread_attr_destroy(&attr);
+	GB_ASSERT(result == 0, "pthread_attr_destroy: errno = %d", result);
+
+	// NOTE(bill): So much boiler patch compared to windows.h (for once)
+#endif
+
+	thread->is_running = true;
+	semaphore::wait(&thread->semaphore);
+}
+
+void
+stop(Thread* thread)
+{
+	if (!thread->is_running)
+		return;
+
+#if defined(GB_SYSTEM_WINDOWS)
+	WaitForSingleObject(thread->win32_handle, INFINITE);
+	CloseHandle(thread->win32_handle);
+	thread->win32_handle = INVALID_HANDLE_VALUE;
+#else
+
+#endif
+
+	thread->is_running = false;
+}
+
+bool
+is_running(const Thread& thread)
+{
+	return thread.is_running != 0;
+}
+} // namespace thread
+
+
+
+
+
+
 #define GB_HEAP_ALLOCATOR_HEADER_PAD_VALUE (usize)(-1)
 Heap_Allocator::~Heap_Allocator()
 {
@@ -2890,8 +3263,8 @@ Heap_Allocator::~Heap_Allocator()
 void*
 Heap_Allocator::alloc(usize size, usize align)
 {
-	mutex::lock(mutex);
-	defer (mutex::unlock(mutex));
+	mutex::lock(&mutex);
+	defer (mutex::unlock(&mutex));
 
 	const usize total = size + align + sizeof(Header);
 	Header* h = static_cast<Header*>(::malloc(total));
@@ -2916,8 +3289,8 @@ Heap_Allocator::dealloc(const void* ptr)
 	if (!ptr)
 		return;
 
-	mutex::lock(mutex);
-	defer (mutex::unlock(mutex));
+	mutex::lock(&mutex);
+	defer (mutex::unlock(&mutex));
 
 
 	Header* h = get_header_ptr(ptr);
@@ -2931,8 +3304,8 @@ Heap_Allocator::dealloc(const void* ptr)
 s64
 Heap_Allocator::allocated_size(const void* ptr)
 {
-	mutex::lock(mutex);
-	defer (mutex::unlock(mutex));
+	mutex::lock(&mutex);
+	defer (mutex::unlock(&mutex));
 
 	return get_header_ptr(ptr)->size;
 }
@@ -3037,17 +3410,17 @@ String make(Allocator* a, const void* init_str, Size len)
 	return str;
 }
 
-void free(String& str)
+void free(String str)
 {
 	if (str == nullptr)
 		return;
 	string::Header* h = string::header(str);
 	Allocator* a = h->allocator;
-	if (a) dealloc(a, h);
-	str = nullptr;
+	if (a)
+		dealloc(a, h);
 }
 
-String duplicate_string(Allocator* a, const String str)
+String duplicate(Allocator* a, const String str)
 {
 	return string::make(a, str, string::length(str));
 }
@@ -3126,7 +3499,8 @@ string_realloc(Allocator* a, void* ptr, usize old_size, usize new_size)
 }
 } // namespace impl
 
-void make_space_for(String* str, Size add_len)
+void
+make_space_for(String* str, Size add_len)
 {
 	Size len = string::length(*str);
 	Size new_len = len + add_len;
@@ -3148,13 +3522,15 @@ void make_space_for(String* str, Size add_len)
 	string::header(*str)->cap = new_len;
 }
 
-usize allocation_size(const String str)
+usize
+allocation_size(const String str)
 {
 	Size cap = string::capacity(str);
 	return sizeof(string::Header) + cap;
 }
 
-bool equals(const String lhs, const String rhs)
+bool
+equals(const String lhs, const String rhs)
 {
 	Size lhs_len = string::length(lhs);
 	Size rhs_len = string::length(rhs);
@@ -3170,15 +3546,36 @@ bool equals(const String lhs, const String rhs)
 	return true;
 }
 
-void trim(String& str, const char* cut_set)
+int
+compare(const String lhs, const String rhs) // NOTE(bill): three-way comparison
+{
+	// Treat as cstring
+	const char* str1 = lhs;
+	const char* str2 = rhs;
+	int s1;
+	int s2;
+	do
+	{
+		s1 = *str1++;
+		s2 = *str2++;
+		if (s1 == 0)
+			break;
+	}
+	while (s1 == s2);
+
+	return (s1 < s2) ? -1 : (s1 > s2);
+}
+
+void
+trim(String* str, const char* cut_set)
 {
 	char* start;
 	char* end;
 	char* start_pos;
 	char* end_pos;
 
-	start_pos = start = str;
-	end_pos   = end   = str + string::length(str) - 1;
+	start_pos = start = *str;
+	end_pos   = end   = *str + string::length(*str) - 1;
 
 	while (start_pos <= end && strchr(cut_set, *start_pos))
 		start_pos++;
@@ -3187,13 +3584,185 @@ void trim(String& str, const char* cut_set)
 
 	Size len = static_cast<Size>((start_pos > end_pos) ? 0 : ((end_pos - start_pos)+1));
 
-	if (str != start_pos)
-		memory::move(str, start_pos, len);
-	str[len] = '\0';
+	if (*str != start_pos)
+		memory::move(*str, start_pos, len);
+	(*str)[len] = '\0';
 
-	string::header(str)->len = len;
+	string::header(*str)->len = len;
 }
 } // namespace string
+
+
+
+
+namespace strconv
+{
+// NOTE(bill): Inspired by the golang strconv library but not exactly due to numerous reasons
+
+bool
+parse_bool(const char* str, bool* value)
+{
+	if (str == nullptr)
+		return false;
+
+	if (str[0] == '\0')
+		return false;
+
+	if (str[0] == '1' ||
+	    str[0] == 't' ||
+	    str[0] == 'T')
+	{
+		*value = true;
+		return true;
+	}
+	if (str[0] == '0' ||
+	    str[0] == 'f' ||
+	    str[0] == 'F')
+	{
+		*value = false;
+		return true;
+	}
+	if ((str[0] == 't' &&
+	     str[1] == 'r' &&
+	     str[2] == 'u' &&
+	     str[3] == 'e') ||
+		(str[0] == 'T' &&
+	     str[1] == 'R' &&
+	     str[2] == 'U' &&
+	     str[3] == 'E'))
+	{
+		*value = true;
+		return true;
+	}
+
+	if ((str[0] == 'f' &&
+	     str[1] == 'a' &&
+	     str[2] == 'l' &&
+	     str[3] == 's' &&
+	     str[4] == 'e') ||
+		(str[0] == 'F' &&
+	     str[1] == 'A' &&
+	     str[2] == 'L' &&
+	     str[3] == 'S' &&
+	     str[4] == 'E'))
+	{
+		*value = false;
+		return true;
+	}
+
+	return false;
+}
+
+bool
+parse_f32(const char* str, f32* value)
+{
+	// TODO(bill):
+	return false;
+}
+
+bool
+parse_f64(const char* str, f64* value)
+{
+	// TODO(bill):
+	return false;
+}
+
+bool
+parse_int(const char* str, int base, s8* value)
+{
+	// TODO(bill):
+	return false;
+}
+
+bool
+parse_int(const char* str, int base, s16* value)
+{
+	// TODO(bill):
+	return false;
+}
+
+bool
+parse_int(const char* str, int base, s32* value)
+{
+	// TODO(bill):
+	return false;
+}
+
+bool
+parse_int(const char* str, int base, s64* value)
+{
+	// TODO(bill):
+	return false;
+}
+
+bool
+parse_uint(const char* str, int base, u8* value)
+{
+	// TODO(bill):
+	return false;
+}
+
+bool
+parse_uint(const char* str, int base, u16* value)
+{
+	// TODO(bill):
+	return false;
+}
+
+bool
+parse_uint(const char* str, int base, u32* value)
+{
+	// TODO(bill):
+	return false;
+}
+
+bool
+parse_uint(const char* str, int base, u64* value)
+{
+	// TODO(bill):
+	return false;
+}
+
+void
+format_bool(bool value, char* buffer, usize len)
+{
+	// TODO(bill):
+}
+
+void
+format_f32(f32 value, char* buffer, usize len)
+{
+	// TODO(bill):
+}
+
+void
+format_f64(f64 value, char* buffer, usize len)
+{
+	// TODO(bill):
+}
+
+void
+format_int(s64 value, char* buffer, usize len)
+{
+	// TODO(bill):
+}
+
+void
+format_uint(u64 value, char* buffer, usize len)
+{
+	// TODO(bill):
+}
+} // namespace strconv
+
+
+
+
+
+
+
+
+
+
 
 ////////////////////////////////
 ///                          ///
@@ -3203,7 +3772,8 @@ void trim(String& str, const char* cut_set)
 
 namespace hash
 {
-u32 adler32(const void* key, u32 num_bytes)
+u32
+adler32(const void* key, u32 num_bytes)
 {
 	const u32 MOD_ADLER = 65521;
 
@@ -3355,7 +3925,8 @@ global const u64 GB_CRC64_TABLE[256] = {
 };
 
 
-u32 crc32(const void* key, u32 num_bytes)
+u32
+crc32(const void* key, u32 num_bytes)
 {
 	u32 result = static_cast<u32>(~0);
 	const u8* c = reinterpret_cast<const u8*>(key);
@@ -3365,9 +3936,10 @@ u32 crc32(const void* key, u32 num_bytes)
 	return ~result;
 }
 
-u64 crc64(const void* key, usize num_bytes)
+u64
+crc64(const void* key, usize num_bytes)
 {
-	u64 result = (u64)~0;
+	u64 result = static_cast<u64>(~0);
 	const u8* c = reinterpret_cast<const u8*>(key);
 	for (usize remaining = num_bytes; remaining--; c++)
 		result = (result >> 8) ^ (GB_CRC64_TABLE[(result ^ *c) & 0xff]);
@@ -3395,7 +3967,8 @@ u64 crc64(const void* key, usize num_bytes)
 
 // }
 
-u32 murmur32(const void* key, u32 num_bytes, u32 seed)
+u32
+murmur32(const void* key, u32 num_bytes, u32 seed)
 {
 	local_persist const u32 c1 = 0xcc9e2d51;
 	local_persist const u32 c2 = 0x1b873593;
@@ -3446,7 +4019,8 @@ u32 murmur32(const void* key, u32 num_bytes, u32 seed)
 }
 
 #if defined(GB_ARCH_64_BIT)
-u64 murmur64(const void* key, usize num_bytes, u64 seed)
+u64
+murmur64(const void* key, usize num_bytes, u64 seed)
 {
 	local_persist const u64 m = 0xc6a4a7935bd1e995ULL;
 	local_persist const s32 r = 47;
@@ -3472,13 +4046,13 @@ u64 murmur64(const void* key, usize num_bytes, u64 seed)
 
 	switch (num_bytes & 7)
 	{
-	case 7: h ^= u64{data2[6]} << 48;
-	case 6: h ^= u64{data2[5]} << 40;
-	case 5: h ^= u64{data2[4]} << 32;
-	case 4: h ^= u64{data2[3]} << 24;
-	case 3: h ^= u64{data2[2]} << 16;
-	case 2: h ^= u64{data2[1]} << 8;
-	case 1: h ^= u64{data2[0]};
+	case 7: h ^= static_cast<u64>(data2[6]) << 48;
+	case 6: h ^= static_cast<u64>(data2[5]) << 40;
+	case 5: h ^= static_cast<u64>(data2[4]) << 32;
+	case 4: h ^= static_cast<u64>(data2[3]) << 24;
+	case 3: h ^= static_cast<u64>(data2[2]) << 16;
+	case 2: h ^= static_cast<u64>(data2[1]) << 8;
+	case 1: h ^= static_cast<u64>(data2[0]);
 		h *= m;
 	};
 
@@ -3489,7 +4063,8 @@ u64 murmur64(const void* key, usize num_bytes, u64 seed)
 	return h;
 }
 #elif GB_ARCH_32_BIT
-u64 murmur64(const void* key, usize num_bytes, u64 seed)
+u64
+murmur64(const void* key, usize num_bytes, u64 seed)
 {
 	local_persist const u32 m = 0x5bd1e995;
 	local_persist const s32 r = 24;
@@ -3563,8 +4138,10 @@ u64 murmur64(const void* key, usize num_bytes, u64 seed)
 ///                          ///
 ////////////////////////////////
 
-const Time TIME_ZERO = seconds(0);
+const Time TIME_ZERO = time::seconds(0);
 
+namespace time
+{
 #if defined(GB_SYSTEM_WINDOWS)
 
 internal LARGE_INTEGER
@@ -3575,7 +4152,8 @@ win32_get_frequency()
 	return f;
 }
 
-Time time_now()
+Time
+now()
 {
 	// NOTE(bill): std::chrono does not have a good enough precision in MSVC12
 	// and below. This may have been fixed in MSVC14 but unsure as of yet.
@@ -3597,10 +4175,11 @@ Time time_now()
 	// Restore the thread affinity
 	SetThreadAffinityMask(currentThread, previousMask);
 
-	return microseconds(1000000ll * t.QuadPart / s_frequency.QuadPart);
+	return time::microseconds(1000000ll * t.QuadPart / s_frequency.QuadPart);
 }
 
-void time_sleep(Time t)
+void
+sleep(Time t)
 {
 	if (t.microseconds <= 0)
 		return;
@@ -3612,14 +4191,15 @@ void time_sleep(Time t)
 	timeBeginPeriod(tc.wPeriodMin);
 
 	// Wait...
-	::Sleep(time_as_milliseconds(t));
+	::Sleep(time::as_milliseconds(t));
 
 	// Reset the timer resolution back to the system default
 	timeBeginPeriod(tc.wPeriodMin);
 }
 
 #else
-Time time_now()
+Time
+now()
 {
 #if defined(GB_SYSTEM_OSX)
 	s64 t = static_cast<s64>(mach_absolute_time());
@@ -3632,14 +4212,15 @@ Time time_now()
 #endif
 }
 
-void time_sleep(Time t)
+void
+sleep(Time t)
 {
 	if (t.microseconds <= 0)
 		return;
 
 	struct timespec spec = {};
-	spec.tv_sec = static_cast<s64>(time_as_seconds(t));
-	spec.tv_nsec = 1000ll * (time_as_microseconds(t) % 1000000ll);
+	spec.tv_sec = static_cast<s64>(as_seconds(t));
+	spec.tv_nsec = 1000ll * (as_microseconds(t) % 1000000ll);
 
 	nanosleep(&spec, nullptr);
 }
@@ -3649,131 +4230,221 @@ void time_sleep(Time t)
 Time seconds(f32 s)              { return {static_cast<s64>(s * 1000000ll)}; }
 Time milliseconds(s32 ms)        { return {static_cast<s64>(ms * 1000l)}; }
 Time microseconds(s64 us)        { return {us}; }
-f32 time_as_seconds(Time t)      { return static_cast<f32>(t.microseconds / 1000000.0f); }
-s32 time_as_milliseconds(Time t) { return static_cast<s32>(t.microseconds / 1000l); }
-s64 time_as_microseconds(Time t) { return t.microseconds; }
+f32 as_seconds(Time t)      { return static_cast<f32>(t.microseconds / 1000000.0f); }
+s32 as_milliseconds(Time t) { return static_cast<s32>(t.microseconds / 1000l); }
+s64 as_microseconds(Time t) { return t.microseconds; }
+} // namespace time
+bool operator==(Time left, Time right) { return left.microseconds == right.microseconds; }
+bool operator!=(Time left, Time right) { return !operator==(left, right); }
 
-bool operator==(Time left, Time right)
+bool operator<(Time left, Time right) { return left.microseconds < right.microseconds; }
+bool operator>(Time left, Time right) { return left.microseconds > right.microseconds; }
+
+bool operator<=(Time left, Time right) { return left.microseconds <= right.microseconds; }
+bool operator>=(Time left, Time right) { return left.microseconds >= right.microseconds; }
+
+Time operator-(Time right) { return {-right.microseconds}; }
+
+Time operator+(Time left, Time right) { return {left.microseconds + right.microseconds}; }
+Time operator-(Time left, Time right) { return {left.microseconds - right.microseconds}; }
+
+Time& operator+=(Time& left, Time right) { return (left = left + right); }
+Time& operator-=(Time& left, Time right) { return (left = left - right); }
+
+Time operator*(Time left, f32 right) { return time::seconds(time::as_seconds(left) * right); }
+Time operator*(Time left, s64 right) { return time::microseconds(time::as_microseconds(left) * right); }
+Time operator*(f32 left, Time right) { return time::seconds(time::as_seconds(right) * left); }
+Time operator*(s64 left, Time right) { return time::microseconds(time::as_microseconds(right) * left); }
+
+Time& operator*=(Time& left, f32 right) { return (left = left * right); }
+Time& operator*=(Time& left, s64 right) { return (left = left * right); }
+
+Time operator/(Time left, f32 right) { return time::seconds(time::as_seconds(left) / right); }
+Time operator/(Time left, s64 right) { return time::microseconds(time::as_microseconds(left) / right); }
+f32 operator/(Time left, Time right) { return time::as_seconds(left) / time::as_seconds(right); }
+
+Time& operator/=(Time& left, f32 right) { return (left = left / right); }
+Time& operator/=(Time& left, s64 right) { return (left = left / right); }
+
+
+Time operator%(Time left, Time right) { return time::microseconds(time::as_microseconds(left) % time::as_microseconds(right)); }
+Time& operator%=(Time& left, Time right) { return (left = left % right); }
+
+////////////////////////////////
+///                          ///
+/// OS                       ///
+///                          ///
+////////////////////////////////
+#if 0
+namespace file
 {
-	return left.microseconds == right.microseconds;
+#if defined(GB_SYSTEM_WINDOWS)
+
+internal char*
+duplicate_string(const char* string)
+{
+	usize len = strlen(string);
+	char* result = (char*)malloc(len + 1);
+	memory::copy(result, string, len);
+	result[len] = '\0';
+	return result;
 }
 
-bool operator!=(Time left, Time right)
+
+uintptr
+fd(const File* file)
 {
-	return !operator==(left, right);
+	if (file == nullptr)
+		return reinterpret_cast<uintptr>(INVALID_HANDLE_VALUE);
+	return reinterpret_cast<uintptr>(file->win32_handle);
 }
 
 
-bool operator<(Time left, Time right)
+bool
+new_from_fd(File* file, uintptr h, const char* name)
 {
-	return left.microseconds < right.microseconds;
+	GB_ASSERT(file == nullptr, "file == nullptr");
+	if (reinterpret_cast<HANDLE>(h) == INVALID_HANDLE_VALUE)
+		return false;
+	file->win32_handle = reinterpret_cast<HANDLE>(h);
+	file->name = duplicate_string(name);
+	// u32 m;
+	// file->is_console = GetConsoleMode(h, &m) != 0;
+	return true;
 }
 
-bool operator>(Time left, Time right)
+internal bool
+win32_open_file(File* file, const char* name, u32 flag, u32 perm)
 {
-	return left.microseconds > right.microseconds;
+	// TODO(bill):
+	return false;
 }
 
-bool operator<=(Time left, Time right)
+bool
+open(File* file, const char* name, u32 flag, u32 perm)
 {
-	return left.microseconds <= right.microseconds;
+	if (name == nullptr || name[0] == '\0') {
+		return false;
+	}
+	bool b = win32_open_file(file, name, flag, perm);
+	if (b)
+	{
+		file->mutex = mutex::make();
+		return true;
+	}
+	// TODO(bill): If directory
+
+	return false;
 }
 
-bool operator>=(Time left, Time right)
+bool
+close(File* file)
 {
-	return left.microseconds >= right.microseconds;
+	if (!file)
+		return false;
+
+	// TODO(bill): Handle directory
+
+	bool b = CloseHandle(file->win32_handle) != 0;
+	if (b)
+	{
+		free(file->name); // TODO(bill): When should this be freed?
+		mutex::destroy(&file->mutex);
+		return true;
+	}
+
+	return false;
 }
 
-Time operator-(Time right)
-{
-	return {-right.microseconds};
-}
+// internal bool
+// win32_pread(File* file, void* buffer, u32 bytes_to_read, s64 offset)
+// {
+// 	mutex::lock(&file->mutex);
+// 	defer (mutex::unlock(&file->mutex));
 
-Time operator+(Time left, Time right)
-{
-	return {left.microseconds + right.microseconds};
-}
+// 	return true;
+// }
 
-Time operator-(Time left, Time right)
-{
-	return {left.microseconds - right.microseconds};
-}
 
-Time& operator+=(Time& left, Time right)
-{
-	return (left = left + right);
-}
+// bool
+// open(File* file, const char* filename, u32 flags)
+// {
 
-Time& operator-=(Time& left, Time right)
-{
-	return (left = left - right);
-}
+// 	u32 win32_flags = 0;
+// 	if (flags & file::READ)
+// 		win32_flags |= GENERIC_READ;
+// 	if (flags & file::WRITE)
+// 		win32_flags |= GENERIC_WRITE;
 
-Time operator*(Time left, f32 right)
-{
-	return seconds(time_as_seconds(left) * right);
-}
+// 	file->win32_handle = CreateFileA(filename, win32_flags, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, 0);
+// 	return (file->win32_handle != INVALID_HANDLE_VALUE);
+// }
 
-Time operator*(Time left, s64 right)
-{
-	return microseconds(time_as_microseconds(left) * right);
-}
+// bool
+// create(File* file, const char* filename, u32 flags)
+// {
+// 	// TODO(bill):
+// 	return false;
+// }
 
-Time operator*(f32 left, Time right)
-{
-	return seconds(time_as_seconds(right) * left);
-}
+// bool
+// close(File* file)
+// {
+// 	return (CloseHandle(file->win32_handle) != 0);
+// }
 
-Time operator*(s64 left, Time right)
-{
-	return microseconds(time_as_microseconds(right) * left);
-}
 
-Time& operator*=(Time& left, f32 right)
-{
-	return (left = left * right);
-}
+// bool
+// read(File* file, void* buffer, u32 bytes_to_read)
+// {
+// 	DWORD win32_bytes_written;
+// 	BOOL b = ReadFile(file->win32_handle, buffer, bytes_to_read, &win32_bytes_written, nullptr);
+// 	if (!b || (bytes_to_read != win32_bytes_written))
+// 		return false;
+// 	return true;
+// }
 
-Time& operator*=(Time& left, s64 right)
-{
-	return (left = left * right);
-}
+// bool
+// write(File* file, const void* memory, u32 bytes_to_write)
+// {
+// 	DWORD win32_bytes_written;
+// 	BOOL b = WriteFile(file->win32_handle, memory, bytes_to_write, &win32_bytes_written, nullptr);
+// 	if (!b || (bytes_to_write != win32_bytes_written))
+// 		return false;
+// 	return true;
+// }
 
-Time operator/(Time left, f32 right)
-{
-	return seconds(time_as_seconds(left) / right);
-}
+// bool read_at(File* file, void* buffer, u32 bytes_to_read, s64 offset)
+// {
+// 	file::set_pos(file, offset);
+// 	bool b = read(file, buffer, bytes_to_reads);
+// 	return b;
+// }
 
-Time operator/(Time left, s64 right)
-{
-	return microseconds(time_as_microseconds(left) / right);
+// bool write_at(File* file, const void* memory, u32 bytes_to_write, s64 offset)
+// {
+// 	file::set_pos(file, offset);
+// 	bool b = write(file, memory, bytes_to_write);
+// 	return b;
+// }
 
-}
 
-Time& operator/=(Time& left, f32 right)
-{
-	return (left = left / right);
-}
+// s64
+// size(File* file)
+// {
+// 	LARGE_INTEGER file_size;
+// 	BOOL b = GetFileSizeEx(file->win32_handle, &file_size);
+// 	if (b)
+// 		return static_cast<s64>(file_size.QuadPart);
+// 	return -1;
+// }
 
-Time& operator/=(Time& left, s64 right)
-{
-	return (left = left / right);
-}
 
-f32 operator/(Time left, Time right)
-{
-	return time_as_seconds(left) / time_as_seconds(right);
-}
-
-Time operator%(Time left, Time right)
-{
-	return microseconds(time_as_microseconds(left) % time_as_microseconds(right));
-}
-
-Time& operator%=(Time& left, Time right)
-{
-	return (left = left % right);
-}
+#else
+	#error Implement file system
+#endif
+} // namespace file
+#endif
 
 ////////////////////////////////
 ///                          ///
@@ -4507,7 +5178,6 @@ Transform& operator/=(Transform& ws, const Transform& ps)
 
 namespace math
 {
-const f32 EPSILON         = FLT_EPSILON;
 const f32 ZERO            = 0.0f;
 const f32 ONE             = 1.0f;
 const f32 THIRD           = 0.33333333f;
@@ -4681,11 +5351,11 @@ equals(f32 a, f32 b, f32 precision)
 
 template <typename T>
 inline void
-swap(T& a, T& b)
+swap(T* a, T* b)
 {
-	T c = gb::move(a);
-	a   = gb::move(b);
-	b   = gb::move(c);
+	T c = gb::move(*a);
+	*a  = gb::move(*b);
+	*b  = gb::move(c);
 }
 
 template <typename T, usize N>
@@ -4693,7 +5363,7 @@ inline void
 swap(T (& a)[N], T (& b)[N])
 {
 	for (usize i = 0; i < N; i++)
-		math::swap(a[i], b[i]);
+		math::swap(&a[i], &b[i]);
 }
 
 // Vector2 functions
@@ -5534,7 +6204,7 @@ look_at_quaternion(const Vector3& eye, const Vector3& center, const Vector3& up)
 	if (math::equals(math::magnitude(center - eye), 0, 0.001f))
 		return QUATERNION_IDENTITY; // You cannot look at where you are!
 
-#if 0
+#if 1
 	return matrix4_to_quaternion(look_at_matrix4(eye, center, up));
 #else
 	// TODO(bill): Thoroughly test this look_at_quaternion!
@@ -5593,289 +6263,6 @@ transform_to_matrix4(const Transform& t)
 		   math::scale(t.scale);                        //
 }
 
-
-// Aabb Functions
-inline Aabb
-calculate_aabb(const void* vertices, usize num_vertices, usize stride, usize offset)
-{
-	Vector3 min;
-	Vector3 max;
-	const u8* vertex = reinterpret_cast<const u8*>(vertices);
-	vertex += offset;
-	Vector3 position = pseudo_cast<Vector3>(vertex);
-	min.x = max.x = position.x;
-	min.y = max.y = position.y;
-	min.z = max.z = position.z;
-	vertex += stride;
-
-	for (usize i = 1; i < num_vertices; i++)
-	{
-		position = pseudo_cast<Vector3>(vertex);
-		vertex += stride;
-
-		Vector3 p = position;
-		min.x = math::min(p.x, min.x);
-		min.y = math::min(p.y, min.y);
-		min.z = math::min(p.z, min.z);
-		max.x = math::max(p.x, max.x);
-		max.y = math::max(p.y, max.y);
-		max.z = math::max(p.z, max.z);
-	}
-
-	Aabb aabb;
-
-	aabb.center    = 0.5f * (min + max);
-	aabb.half_size = 0.5f * (max - min);
-
-	return aabb;
-}
-
-inline f32
-aabb_surface_area(const Aabb& aabb)
-{
-	Vector3 h = aabb.half_size * 2.0f;
-	f32 s = 0.0f;
-	s += h.x * h.y;
-	s += h.y * h.z;
-	s += h.z * h.x;
-	s *= 3.0f;
-	return s;
-}
-
-inline f32
-aabb_volume(const Aabb& aabb)
-{
-	Vector3 h = aabb.half_size * 2.0f;
-	return h.x * h.y * h.z;
-}
-
-inline Sphere
-aabb_to_sphere(const Aabb& aabb)
-{
-	Sphere s;
-	s.center = aabb.center;
-	s.radius = math::magnitude(aabb.half_size);
-	return s;
-}
-
-
-inline bool
-contains(const Aabb& aabb, const Vector3& point)
-{
-	Vector3 distance = aabb.center - point;
-
-	// NOTE(bill): & is faster than &&
-	return (math::abs(distance.x) <= aabb.half_size.x) &
-		   (math::abs(distance.y) <= aabb.half_size.y) &
-		   (math::abs(distance.z) <= aabb.half_size.z);
-}
-
-inline bool
-contains(const Aabb& a, const Aabb& b)
-{
-	Vector3 dist = a.center - b.center;
-
-	// NOTE(bill): & is faster than &&
-	return (math::abs(dist.x) + b.half_size.x <= a.half_size.x) &
-		   (math::abs(dist.y) + b.half_size.y <= a.half_size.y) &
-		   (math::abs(dist.z) + b.half_size.z <= a.half_size.z);
-}
-
-
-inline bool
-intersects(const Aabb& a, const Aabb& b)
-{
-	Vector3 dist = a.center - b.center;
-	Vector3 sum_half_sizes = a.half_size + b.half_size;
-
-	// NOTE(bill): & is faster than &&
-	return (math::abs(dist.x) <= sum_half_sizes.x) &
-		   (math::abs(dist.y) <= sum_half_sizes.y) &
-		   (math::abs(dist.z) <= sum_half_sizes.z);
-}
-
-inline Aabb
-aabb_transform_affine(const Aabb& aabb, const Matrix4& m)
-{
-	GB_ASSERT(math::is_affine(m),
-			  "Passed Matrix4 must be an affine matrix");
-
-	Aabb result;
-	Vector4 ac;
-	ac.xyz = aabb.center;
-	ac.w   = 1;
-	result.center = (m * ac).xyz;
-
-	Vector3 hs = aabb.half_size;
-	f32 x = math::abs(m[0][0] * hs.x + math::abs(m[0][1]) * hs.y + math::abs(m[0][2]) * hs.z);
-	f32 y = math::abs(m[1][0] * hs.x + math::abs(m[1][1]) * hs.y + math::abs(m[1][2]) * hs.z);
-	f32 z = math::abs(m[2][0] * hs.x + math::abs(m[2][1]) * hs.y + math::abs(m[2][2]) * hs.z);
-
-	result.half_size.x = math::is_infinite(math::abs(hs.x)) ? hs.x : x;
-	result.half_size.y = math::is_infinite(math::abs(hs.y)) ? hs.y : y;
-	result.half_size.z = math::is_infinite(math::abs(hs.z)) ? hs.z : z;
-
-	return result;
-}
-
-
-// Sphere Functions
-inline Sphere
-calculate_min_bounding_sphere(const void* vertices, usize num_vertices, usize stride, usize offset, f32 step)
-{
-	auto ran_gen = random::make_random_device();
-	auto gen = random::make_mt19937_64(random::next(&ran_gen));
-
-	const u8* vertex = reinterpret_cast<const u8*>(vertices);
-	vertex += offset;
-
-	Vector3 position = pseudo_cast<Vector3>(vertex[0]);
-	Vector3 center = position;
-	center += pseudo_cast<Vector3>(vertex[1 * stride]);
-	center *= 0.5f;
-
-	Vector3 d = position - center;
-	f32 max_dist_sq = math::dot(d, d);
-	f32 radius_step = step * 0.37f;
-
-	bool done;
-	do
-	{
-		done = true;
-		for (usize i = 0, index = random::uniform_usize_distribution(&gen, 0, num_vertices-1);
-			 i < num_vertices;
-			 i++, index = (index + 1)%num_vertices)
-		{
-			Vector3 position = pseudo_cast<Vector3>(vertex[index * stride]);
-
-			d = position - center;
-			f32 dist_sq = math::dot(d, d);
-
-			if (dist_sq > max_dist_sq)
-			{
-				done = false;
-
-				center = d * radius_step;
-				max_dist_sq = math::lerp(max_dist_sq, dist_sq, step);
-
-				break;
-			}
-		}
-	}
-	while (!done);
-
-	Sphere result;
-
-	result.center = center;
-	result.radius = math::sqrt(max_dist_sq);
-
-	return result;
-}
-
-inline Sphere
-calculate_max_bounding_sphere(const void* vertices, usize num_vertices, usize stride, usize offset)
-{
-	Aabb aabb = calculate_aabb(vertices, num_vertices, stride, offset);
-
-	Vector3 center = aabb.center;
-
-	f32 max_dist_sq = 0.0f;
-	const u8* vertex = reinterpret_cast<const u8*>(vertices);
-	vertex += offset;
-
-	for (usize i = 0; i < num_vertices; i++)
-	{
-		Vector3 position = pseudo_cast<Vector3>(vertex);
-		vertex += stride;
-
-		Vector3 d = position - center;
-		f32 dist_sq = math::dot(d, d);
-		max_dist_sq = math::max(dist_sq, max_dist_sq);
-	}
-
-	Sphere sphere;
-	sphere.center = center;
-	sphere.radius = math::sqrt(max_dist_sq);
-
-	return sphere;
-}
-
-inline f32
-sphere_surface_area(const Sphere& s)
-{
-	return 2.0f * TAU * s.radius * s.radius;
-}
-
-inline f32
-sphere_volume(const Sphere& s)
-{
-	return TWO_THIRDS * TAU * s.radius * s.radius * s.radius;
-}
-
-inline Aabb
-sphere_to_aabb(const Sphere& s)
-{
-	Aabb a;
-	a.center = s.center;
-	a.half_size.x = s.radius * SQRT_3;
-	a.half_size.y = s.radius * SQRT_3;
-	a.half_size.z = s.radius * SQRT_3;
-	return a;
-}
-
-inline bool
-sphere_contains_point(const Sphere& s, const Vector3& point)
-{
-	Vector3 dr = point - s.center;
-	f32 distance = math::dot(dr, dr);
-	return distance < s.radius * s.radius;
-}
-
-// Plane Functions
-inline f32
-ray_plane_intersection(const Vector3& from, const Vector3& dir, const Plane& p)
-{
-	f32 nd   = math::dot(dir,  p.normal);
-	f32 orpn = math::dot(from, p.normal);
-	f32 dist = -1.0f;
-
-	if (nd < 0.0f)
-		dist = (-p.distance - orpn) / nd;
-
-	return dist > 0.0f ? dist : -1.0f;
-}
-
-inline f32
-ray_sphere_intersection(const Vector3& from, const Vector3& dir, const Sphere& s)
-{
-	Vector3 v = s.center - from;
-	f32 b = math::dot(v, dir);
-	f32 det = (s.radius * s.radius) - math::dot(v, v) + (b * b);
-
-	if (det < 0.0 || b < s.radius)
-		return -1.0f;
-	return b - math::sqrt(det);
-}
-
-inline bool
-plane_3_intersection(const Plane& p1, const Plane& p2, const Plane& p3, Vector3& ip)
-{
-	const Vector3& n1 = p1.normal;
-	const Vector3& n2 = p2.normal;
-	const Vector3& n3 = p3.normal;
-
-	f32 den = -math::dot(math::cross(n1, n2), n3);
-
-	if (math::equals(den, 0.0f))
-		return false;
-
-	Vector3 res = p1.distance * math::cross(n2, n3)
-				+ p2.distance * math::cross(n3, n1)
-				+ p3.distance * math::cross(n1, n2);
-	ip = res / den;
-
-	return true;
-}
 
 global s32 g_perlin_randtab[512] =
 {
@@ -5996,9 +6383,296 @@ perlin_noise3(f32 x, f32 y, f32 z, s32 x_wrap, s32 y_wrap, s32 z_wrap)
 
 	return math::lerp(n0,n1,u);
 }
-
-
 } // namespace math
+
+
+namespace aabb
+{
+inline Aabb
+calculate(const void* vertices, usize num_vertices, usize stride, usize offset)
+{
+	Vector3 min;
+	Vector3 max;
+	const u8* vertex = reinterpret_cast<const u8*>(vertices);
+	vertex += offset;
+	Vector3 position = pseudo_cast<Vector3>(vertex);
+	min.x = max.x = position.x;
+	min.y = max.y = position.y;
+	min.z = max.z = position.z;
+	vertex += stride;
+
+	for (usize i = 1; i < num_vertices; i++)
+	{
+		position = pseudo_cast<Vector3>(vertex);
+		vertex += stride;
+
+		Vector3 p = position;
+		min.x = math::min(p.x, min.x);
+		min.y = math::min(p.y, min.y);
+		min.z = math::min(p.z, min.z);
+		max.x = math::max(p.x, max.x);
+		max.y = math::max(p.y, max.y);
+		max.z = math::max(p.z, max.z);
+	}
+
+	Aabb aabb;
+
+	aabb.center    = 0.5f * (min + max);
+	aabb.half_size = 0.5f * (max - min);
+
+	return aabb;
+}
+
+inline f32
+surface_area(const Aabb& aabb)
+{
+	Vector3 h = aabb.half_size * 2.0f;
+	f32 s = 0.0f;
+	s += h.x * h.y;
+	s += h.y * h.z;
+	s += h.z * h.x;
+	s *= 3.0f;
+	return s;
+}
+
+inline f32
+volume(const Aabb& aabb)
+{
+	Vector3 h = aabb.half_size * 2.0f;
+	return h.x * h.y * h.z;
+}
+
+inline Sphere
+to_sphere(const Aabb& aabb)
+{
+	Sphere s;
+	s.center = aabb.center;
+	s.radius = math::magnitude(aabb.half_size);
+	return s;
+}
+
+
+inline bool
+contains(const Aabb& aabb, const Vector3& point)
+{
+	Vector3 distance = aabb.center - point;
+
+	// NOTE(bill): & is faster than &&
+	return (math::abs(distance.x) <= aabb.half_size.x) &
+		   (math::abs(distance.y) <= aabb.half_size.y) &
+		   (math::abs(distance.z) <= aabb.half_size.z);
+}
+
+inline bool
+contains(const Aabb& a, const Aabb& b)
+{
+	Vector3 dist = a.center - b.center;
+
+	// NOTE(bill): & is faster than &&
+	return (math::abs(dist.x) + b.half_size.x <= a.half_size.x) &
+		   (math::abs(dist.y) + b.half_size.y <= a.half_size.y) &
+		   (math::abs(dist.z) + b.half_size.z <= a.half_size.z);
+}
+
+
+inline bool
+intersects(const Aabb& a, const Aabb& b)
+{
+	Vector3 dist = a.center - b.center;
+	Vector3 sum_half_sizes = a.half_size + b.half_size;
+
+	// NOTE(bill): & is faster than &&
+	return (math::abs(dist.x) <= sum_half_sizes.x) &
+		   (math::abs(dist.y) <= sum_half_sizes.y) &
+		   (math::abs(dist.z) <= sum_half_sizes.z);
+}
+
+inline Aabb
+transform_affine(const Aabb& aabb, const Matrix4& m)
+{
+	GB_ASSERT(math::is_affine(m),
+			  "Passed Matrix4 must be an affine matrix");
+
+	Aabb result;
+	Vector4 ac;
+	ac.xyz = aabb.center;
+	ac.w   = 1;
+	result.center = (m * ac).xyz;
+
+	Vector3 hs = aabb.half_size;
+	f32 x = math::abs(m[0][0] * hs.x + math::abs(m[0][1]) * hs.y + math::abs(m[0][2]) * hs.z);
+	f32 y = math::abs(m[1][0] * hs.x + math::abs(m[1][1]) * hs.y + math::abs(m[1][2]) * hs.z);
+	f32 z = math::abs(m[2][0] * hs.x + math::abs(m[2][1]) * hs.y + math::abs(m[2][2]) * hs.z);
+
+	result.half_size.x = math::is_infinite(math::abs(hs.x)) ? hs.x : x;
+	result.half_size.y = math::is_infinite(math::abs(hs.y)) ? hs.y : y;
+	result.half_size.z = math::is_infinite(math::abs(hs.z)) ? hs.z : z;
+
+	return result;
+}
+} // namespace aabb
+
+namespace sphere
+{
+inline Sphere
+calculate_min_bounding(const void* vertices, usize num_vertices, usize stride, usize offset, f32 step)
+{
+	auto ran_gen = random::make_random_device();
+	auto gen = random::make_mt19937_64(random::next(&ran_gen));
+
+	const u8* vertex = reinterpret_cast<const u8*>(vertices);
+	vertex += offset;
+
+	Vector3 position = pseudo_cast<Vector3>(vertex[0]);
+	Vector3 center = position;
+	center += pseudo_cast<Vector3>(vertex[1 * stride]);
+	center *= 0.5f;
+
+	Vector3 d = position - center;
+	f32 max_dist_sq = math::dot(d, d);
+	f32 radius_step = step * 0.37f;
+
+	bool done;
+	do
+	{
+		done = true;
+		for (usize i = 0, index = random::uniform_usize_distribution(&gen, 0, num_vertices-1);
+			 i < num_vertices;
+			 i++, index = (index + 1)%num_vertices)
+		{
+			Vector3 position = pseudo_cast<Vector3>(vertex[index * stride]);
+
+			d = position - center;
+			f32 dist_sq = math::dot(d, d);
+
+			if (dist_sq > max_dist_sq)
+			{
+				done = false;
+
+				center = d * radius_step;
+				max_dist_sq = math::lerp(max_dist_sq, dist_sq, step);
+
+				break;
+			}
+		}
+	}
+	while (!done);
+
+	Sphere result;
+
+	result.center = center;
+	result.radius = math::sqrt(max_dist_sq);
+
+	return result;
+}
+
+inline Sphere
+calculate_max_bounding(const void* vertices, usize num_vertices, usize stride, usize offset)
+{
+	Aabb aabb = aabb::calculate(vertices, num_vertices, stride, offset);
+
+	Vector3 center = aabb.center;
+
+	f32 max_dist_sq = 0.0f;
+	const u8* vertex = reinterpret_cast<const u8*>(vertices);
+	vertex += offset;
+
+	for (usize i = 0; i < num_vertices; i++)
+	{
+		Vector3 position = pseudo_cast<Vector3>(vertex);
+		vertex += stride;
+
+		Vector3 d = position - center;
+		f32 dist_sq = math::dot(d, d);
+		max_dist_sq = math::max(dist_sq, max_dist_sq);
+	}
+
+	Sphere sphere;
+	sphere.center = center;
+	sphere.radius = math::sqrt(max_dist_sq);
+
+	return sphere;
+}
+
+inline f32
+surface_area(const Sphere& s)
+{
+	return 2.0f * math::TAU * s.radius * s.radius;
+}
+
+inline f32
+volume(const Sphere& s)
+{
+	return math::TWO_THIRDS * math::TAU * s.radius * s.radius * s.radius;
+}
+
+inline Aabb
+to_aabb(const Sphere& s)
+{
+	Aabb a;
+	a.center = s.center;
+	a.half_size.x = s.radius * math::SQRT_3;
+	a.half_size.y = s.radius * math::SQRT_3;
+	a.half_size.z = s.radius * math::SQRT_3;
+	return a;
+}
+
+inline bool
+contains_point(const Sphere& s, const Vector3& point)
+{
+	Vector3 dr = point - s.center;
+	f32 distance = math::dot(dr, dr);
+	return distance < s.radius * s.radius;
+}
+
+inline f32
+ray_intersection(const Vector3& from, const Vector3& dir, const Sphere& s)
+{
+	Vector3 v = s.center - from;
+	f32 b = math::dot(v, dir);
+	f32 det = (s.radius * s.radius) - math::dot(v, v) + (b * b);
+
+	if (det < 0.0 || b < s.radius)
+		return -1.0f;
+	return b - math::sqrt(det);
+}
+} // namespace sphere
+
+namespace plane
+{
+inline f32
+ray_intersection(const Vector3& from, const Vector3& dir, const Plane& p)
+{
+	f32 nd   = math::dot(dir,  p.normal);
+	f32 orpn = math::dot(from, p.normal);
+	f32 dist = -1.0f;
+
+	if (nd < 0.0f)
+		dist = (-p.distance - orpn) / nd;
+
+	return dist > 0.0f ? dist : -1.0f;
+}
+
+inline bool
+intersection3(const Plane& p1, const Plane& p2, const Plane& p3, Vector3* ip)
+{
+	const Vector3& n1 = p1.normal;
+	const Vector3& n2 = p2.normal;
+	const Vector3& n3 = p3.normal;
+
+	f32 den = -math::dot(math::cross(n1, n2), n3);
+
+	if (math::equals(den, 0.0f))
+		return false;
+
+	Vector3 res = p1.distance * math::cross(n2, n3)
+				+ p2.distance * math::cross(n3, n1)
+				+ p3.distance * math::cross(n1, n2);
+	*ip = res / den;
+
+	return true;
+}
+} // namespace plane
 
 namespace random
 {
@@ -6050,7 +6724,7 @@ Mt19937_32::next_u64()
 {
 	s32 n = next();
 	u64 a = n;
-	a = (u64)(a << 32) | (u64)next();
+	a = static_cast<u64>(a << 32) | static_cast<u64>(next());
 	return a;
 }
 
@@ -6059,7 +6733,7 @@ Mt19937_32::next_s64()
 {
 	s32 n = next();
 	u64 a = n;
-	a = (u64)(a << 32) | (u64)next();
+	a = static_cast<u64>(a << 32) | static_cast<u64>(next());
 	return bit_cast<s64>(a);
 }
 
@@ -6075,7 +6749,7 @@ Mt19937_32::next_f64()
 {
 	s32 n = next();
 	u64 a = n;
-	a = (u64)(a << 32) | (u64)next();
+	a = static_cast<u64>(a << 32) | static_cast<u64>(next());
 	return bit_cast<f64>(a);
 }
 
@@ -6164,7 +6838,7 @@ Random_Device::next()
 {
 	u32 result = 0;
 #if defined(GB_SYSTEM_WINDOWS)
-//	rand_s(&result); // TODO(bill): fix this
+	// rand_s(&result); // TODO(bill): fix this
 #else
 	#error Implement Random_Device::next() for this platform
 #endif
