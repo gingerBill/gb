@@ -1,8 +1,9 @@
-// gb.hpp - v0.16 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.18 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
 Version History:
+	0.18  - Hash_Table bug fixes
 	0.17  - Death to OOP
 	0.16  - All References are const convention
 	0.15  - Namespaced Types
@@ -703,10 +704,10 @@ struct Thread
 namespace thread
 {
 Thread make();
-void destroy(Thread* thread);
-void start(Thread* thread, Thread_Function* func, void* data = nullptr, usize stack_size = 0);
-void stop(Thread* thread);
-bool is_running(const Thread& thread);
+void destroy(Thread* t);
+void start(Thread* t, Thread_Function* func, void* data = nullptr, usize stack_size = 0);
+void stop(Thread* t);
+bool is_running(const Thread& t);
 } // namespace thread
 
 
@@ -898,8 +899,8 @@ template <usize BUFFER_SIZE>
 void*
 Temp_Allocator<BUFFER_SIZE>::alloc(usize size, usize align)
 {
-	current_pointer = (u8*)memory::align_forward(current_pointer, align);
-	if (size > (usize)physical_end - current_pointer)
+	current_pointer = static_cast<u8*>(memory::align_forward(current_pointer, align));
+	if (size > static_cast<usize>(physical_end) - current_pointer)
 	{
 		usize to_allocate = sizeof(void*) + size + align;
 		if (to_allocate < chunk_size)
@@ -907,17 +908,16 @@ Temp_Allocator<BUFFER_SIZE>::alloc(usize size, usize align)
 		chunk_size *= 2;
 		void* ptr = backing_->alloc(to_allocate);
 		*static_cast<void**>(physical_start) = ptr;
-		current_pointer = physical_start = (u8*)ptr;
+		current_pointer = physical_start = static_cast<u8*>(ptr);
 		*static_cast<void**>(physical_start) = 0;
 		current_pointer = memory::pointer_add(current_pointer, sizeof(void*));
-		current_pointer = (u8*)memory::align_forward(current_pointer, align);
+		current_pointer = static_cast<u8*>(memory::align_forward(current_pointer, align));
 	}
 
 	void* result = current_pointer;
 	current_pointer += size;
 	return (result);
 }
-
 
 namespace memory
 {
@@ -1161,7 +1161,7 @@ struct Hash_Table
 	Array<s64>   hashes;
 	Array<Entry> entries;
 
-	Hash_Table() = default;
+	Hash_Table();
 	explicit Hash_Table(Allocator* a);
 	Hash_Table(const Hash_Table<T>& other);
 	Hash_Table<T>& operator=(const Hash_Table<T>& other);
@@ -1226,7 +1226,6 @@ Array<T>::Array(Allocator* a, usize count_)
 , capacity(0)
 , data(nullptr)
 {
-
 	if (count_ > 0)
 	{
 		data = alloc_array<T>(a, count_);
@@ -1254,7 +1253,7 @@ template <typename T>
 inline
 Array<T>::~Array()
 {
-	if (allocator)
+	if (allocator && capacity > 0)
 		dealloc(allocator, data);
 }
 
@@ -1263,6 +1262,8 @@ template <typename T>
 Array<T>&
 Array<T>::operator=(const Array<T>& other)
 {
+	if (allocator == nullptr)
+		allocator = other.allocator;
 	const auto n = other.count;
 	array::resize(this, n);
 	memory::copy(data, other.data, n * sizeof(T));
@@ -1276,11 +1277,8 @@ template <typename T>
 inline Array<T>
 make(Allocator* allocator, usize count)
 {
-	Array<T> array = {};
-	array.allocator = allocator;
-	array.count = 0;
-	array.capacity = 0;
-	array.data = nullptr;
+	Array<T> array{allocator};
+
 	if (count > 0)
 	{
 		array.data = alloc_array<T>(allocator, count);
@@ -1293,10 +1291,10 @@ make(Allocator* allocator, usize count)
 
 template <typename T>
 inline void
-dealloc(Array<T>* array)
+dealloc(Array<T>* a)
 {
-	if (array.allocator)
-		dealloc(array.allocator, array.data);
+	if (a->allocator)
+		dealloc(a->allocator, a->data);
 }
 
 template <typename T>
@@ -1312,7 +1310,7 @@ template <typename T>
 inline void
 append(Array<T>* a, const T* items, usize count)
 {
-	if (a->capacity <= a->count + count)
+	if (a->capacity <= a->count + static_cast<s64>(count))
 		array::grow(a, a->count + count);
 
 	memory::copy(&a->data[a->count], items, count * sizeof(T));
@@ -1389,6 +1387,13 @@ grow(Array<T>* a, usize min_capacity)
 /// Hash Table               ///
 ///                          ///
 ////////////////////////////////
+template <typename T>
+inline
+Hash_Table<T>::Hash_Table()
+: hashes()
+, entries()
+{
+}
 
 template <typename T>
 inline
@@ -1410,8 +1415,8 @@ template <typename T>
 inline Hash_Table<T>&
 Hash_Table<T>::operator=(const Hash_Table<T>& other)
 {
-	hashes = other.hashes;
-	entries   = other.entries;
+	hashes  = other.hashes;
+	entries = other.entries;
 	return *this;
 }
 
@@ -1422,7 +1427,8 @@ template <typename T>
 inline Hash_Table<T>
 make(Allocator* a)
 {
-	return Hash_Table<T>(a);
+	Hash_Table<T> h{a};
+	return h;
 }
 
 namespace impl
@@ -1602,11 +1608,11 @@ rehash(Hash_Table<T>* h, usize new_capacity)
 		multi_hash_table::insert(&nh, e.key, e.value);
 	}
 
-	auto empty = hash_table::make<T>(h->hashes.allocator);
+	Hash_Table<T> empty_ht{h->hashes.allocator};
 	h->~Hash_Table<T>();
 
-	memory::copy(&h,  &nh,    sizeof(Hash_Table<T>));
-	memory::copy(&nh, &empty, sizeof(Hash_Table<T>));
+	memory::copy(h,   &nh,       sizeof(Hash_Table<T>));
+	memory::copy(&nh, &empty_ht, sizeof(Hash_Table<T>));
 }
 
 template <typename T>
@@ -2275,6 +2281,7 @@ extern const f32 PI;
 extern const f32 TAU;
 extern const f32 SQRT_2;
 extern const f32 SQRT_3;
+extern const f32 SQRT_5;
 
 extern const f32 F32_PRECISION;
 
@@ -3130,43 +3137,43 @@ namespace thread
 Thread
 make()
 {
-	Thread thread = {};
+	Thread t = {};
 #if defined(GB_SYSTEM_WINDOWS)
-	thread.win32_handle = INVALID_HANDLE_VALUE;
+	t.win32_handle = INVALID_HANDLE_VALUE;
 #else
-	thread.posix_handle = 0;
+	t.posix_handle = 0;
 #endif
-	thread.function = nullptr;
-	thread.data = nullptr;
-	thread.stack_size = 0;
-	thread.is_running = false;
-	thread.semaphore = semaphore::make();
+	t.function = nullptr;
+	t.data = nullptr;
+	t.stack_size = 0;
+	t.is_running = false;
+	t.semaphore = semaphore::make();
 
-	return thread;
+	return t;
 }
 
 void
-destroy(Thread* thread)
+destroy(Thread* t)
 {
-	if (thread->is_running)
-		thread::stop(thread);
+	if (t->is_running)
+		thread::stop(t);
 
-	semaphore::destroy(&thread->semaphore);
+	semaphore::destroy(&t->semaphore);
 }
 
 internal s32
-run(Thread* thread)
+run(Thread* t)
 {
-	semaphore::post(&thread->semaphore);
-	return thread->function(thread->data);
+	semaphore::post(&t->semaphore);
+	return t->function(t->data);
 }
 
 #if defined(GB_SYSTEM_WINDOWS)
 internal DWORD WINAPI
 thread_proc(void* arg)
 {
-	Thread* thread = static_cast<Thread*>(arg);
-	s32 result = thread::run(thread);
+	Thread* t = static_cast<Thread*>(arg);
+	s32 result = thread::run(t);
 	return result;
 }
 
@@ -3182,17 +3189,17 @@ thread_proc(void* arg)
 #endif
 
 void
-start(Thread* thread, Thread_Function* func, void* data, usize stack_size)
+start(Thread* t, Thread_Function* func, void* data, usize stack_size)
 {
-	GB_ASSERT(!thread->is_running);
+	GB_ASSERT(!t->is_running);
 	GB_ASSERT(func != nullptr);
-	thread->function = func;
-	thread->data = data;
-	thread->stack_size = stack_size;
+	t->function = func;
+	t->data = data;
+	t->stack_size = stack_size;
 
 #if defined(GB_SYSTEM_WINDOWS)
-	thread->win32_handle = CreateThread(nullptr, stack_size, thread_proc, thread, 0, nullptr);
-	GB_ASSERT(thread->win32_handle != nullptr,
+	t->win32_handle = CreateThread(nullptr, stack_size, thread_proc, t, 0, nullptr);
+	GB_ASSERT(t->win32_handle != nullptr,
 	          "CreateThread: GetLastError = %d", GetLastError());
 
 #else
@@ -3201,13 +3208,13 @@ start(Thread* thread, Thread_Function* func, void* data, usize stack_size)
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 	GB_ASSERT(result == 0, "pthread_attr_init: errno = %d", result);
 
-	if (thread->stack_size != 0)
+	if (t->stack_size != 0)
 	{
-		result = pthread_attr_setstacksize(&attr, thread->stack_size);
+		result = pthread_attr_setstacksize(&attr, t->stack_size);
 		GB_ASSERT(result == 0, "pthread_attr_setstacksize: errno = %d", result);
 	}
 
-	result = pthread_create(&thread->posix_handle, &attr, thread_proc, thread);
+	result = pthread_create(&t->posix_handle, &attr, thread_proc, thread);
 	GB_ASSERT(result == 0, "pthread_create: errno = %d", result);
 
 	// NOTE(bill): Free attr memory
@@ -3217,25 +3224,26 @@ start(Thread* thread, Thread_Function* func, void* data, usize stack_size)
 	// NOTE(bill): So much boiler patch compared to windows.h (for once)
 #endif
 
-	thread->is_running = true;
-	semaphore::wait(&thread->semaphore);
+	t->is_running = true;
+	semaphore::wait(&t->semaphore);
 }
 
 void
-stop(Thread* thread)
+stop(Thread* t)
 {
-	if (!thread->is_running)
+	if (!t->is_running)
 		return;
 
 #if defined(GB_SYSTEM_WINDOWS)
-	WaitForSingleObject(thread->win32_handle, INFINITE);
-	CloseHandle(thread->win32_handle);
-	thread->win32_handle = INVALID_HANDLE_VALUE;
+	WaitForSingleObject(t->win32_handle, INFINITE);
+	CloseHandle(t->win32_handle);
+	t->win32_handle = INVALID_HANDLE_VALUE;
 #else
-
+	int result = pthread_join(t->posix_handle, nullptr);
+	t->posix_handle = 0;
 #endif
 
-	thread->is_running = false;
+	t->is_running = false;
 }
 
 bool
@@ -5178,15 +5186,16 @@ Transform& operator/=(Transform& ws, const Transform& ps)
 
 namespace math
 {
-const f32 ZERO            = 0.0f;
-const f32 ONE             = 1.0f;
-const f32 THIRD           = 0.33333333f;
-const f32 TWO_THIRDS      = 0.66666667f;
-const f32 E               = 2.718281828f;
-const f32 PI              = 3.141592654f;
-const f32 TAU             = 6.283185307f;
-const f32 SQRT_2          = 1.414213562f;
-const f32 SQRT_3          = 1.732050808f;
+const f32 ZERO       = 0.0f;
+const f32 ONE        = 1.0f;
+const f32 THIRD      = 0.33333333f;
+const f32 TWO_THIRDS = 0.66666667f;
+const f32 E          = 2.718281828f;
+const f32 PI         = 3.141592654f;
+const f32 TAU        = 6.283185307f;
+const f32 SQRT_2     = 1.414213562f;
+const f32 SQRT_3     = 1.732050808f;
+const f32 SQRT_5     = 2.236067978f;
 
 const f32 F32_PRECISION = 1.0e-7f;
 
