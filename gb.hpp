@@ -1,8 +1,9 @@
-// gb.hpp - v0.18 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.19 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
 Version History:
+	0.19  - Cache friendly Transform and String fixes
 	0.18  - Hash_Table bug fixes
 	0.17  - Death to OOP
 	0.16  - All References are const convention
@@ -210,7 +211,7 @@ Context:
 
 	#include <windows.h>
 	#include <mmsystem.h> // Time functions
-	// #include <ntsecapi.h> // Random  generation functions
+	#include <wincrypt.h>
 
 	#undef NOMINMAX
 	#undef VC_EXTRALEAN
@@ -234,13 +235,9 @@ Context:
 #endif
 
 
-extern "C" inline void
-gb__abort(void)
-{
-	// TODO(bill): Get a better way to abort
-	*(int*)0 = 0;
-	// raise(SIGABRT);
-}
+#define GB_DISABLE_COPY(Type) \
+	Type(const Type&) = delete;      \
+	Type& operator=(const Type&) = delete
 
 /// Helper function used as a better alternative to assert which allows for
 /// optional printf style error messages
@@ -263,7 +260,8 @@ gb__assert_handler(bool condition, const char* condition_str,
 		va_end(args);
 	}
 	fprintf(stderr, "\n");
-	gb__abort();
+	// TODO(bill): Get a better way to abort
+	*(int*)0 = 0;
 }
 
 ////////////////////////////////
@@ -526,6 +524,20 @@ template <typename T> struct Remove_Reference_Def<T&>  { using Type = T; };
 template <typename T> struct Remove_Reference_Def<T&&> { using Type = T; };
 template <typename T> using  Remove_Reference = typename Remove_Reference_Def<T>::Type;
 
+template <typename T, T v> struct Integral_Constant { global const T VALUE = v; using Value_Type = T; using Type = Integral_Constant; };
+
+template <typename T, usize N = 0>      struct Extent          : Integral_Constant<usize, 0> {};
+template <typename T>                   struct Extent<T[], 0>  : Integral_Constant<usize, 0> {};
+template <typename T, usize N>          struct Extent<T[], N>  : Integral_Constant<usize, Extent<T, N-1>::VALUE> {};
+template <typename T, usize N>          struct Extent<T[N], 0> : Integral_Constant<usize, N> {};
+template <typename T, usize I, usize N> struct Extent<T[I], N> : Integral_Constant<usize, Extent<T, N-1>::VALUE> {};
+
+template <typename T>          struct Remove_Extend_Def       { using Type = T; };
+template <typename T>          struct Remove_Extend_Def<T[]>  { using Type = T; };
+template <typename T, usize N> struct Remove_Extend_Def<T[N]> { using Type = T; };
+
+// TODO NOTE(bill): Do I _need_ all of these template traits?
+
 ////////////////////////////////
 ///                          ///
 /// C++11 Move Semantics     ///
@@ -569,7 +581,7 @@ struct Defer
 };
 
 template <typename Func>
-Defer<Func>
+inline Defer<Func>
 defer_func(Func&& f) { return Defer<Func>(forward<Func>(f)); }
 } // namespace impl
 __GB_NAMESPACE_END
@@ -742,9 +754,7 @@ struct Allocator
 	/// If the allocator does not track memory, the function will return -1
 	virtual s64 total_allocated() = 0;
 
-	// Delete copying
-	Allocator(const Allocator&) = delete;
-	Allocator& operator=(const Allocator&) = delete;
+	GB_DISABLE_COPY(Allocator);
 };
 
 /// An allocator that used the malloc(). Allocations are padded with the size of
@@ -988,7 +998,6 @@ equals(const void* a, const void* b, usize bytes)
 {
 	return (memcmp(a, b, bytes) == 0);
 }
-
 } // namespace memory
 
 ////////////////////////////////
@@ -1027,6 +1036,7 @@ Size available_space(const String str);
 
 void clear(String str);
 
+void append(String* str, char c);
 void append(String* str, const String other);
 void append_cstring(String* str, const char* other);
 void append(String* str, const void* other, Size len);
@@ -1038,6 +1048,7 @@ bool equals(const String lhs, const String rhs);
 int compare(const String lhs, const String rhs); // NOTE(bill): three-way comparison
 
 void trim(String* str, const char* cut_set);
+void trim_space(String* str);
 } // namespace string
 // TODO(bill): string libraries
 
@@ -2062,17 +2073,19 @@ struct Transform
 {
 	Vector3    position;
 	Quaternion orientation;
-	Vector3    scale;
+	f32        scale;
+	// NOTE(bill): Scale is only f32 to make sizeof(Transform) == 32 bytes
 };
 
 struct Aabb
 {
-	Vector3 center, half_size;
+	Vector3 center;
+	Vector3 half_size;
 };
 
 struct Oobb
 {
-	Matrix4 tm;
+	Matrix4 transform;
 	Aabb    aabb;
 };
 
@@ -2296,10 +2309,10 @@ f32 sin(f32 radians);
 f32 cos(f32 radians);
 f32 tan(f32 radians);
 
-f32 asin(f32 x);
-f32 acos(f32 x);
-f32 atan(f32 x);
-f32 atan2(f32 y, f32 x);
+f32 arcsin(f32 x);
+f32 arccos(f32 x);
+f32 arctan(f32 x);
+f32 arctan2(f32 y, f32 x);
 
 f32 radians(f32 degrees);
 f32 degrees(f32 radians);
@@ -2309,9 +2322,9 @@ f32 sinh(f32 x);
 f32 cosh(f32 x);
 f32 tanh(f32 x);
 
-f32 asinh(f32 x);
-f32 acosh(f32 x);
-f32 atanh(f32 x);
+f32 arsinh(f32 x);
+f32 arcosh(f32 x);
+f32 artanh(f32 x);
 
 // Rounding
 f32 ceil(f32 x);
@@ -2368,6 +2381,8 @@ f32 magnitude(const Vector2& a);
 Vector2 normalize(const Vector2& a);
 
 Vector2 hadamard(const Vector2& a, const Vector2& b);
+
+f32 aspect_ratio(const Vector2& a);
 
 // Vector3 functions
 f32 dot(const Vector3& a, const Vector3& b);
@@ -2524,239 +2539,37 @@ bool intersection3(const Plane& p1, const Plane& p2, const Plane& p3, Vector3* i
 
 namespace random
 {
-enum Generator_Type
+struct Random // NOTE(bill): Mt19937_64
 {
-	MERSENNE_TWISTER_32,
-	MERSENNE_TWISTER_64,
-
-	RANDOM_DEVICE,
-};
-
-// NOTE(bill): Basic Definition of a Random Number Generator
-// NOTE(bill): C++(17)?? Concepts might be useful here
-// NOTE(bill): A vtable could be used but would not have good performance
-// NOTE(bill): Just overload functions like mad?
-/*
-struct Generator
-// concept Generator<typename T, typename U>
-{
-	using Result_Type = T;
-	using Seed_Type   = U;
-
-	Generator_Type type;
-
-	u32 entropy();
-
-	Result_Type next();
-	u32 next_u32();
-	s32 next_s32();
-	u64 next_u64();
-	s64 next_s64();
-	f32 next_f32();
-	f64 next_f64();
-};
-*/
-
-template <typename T, typename U>
-struct Generator_Base
-{
-	using Result_Type = T;
-	using Seed_Type   = U;
-
-	Seed_Type seed;
-	Generator_Type type;
-};
-
-struct Mt19937_32 : Generator_Base<s32, s32>
-{
-	u32 index;
-	s32 mt[624];
-
-	u32 entropy();
-
-	Result_Type next();
-	u32 next_u32();
-	s32 next_s32();
-	u64 next_u64();
-	s64 next_s64();
-	f32 next_f32();
-	f64 next_f64();
-};
-
-struct Mt19937_64 : Generator_Base<s64, s64>
-{
+	s64 seed;
 	u32 index;
 	s64 mt[312];
-
-	u32 entropy();
-
-	Result_Type next();
-	u32 next_u32();
-	s32 next_s32();
-	u64 next_u64();
-	s64 next_s64();
-	f32 next_f32();
-	f64 next_f64();
 };
 
-struct Random_Device : Generator_Base<u32, u32>
-{
-	u32 entropy();
+Random make(s64 seed);
 
-	Result_Type next();
-	u32 next_u32();
-	s32 next_s32();
-	u64 next_u64();
-	s64 next_s64();
-	f32 next_f32();
-	f64 next_f64();
-};
+void set_seed(Random* r, s64 seed);
 
-// Makers for Generators
-Mt19937_32    make_mt19937_32(Mt19937_32::Seed_Type seed);
-Mt19937_64    make_mt19937_64(Mt19937_64::Seed_Type seed);
-Random_Device make_random_device();
+s64 next(Random* r);
 
-void set_seed(Mt19937_32* gen, Mt19937_32::Seed_Type seed);
-void set_seed(Mt19937_64* gen, Mt19937_64::Seed_Type seed);
+void next_from_device(void* buffer, u32 length_in_bytes);
 
-template <typename Generator> typename Generator::Result_Type next(Generator* gen);
+s32 next_s32(Random* r);
+u32 next_u32(Random* r);
+f32 next_f32(Random* r);
+s64 next_s64(Random* r);
+u64 next_u64(Random* r);
+f64 next_f64(Random* r);
 
-template <typename Generator> s32 uniform_s32_distribution(Generator* gen, s32 min_inc, s32 max_inc);
-template <typename Generator> s64 uniform_s64_distribution(Generator* gen, s64 min_inc, s64 max_inc);
-template <typename Generator> u32 uniform_u32_distribution(Generator* gen, u32 min_inc, u32 max_inc);
-template <typename Generator> u64 uniform_u64_distribution(Generator* gen, u64 min_inc, u64 max_inc);
-template <typename Generator> f32 uniform_f32_distribution(Generator* gen, f32 min_inc, f32 max_inc);
-template <typename Generator> f64 uniform_f64_distribution(Generator* gen, f64 min_inc, f64 max_inc);
-
-template <typename Generator> ssize uniform_ssize_distribution(Generator* gen, ssize min_inc, ssize max_inc);
-template <typename Generator> usize uniform_usize_distribution(Generator* gen, usize min_inc, usize max_inc);
+s32 uniform_s32(Random* r, s32 min_inc, s32 max_inc);
+u32 uniform_u32(Random* r, u32 min_inc, u32 max_inc);
+f32 uniform_f32(Random* r, f32 min_inc, f32 max_inc);
+s64 uniform_s64(Random* r, s64 min_inc, s64 max_inc);
+u64 uniform_u64(Random* r, u64 min_inc, u64 max_inc);
+f64 uniform_f64(Random* r, f64 min_inc, f64 max_inc);
 
 
-inline Mt19937_32
-make_mt19937_32(Mt19937_32::Seed_Type seed)
-{
-	Mt19937_32 gen = {};
-	gen.type = MERSENNE_TWISTER_32;
-	set_seed(&gen, seed);
-	return gen;
-}
 
-inline Mt19937_64
-make_mt19937_64(Mt19937_64::Seed_Type seed)
-{
-	Mt19937_64 gen = {};
-	gen.type = MERSENNE_TWISTER_64;
-	set_seed(&gen, seed);
-	return gen;
-}
-
-inline Random_Device
-make_random_device()
-{
-	Random_Device gen = {};
-	gen.type = RANDOM_DEVICE;
-	return gen;
-}
-
-inline void
-set_seed(Mt19937_32* gen, Mt19937_32::Seed_Type seed)
-{
-	gen->seed = seed;
-	gen->mt[0] = seed;
-	for (u32 i = 1; i < 624; i++)
-		gen->mt[i] = 1812433253 * (gen->mt[i-1] ^ gen->mt[i-1] >> 30) + i;
-}
-
-inline void
-set_seed(Mt19937_64* gen, Mt19937_64::Seed_Type seed)
-{
-	gen->seed = seed;
-	gen->mt[0] = seed;
-	for (u32 i = 1; i < 312; i++)
-		gen->mt[i] = 6364136223846793005ull * (gen->mt[i-1] ^ gen->mt[i-1] >> 62) + i;
-}
-
-template <typename Generator>
-inline typename Generator::Result_Type
-next(Generator* gen)
-{
-	return gen->next();
-}
-
-template <typename Generator>
-inline s32
-uniform_s32_distribution(Generator* gen, s32 min_inc, s32 max_inc)
-{
-	return (gen->next_s32() % (max_inc - min_inc + 1)) + min_inc;
-}
-
-template <typename Generator>
-inline s64
-uniform_s64_distribution(Generator* gen, s64 min_inc, s64 max_inc)
-{
-	return (gen->next_s64() % (max_inc - min_inc + 1)) + min_inc;
-}
-
-
-template <typename Generator>
-inline u32
-uniform_u32_distribution(Generator* gen, u32 min_inc, u32 max_inc)
-{
-	return (gen->next_u64() % (max_inc - min_inc + 1)) + min_inc;
-}
-
-template <typename Generator>
-inline u64
-uniform_u64_distribution(Generator* gen, u64 min_inc, u64 max_inc)
-{
-	return (gen->next_u64() % (max_inc - min_inc + 1)) + min_inc;
-}
-
-
-template <typename Generator>
-inline f32
-uniform_f32_distribution(Generator* gen, f32 min_inc, f32 max_inc)
-{
-	f64 n = (gen->next_s64() >> 11) * (1.0/4503599627370495.0);
-	return static_cast<f32>(n * (max_inc - min_inc + 1.0) + min_inc);
-}
-
-
-template <typename Generator>
-inline f64
-uniform_f64_distribution(Generator* gen, f64 min_inc, f64 max_inc)
-{
-	f64 n = (gen->next_s64() >> 11) * (1.0/4503599627370495.0);
-	return n * (max_inc - min_inc + 1.0) + min_inc;
-}
-
-template <typename Generator>
-inline ssize
-uniform_ssize_distribution(Generator* gen, ssize min_inc, ssize max_inc)
-{
-#if GB_ARCH_32_BIT
-	return (gen->next_s32() % (max_inc - min_inc + 1)) + min_inc;
-#elif GB_ARCH_64_BIT
-	return (gen->next_s64() % (max_inc - min_inc + 1)) + min_inc;
-#else
-#error Bit size not supported
-#endif
-}
-
-
-template <typename Generator>
-inline usize
-uniform_usize_distribution(Generator* gen, usize min_inc, usize max_inc)
-{
-#if GB_ARCH_32_BIT
-	return (gen->next_u32() % (max_inc - min_inc + 1)) + min_inc;
-#elif GB_ARCH_64_BIT
-	return (gen->next_u64() % (max_inc - min_inc + 1)) + min_inc;
-#else
-#error Bit size not supported
-#endif
-}
 
 } // namespace random
 __GB_NAMESPACE_END
@@ -3457,6 +3270,19 @@ void clear(String str)
 	str[0] = '\0';
 }
 
+void append(String* str, char c)
+{
+	Size curr_len = string::length(*str);
+
+	string::make_space_for(str, 1);
+	if (str == nullptr)
+		return;
+
+	(*str)[curr_len]     = c;
+	(*str)[curr_len + 1] = '\0';
+	string::header(*str)->len = curr_len + 1;
+}
+
 void append(String* str, const String other)
 {
 	string::append(str, other, string::length(other));
@@ -3475,8 +3301,8 @@ void append(String* str, const void* other, Size other_len)
 	if (str == nullptr)
 		return;
 
-	memory::copy(str + curr_len, other, other_len);
-	str[curr_len + other_len] = '\0';
+	memory::copy((*str) + curr_len, other, other_len);
+	(*str)[curr_len + other_len] = '\0';
 	string::header(*str)->len = curr_len + other_len;
 }
 
@@ -3517,7 +3343,7 @@ make_space_for(String* str, Size add_len)
 	if (available >= add_len) // Return if there is enough space left
 		return;
 
-	void* ptr = reinterpret_cast<string::Header*>(str) - 1;
+	void* ptr = reinterpret_cast<string::Header*>(*str) - 1;
 	usize old_size = sizeof(string::Header) + string::length(*str) + 1;
 	usize new_size = sizeof(string::Header) + new_len + 1;
 
@@ -3597,6 +3423,11 @@ trim(String* str, const char* cut_set)
 	(*str)[len] = '\0';
 
 	string::header(*str)->len = len;
+}
+inline void
+trim_space(String* str)
+{
+	trim(str, " \n\r\t\v\f");
 }
 } // namespace string
 
@@ -4460,22 +4291,22 @@ close(File* file)
 ///                          ///
 ////////////////////////////////
 
-const Vector2      VECTOR2_ZERO        = {0, 0};
-const Vector3      VECTOR3_ZERO        = {0, 0, 0};
-const Vector4      VECTOR4_ZERO        = {0, 0, 0, 0};
-const Complex      COMPLEX_ZERO        = {0, 0};
-const Quaternion   QUATERNION_IDENTITY = {0, 0, 0, 1};
-const Matrix2      MATRIX2_IDENTITY    = {1, 0,
-										  0, 1};
-const Matrix3      MATRIX3_IDENTITY    = {1, 0, 0,
-										  0, 1, 0,
-										  0, 0, 1};
-const Matrix4      MATRIX4_IDENTITY    = {1, 0, 0, 0,
-										  0, 1, 0, 0,
-										  0, 0, 1, 0,
-										  0, 0, 0, 1};
-const Euler_Angles EULER_ANGLES_ZERO   = {0, 0, 0};
-const Transform    TRANSFORM_IDENTITY  = Transform{};
+const Vector2      VECTOR2_ZERO        = Vector2{0, 0};
+const Vector3      VECTOR3_ZERO        = Vector3{0, 0, 0};
+const Vector4      VECTOR4_ZERO        = Vector4{0, 0, 0, 0};
+const Complex      COMPLEX_ZERO        = Complex{0, 0};
+const Quaternion   QUATERNION_IDENTITY = Quaternion{0, 0, 0, 1};
+const Matrix2      MATRIX2_IDENTITY    = Matrix2{1, 0,
+										         0, 1};
+const Matrix3      MATRIX3_IDENTITY    = Matrix3{1, 0, 0,
+										         0, 1, 0,
+										         0, 0, 1};
+const Matrix4      MATRIX4_IDENTITY    = Matrix4{1, 0, 0, 0,
+										         0, 1, 0, 0,
+										         0, 0, 1, 0,
+										         0, 0, 0, 1};
+const Euler_Angles EULER_ANGLES_ZERO   = Euler_Angles{0, 0, 0};
+const Transform    TRANSFORM_IDENTITY  = Transform{VECTOR3_ZERO, QUATERNION_IDENTITY, 1};
 
 ////////////////////////////////
 /// Math Type Op Overloads   ///
@@ -5145,7 +4976,8 @@ Transform operator*(const Transform& ps, const Transform& ls)
 
 	ws.position    = ps.position + ps.orientation * (ps.scale * ls.position);
 	ws.orientation = ps.orientation * ls.orientation;
-	ws.scale       = ps.scale * (ps.orientation * ls.scale);
+	// ws.scale       = ps.scale * (ps.orientation * ls.scale); // Vector3 scale
+	ws.scale       = ps.scale * ls.scale;
 
 	return ws;
 }
@@ -5164,7 +4996,8 @@ Transform operator/(const Transform& ws, const Transform& ps)
 
 	ls.position    = (ps_conjugate * (ws.position - ps.position)) / ps.scale;
 	ls.orientation = ps_conjugate * ws.orientation;
-	ls.scale       = ps_conjugate * (ws.scale / ps.scale);
+	// ls.scale       = ps_conjugate * (ws.scale / ps.scale); // Vector3 scale
+	ls.scale       = ws.scale / ps.scale;
 
 	return ls;
 }
@@ -5201,8 +5034,8 @@ const f32 F32_PRECISION = 1.0e-7f;
 
 // Power
 inline f32 sqrt(f32 x)       { return ::sqrtf(x);        }
-inline f32 pow(f32 x, f32 y) { return (f32)::powf(x, y); }
-inline f32 cbrt(f32 x)       { return (f32)::cbrtf(x);   }
+inline f32 pow(f32 x, f32 y) { return static_cast<f32>(::powf(x, y)); }
+inline f32 cbrt(f32 x)       { return static_cast<f32>(::cbrtf(x));   }
 
 inline f32
 fast_inv_sqrt(f32 x)
@@ -5226,10 +5059,10 @@ inline f32 sin(f32 radians) { return ::sinf(radians); }
 inline f32 cos(f32 radians) { return ::cosf(radians); }
 inline f32 tan(f32 radians) { return ::tanf(radians); }
 
-inline f32 asin(f32 x)         { return ::asinf(x);     }
-inline f32 acos(f32 x)         { return ::acosf(x);     }
-inline f32 atan(f32 x)         { return ::atanf(x);     }
-inline f32 atan2(f32 y, f32 x) { return ::atan2f(y, x); }
+inline f32 arcsin(f32 x)         { return ::asinf(x);     }
+inline f32 arccos(f32 x)         { return ::acosf(x);     }
+inline f32 arctan(f32 x)         { return ::atanf(x);     }
+inline f32 arctan2(f32 y, f32 x) { return ::atan2f(y, x); }
 
 inline f32 radians(f32 degrees) { return TAU * degrees / 360.0f; }
 inline f32 degrees(f32 radians) { return 360.0f * radians / TAU; }
@@ -5239,9 +5072,9 @@ inline f32 sinh(f32 x) { return ::sinhf(x); }
 inline f32 cosh(f32 x) { return ::coshf(x); }
 inline f32 tanh(f32 x) { return ::tanhf(x); }
 
-inline f32 asinh(f32 x) { return ::asinhf(x); }
-inline f32 acosh(f32 x) { return ::acoshf(x); }
-inline f32 atanh(f32 x) { return ::atanhf(x); }
+inline f32 arsinh(f32 x) { return ::asinhf(x); }
+inline f32 arcosh(f32 x) { return ::acoshf(x); }
+inline f32 artanh(f32 x) { return ::atanhf(x); }
 
 // Rounding
 inline f32 ceil(f32 x)       { return ::ceilf(x);    }
@@ -5408,6 +5241,13 @@ hadamard(const Vector2& a, const Vector2& b)
 {
 	return {a.x * b.x, a.y * b.y};
 }
+
+inline f32
+aspect_ratio(const Vector2& a)
+{
+	return a.x / a.y;
+}
+
 
 inline Matrix4
 matrix2_to_matrix4(const Matrix2& m)
@@ -5612,7 +5452,7 @@ inverse(const Quaternion& a)
 inline f32
 quaternion_angle(const Quaternion& a)
 {
-	return 2.0f * math::acos(a.w);
+	return 2.0f * math::arccos(a.w);
 }
 
 inline Vector3
@@ -5644,21 +5484,21 @@ axis_angle(const Vector3& axis, f32 radians)
 inline f32
 quaternion_roll(const Quaternion& a)
 {
-	return math::atan2(2.0f * a.x * a.y + a.z * a.w,
-					   a.x * a.x + a.w * a.w - a.y * a.y - a.z * a.z);
+	return math::arctan2(2.0f * a.x * a.y + a.z * a.w,
+					     a.x * a.x + a.w * a.w - a.y * a.y - a.z * a.z);
 }
 
 inline f32
 quaternion_pitch(const Quaternion& a)
 {
-	return math::atan2(2.0f * a.y * a.z + a.w * a.x,
-					   a.w * a.w - a.x * a.x - a.y * a.y + a.z * a.z);
+	return math::arctan2(2.0f * a.y * a.z + a.w * a.x,
+					     a.w * a.w - a.x * a.x - a.y * a.y + a.z * a.z);
 }
 
 inline f32
 quaternion_yaw(const Quaternion& a)
 {
-	return math::asin(-2.0f * (a.x * a.z - a.w * a.y));
+	return math::arcsin(-2.0f * (a.x * a.z - a.w * a.y));
 
 }
 
@@ -5704,7 +5544,7 @@ slerp(const Quaternion& x, const Quaternion& y, f32 t)
 						  lerp(x.w, y.w, t)};
 	}
 
-	f32 angle = math::acos(cos_theta);
+	f32 angle = math::arccos(cos_theta);
 
 	Quaternion result = math::sin(1.0f - (t * angle)) * x + math::sin(t * angle) * z;
 	return result * (1.0f / math::sin(angle));
@@ -6259,7 +6099,8 @@ inverse(const Transform& t)
 
 	inv_transform.position    = (inv_orientation * -t.position) / t.scale;
 	inv_transform.orientation = inv_orientation;
-	inv_transform.scale       = inv_orientation * (Vector3{1, 1, 1} / t.scale);
+	// inv_transform.scale       = inv_orientation * (Vector3{1, 1, 1} / t.scale); // Vector3 scale
+	inv_transform.scale       = 1.0f / t.scale;
 
 	return inv_transform;
 }
@@ -6267,9 +6108,9 @@ inverse(const Transform& t)
 inline Matrix4
 transform_to_matrix4(const Transform& t)
 {
-	return math::translate(t.position) *                //
-		   math::quaternion_to_matrix4(t.orientation) * //
-		   math::scale(t.scale);                        //
+	return math::translate(t.position) *
+		   math::quaternion_to_matrix4(t.orientation) *
+		   math::scale({t.scale, t.scale, t.scale});
 }
 
 
@@ -6526,8 +6367,7 @@ namespace sphere
 inline Sphere
 calculate_min_bounding(const void* vertices, usize num_vertices, usize stride, usize offset, f32 step)
 {
-	auto ran_gen = random::make_random_device();
-	auto gen = random::make_mt19937_64(random::next(&ran_gen));
+	auto gen = random::make(0);
 
 	const u8* vertex = reinterpret_cast<const u8*>(vertices);
 	vertex += offset;
@@ -6545,7 +6385,7 @@ calculate_min_bounding(const void* vertices, usize num_vertices, usize stride, u
 	do
 	{
 		done = true;
-		for (usize i = 0, index = random::uniform_usize_distribution(&gen, 0, num_vertices-1);
+		for (u32 i = 0, index = random::uniform_u32(&gen, 0, num_vertices-1);
 			 i < num_vertices;
 			 i++, index = (index + 1)%num_vertices)
 		{
@@ -6685,110 +6525,49 @@ intersection3(const Plane& p1, const Plane& p2, const Plane& p3, Vector3* ip)
 
 namespace random
 {
-inline Mt19937_32::Result_Type
-Mt19937_32::next()
+inline Random
+make(s64 seed)
 {
-	if (index >= 624)
-	{
-		for (u32 i = 0; i < 624; i++)
-		{
-			s32 y = ((mt[i] & 0x80000000) + (mt[(i + 1) % 624] & 0x7fffffff)) & 0xffffffff;
-			mt[i] = mt[(i + 397) % 624] ^ y >> 1;
-
-			if (y % 2 != 0)
-				mt[i] = mt[i] ^ 0x9908b0df;
-		}
-		index = 0;
-	}
-
-	s32 y = mt[index];
-
-	y ^= (y >> 11);
-	y ^= (y <<  7) & 2636928640;
-	y ^= (y << 15) & 4022730752;
-	y ^= (y >> 18);
-
-	index++;
-
-	return y;
+	Random r = {};
+	set_seed(&r, seed);
+	return r;
 }
 
-inline u32 Mt19937_32::entropy() { return 32; }
-
-inline u32
-Mt19937_32::next_u32()
+void
+set_seed(Random* r, s64 seed)
 {
-	s32 n = next();
-	return bit_cast<u32>(n);
+	r->seed  = seed;
+	r->mt[0] = seed;
+	for (u64 i = 1; i < 312; i++)
+		r->mt[i] = 6364136223846793005ull * (r->mt[i-1] ^ r->mt[i-1] >> 62) + i;
 }
 
-inline s32
-Mt19937_32::next_s32()
+s64
+next(Random* r)
 {
-	return next();
-}
-
-inline u64
-Mt19937_32::next_u64()
-{
-	s32 n = next();
-	u64 a = n;
-	a = static_cast<u64>(a << 32) | static_cast<u64>(next());
-	return a;
-}
-
-inline s64
-Mt19937_32::next_s64()
-{
-	s32 n = next();
-	u64 a = n;
-	a = static_cast<u64>(a << 32) | static_cast<u64>(next());
-	return bit_cast<s64>(a);
-}
-
-inline f32
-Mt19937_32::next_f32()
-{
-	s32 n = next();
-	return bit_cast<f32>(n);
-}
-
-inline f64
-Mt19937_32::next_f64()
-{
-	s32 n = next();
-	u64 a = n;
-	a = static_cast<u64>(a << 32) | static_cast<u64>(next());
-	return bit_cast<f64>(a);
-}
-
-
-inline Mt19937_64::Result_Type
-Mt19937_64::next()
-{
-	const u64 MAG01[2] = {0ull, 0xB5026F5AA96619E9ull};
+	const u64 MAG01[2] = {0ull, 0xb5026f5aa96619e9ull};
 
 	u64 x;
-	if (index > 312)
+	if (r->index > 312)
 	{
 		u32 i = 0;
 		for (; i < 312-156; i++)
 		{
-			x = (mt[i] & 0xffffffff80000000ull) | (mt[i+1] & 0x7fffffffull);
-			mt[i] = mt[i+156] ^ (x>>1) ^ MAG01[(u32)(x & 1ull)];
+			x = (r->mt[i] & 0xffffffff80000000ull) | (r->mt[i+1] & 0x7fffffffull);
+			r->mt[i] = r->mt[i+156] ^ (x>>1) ^ MAG01[(u32)(x & 1ull)];
 		}
 		for (; i < 312-1; i++)
 		{
-			x = (mt[i] & 0xffffffff80000000ull) | (mt[i+1] & 0x7fffffffull);
-			mt[i] = mt[i + (312-156)] ^ (x >> 1) ^ MAG01[(u32)(x & 1ull)];
+			x = (r->mt[i] & 0xffffffff80000000ull) | (r->mt[i+1] & 0x7fffffffull);
+			r->mt[i] = r->mt[i + (312-156)] ^ (x >> 1) ^ MAG01[(u32)(x & 1ull)];
 		}
-		x = (mt[312-1] & 0xffffffff80000000ull) | (mt[0] & 0x7fffffffull);
-		mt[312-1] = mt[156-1] ^ (x>>1) ^ MAG01[(u32)(x & 1ull)];
+		x = (r->mt[312-1] & 0xffffffff80000000ull) | (r->mt[0] & 0x7fffffffull);
+		r->mt[312-1] = r->mt[156-1] ^ (x>>1) ^ MAG01[(u32)(x & 1ull)];
 
-		index = 0;
+		r->index = 0;
 	}
 
-	x = mt[index++];
+	x = r->mt[r->index++];
 
 	x ^= (x >> 29) & 0x5555555555555555ull;
 	x ^= (x << 17) & 0x71d67fffeda60000ull;
@@ -6798,112 +6577,97 @@ Mt19937_64::next()
 	return x;
 }
 
-inline u32 Mt19937_64::entropy() { return 64; }
-
-inline u32
-Mt19937_64::next_u32()
+void
+next_from_device(void* buffer, u32 length_in_bytes)
 {
-	s64 n = next();
-	return bit_cast<u32>(n);
-}
-
-inline s32
-Mt19937_64::next_s32()
-{
-	s64 n = next();
-	return bit_cast<s32>(n);
-}
-
-inline u64
-Mt19937_64::next_u64()
-{
-	s64 n = next();
-	return bit_cast<u64>(n);
-}
-
-inline s64
-Mt19937_64::next_s64()
-{
-	s64 n = next();
-	return n;
-}
-
-inline f32
-Mt19937_64::next_f32()
-{
-	s64 n = next();
-	return bit_cast<f32>(n);
-}
-
-inline f64
-Mt19937_64::next_f64()
-{
-	s64 n = next();
-	return bit_cast<f64>(n);
-}
-
-inline Random_Device::Result_Type
-Random_Device::next()
-{
-	u32 result = 0;
 #if defined(GB_SYSTEM_WINDOWS)
-	// rand_s(&result); // TODO(bill): fix this
+	HCRYPTPROV prov;
+
+	bool ok = CryptAcquireContext(&prov, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT);
+	GB_ASSERT(ok, "CryptAcquireContext");
+	ok = CryptGenRandom(prov, length_in_bytes, reinterpret_cast<u8*>(&buffer));
+	GB_ASSERT(ok, "CryptGenRandom");
+
+	CryptReleaseContext(prov, 0);
+
 #else
-	#error Implement Random_Device::next() for this platform
+	#error Implement random::next_from_device()
 #endif
-	// IMPORTANT TODO(bill): Implenent Random_Device::next()
-	return result;
 }
 
-inline u32 Random_Device::entropy() { return 32; }
-
-inline u32
-Random_Device::next_u32()
+s32
+next_s32(Random* r)
 {
-	s32 n = next();
-	return bit_cast<u32>(n);
+	return bit_cast<s32>(random::next(r));
 }
 
-inline s32
-Random_Device::next_s32()
+u32
+next_u32(Random* r)
 {
-	return next();
+	return bit_cast<u32>(random::next(r));
 }
 
-inline u64
-Random_Device::next_u64()
+f32
+next_f32(Random* r)
 {
-	s32 n = next();
-	u64 a = n;
-	a = static_cast<u64>(a << 32) | static_cast<u64>(next());
-	return a;
+	return bit_cast<f32>(random::next(r));
 }
 
-inline s64
-Random_Device::next_s64()
+s64
+next_s64(Random* r)
 {
-	s32 n = next();
-	u64 a = n;
-	a = static_cast<u64>(a << 32) | static_cast<u64>(next());
-	return bit_cast<s64>(a);
+	return random::next(r);
 }
 
-inline f32
-Random_Device::next_f32()
+u64
+next_u64(Random* r)
 {
-	s32 n = next();
-	return bit_cast<f32>(n);
+	return bit_cast<u64>(random::next(r));
 }
 
-inline f64
-Random_Device::next_f64()
+f64
+next_f64(Random* r)
 {
-	s32 n = next();
-	u64 a = n;
-	a = static_cast<u64>(a << 32) | static_cast<u64>(next());
-	return bit_cast<f64>(a);
+	return bit_cast<f64>(random::next(r));
 }
 
+s32
+uniform_s32(Random* r, s32 min_inc, s32 max_inc)
+{
+	return (random::next_s32(r) & (max_inc - min_inc + 1)) + min_inc;
+}
+
+u32
+uniform_u32(Random* r, u32 min_inc, u32 max_inc)
+{
+	return (random::next_u32(r) & (max_inc - min_inc + 1)) + min_inc;
+}
+
+f32
+uniform_f32(Random* r, f32 min_inc, f32 max_inc)
+{
+	f64 n = (random::next_s64(r) >> 11) * (1.0/4503599627370495.0);
+	return static_cast<f32>(n * (max_inc - min_inc + 1.0) + min_inc);
+}
+
+s64
+uniform_s64(Random* r, s64 min_inc, s64 max_inc)
+{
+	return (random::next_s32(r) & (max_inc - min_inc + 1)) + min_inc;
+}
+
+u64
+uniform_u64(Random* r, u64 min_inc, u64 max_inc)
+{
+	return (random::next_u64(r) & (max_inc - min_inc + 1)) + min_inc;
+}
+
+f64
+uniform_f64(Random* r, f64 min_inc, f64 max_inc)
+{
+	f64 n = (random::next_s64(r) >> 11) * (1.0/4503599627370495.0);
+	return (n * (max_inc - min_inc + 1.0) + min_inc);
+}
 
 } // namespace random
 __GB_NAMESPACE_END
