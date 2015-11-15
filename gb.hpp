@@ -1,8 +1,9 @@
-// gb.hpp - v0.19 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.20 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
 Version History:
+	0.20  - Angle
 	0.19  - Cache friendly Transform and String fixes
 	0.18  - Hash_Table bug fixes
 	0.17  - Death to OOP
@@ -2063,10 +2064,14 @@ struct Matrix4
 	inline       Vector4& operator[](usize index)       { return columns[index]; }
 };
 
+struct Angle
+{
+	f32 radians;
+};
+
 struct Euler_Angles
 {
-	// NOTE(bill): All angles in radians
-	f32 pitch, yaw, roll;
+	Angle pitch, yaw, roll;
 };
 
 struct Transform
@@ -2100,6 +2105,16 @@ struct Plane
 	Vector3 normal;
 	f32     distance; // negative distance to origin
 };
+
+
+namespace angle
+{
+Angle radians(f32 radians);
+Angle degrees(f32 degrees);
+
+f32 as_radians(Angle angle);
+f32 as_degrees(Angle angle);
+} // namespace angle
 
 ////////////////////////////////
 ///                          ///
@@ -2259,6 +2274,27 @@ Matrix4& operator+=(Matrix4& a, const Matrix4& b);
 Matrix4& operator-=(Matrix4& a, const Matrix4& b);
 Matrix4& operator*=(Matrix4& a, const Matrix4& b);
 
+// Angle Operators
+bool operator==(Angle a, Angle b);
+bool operator!=(Angle a, Angle b);
+
+Angle operator-(Angle a);
+
+Angle operator+(Angle a, Angle b);
+Angle operator-(Angle a, Angle b);
+
+Angle operator*(Angle a, f32 scalar);
+Angle operator*(f32 scalar, Angle a);
+
+Angle operator/(Angle a, f32 scalar);
+
+f32 operator/(Angle a, Angle b);
+
+Angle& operator+=(Angle& a, Angle b);
+Angle& operator-=(Angle& a, Angle b);
+Angle& operator*=(Angle& a, f32 scalar);
+Angle& operator/=(Angle& a, f32 scalar);
+
 // Transform Operators
 // World = Parent * Local
 Transform operator*(const Transform& ps, const Transform& ls);
@@ -2305,17 +2341,14 @@ f32 cbrt(f32 x);
 f32 fast_inv_sqrt(f32 x);
 
 // Trigonometric
-f32 sin(f32 radians);
-f32 cos(f32 radians);
-f32 tan(f32 radians);
+f32 sin(Angle a);
+f32 cos(Angle a);
+f32 tan(Angle a);
 
-f32 arcsin(f32 x);
-f32 arccos(f32 x);
-f32 arctan(f32 x);
-f32 arctan2(f32 y, f32 x);
-
-f32 radians(f32 degrees);
-f32 degrees(f32 radians);
+Angle arcsin(f32 x);
+Angle arccos(f32 x);
+Angle arctan(f32 x);
+Angle arctan2(f32 y, f32 x);
 
 // Hyperbolic
 f32 sinh(f32 x);
@@ -2413,8 +2446,8 @@ Complex inverse(const Complex& a);
 
 f32 complex_angle(const Complex& a);
 inline f32 complex_argument(const Complex& a) { return complex_angle(a); }
-Complex magnitude_angle(f32 magnitude, f32 radians);
-inline Complex complex_polar(f32 magnitude, f32 radians) { return magnitude_angle(magnitude, radians); }
+Complex magnitude_angle(f32 magnitude, Angle a);
+inline Complex complex_polar(f32 magnitude, Angle a) { return magnitude_angle(magnitude, a); }
 
 // Quaternion functions
 f32 dot(const Quaternion& a, const Quaternion& b);
@@ -2427,13 +2460,13 @@ Quaternion normalize(const Quaternion& a);
 Quaternion conjugate(const Quaternion& a);
 Quaternion inverse(const Quaternion& a);
 
-f32 quaternion_angle(const Quaternion& a);
+Angle quaternion_angle(const Quaternion& a);
 Vector3 quaternion_axis(const Quaternion& a);
-Quaternion axis_angle(const Vector3& axis, f32 radians);
+Quaternion axis_angle(const Vector3& axis, Angle a);
 
-f32 quaternion_roll(const Quaternion& a);
-f32 quaternion_pitch(const Quaternion& a);
-f32 quaternion_yaw(const Quaternion& a);
+Angle quaternion_roll(const Quaternion& a);
+Angle quaternion_pitch(const Quaternion& a);
+Angle quaternion_yaw(const Quaternion& a);
 
 Euler_Angles quaternion_to_euler_angles(const Quaternion& a);
 Quaternion euler_angles_to_quaternion(const Euler_Angles& e,
@@ -2476,12 +2509,12 @@ Matrix4 quaternion_to_matrix4(const Quaternion& a);
 Quaternion matrix4_to_quaternion(const Matrix4& m);
 
 Matrix4 translate(const Vector3& v);
-Matrix4 rotate(const Vector3& v, f32 radians);
+Matrix4 rotate(const Vector3& v, Angle angle);
 Matrix4 scale(const Vector3& v);
 Matrix4 ortho(f32 left, f32 right, f32 bottom, f32 top);
 Matrix4 ortho(f32 left, f32 right, f32 bottom, f32 top, f32 z_near, f32 z_far);
-Matrix4 perspective(f32 fovy_radians, f32 aspect, f32 z_near, f32 z_far);
-Matrix4 infinite_perspective(f32 fovy_radians, f32 aspect, f32 z_near);
+Matrix4 perspective(Angle fovy, f32 aspect, f32 z_near, f32 z_far);
+Matrix4 infinite_perspective(Angle fovy, f32 aspect, f32 z_near);
 
 Matrix4
 look_at_matrix4(const Vector3& eye, const Vector3& center, const Vector3& up = {0, 1, 0});
@@ -4968,6 +5001,73 @@ Matrix4& operator*=(Matrix4& a, const Matrix4& b)
 	return (a = a * b);
 }
 
+// Angle Operators
+bool operator==(Angle a, Angle b)
+{
+	return a.radians == b.radians;
+}
+
+bool operator!=(Angle a, Angle b)
+{
+	return !operator==(a, b);
+}
+
+Angle operator-(Angle a)
+{
+	return {-a.radians};
+}
+
+Angle operator+(Angle a, Angle b)
+{
+	return {a.radians + b.radians};
+}
+
+Angle operator-(Angle a, Angle b)
+{
+	return {a.radians - b.radians};
+}
+
+Angle operator*(Angle a, f32 scalar)
+{
+	return {a.radians * scalar};
+}
+
+Angle operator*(f32 scalar, Angle a)
+{
+	return {a.radians * scalar};
+}
+
+Angle operator/(Angle a, f32 scalar)
+{
+	return {a.radians / scalar};
+}
+
+f32 operator/(Angle a, Angle b)
+{
+	return a.radians / b.radians;
+}
+
+Angle& operator+=(Angle& a, Angle b)
+{
+	return (a = a + b);
+}
+
+Angle& operator-=(Angle& a, Angle b)
+{
+	return (a = a - b);
+}
+
+Angle& operator*=(Angle& a, f32 scalar)
+{
+	return (a = a * scalar);
+}
+
+Angle& operator/=(Angle& a, f32 scalar)
+{
+	return (a = a / scalar);
+}
+
+
 // Transform Operators
 // World = Parent * Local
 Transform operator*(const Transform& ps, const Transform& ls)
@@ -5008,7 +5108,32 @@ Transform& operator/=(Transform& ws, const Transform& ps)
 }
 
 
+namespace angle
+{
+inline Angle
+radians(f32 r)
+{
+	return {r};
+}
 
+inline Angle
+degrees(f32 d)
+{
+	return {d * math::TAU / 360.0f};
+}
+
+inline f32
+as_radians(Angle angle)
+{
+	return angle.radians;
+}
+
+inline f32
+as_degrees(Angle angle)
+{
+	return angle.radians * 360.0f / math::TAU;
+}
+} // namespace angle
 
 ////////////////////////////////
 ///                          ///
@@ -5055,17 +5180,14 @@ fast_inv_sqrt(f32 x)
 }
 
 // Trigonometric
-inline f32 sin(f32 radians) { return ::sinf(radians); }
-inline f32 cos(f32 radians) { return ::cosf(radians); }
-inline f32 tan(f32 radians) { return ::tanf(radians); }
+inline f32 sin(Angle a) { return ::sinf(angle::as_radians(a)); }
+inline f32 cos(Angle a) { return ::cosf(angle::as_radians(a)); }
+inline f32 tan(Angle a) { return ::tanf(angle::as_radians(a)); }
 
-inline f32 arcsin(f32 x)         { return ::asinf(x);     }
-inline f32 arccos(f32 x)         { return ::acosf(x);     }
-inline f32 arctan(f32 x)         { return ::atanf(x);     }
-inline f32 arctan2(f32 y, f32 x) { return ::atan2f(y, x); }
-
-inline f32 radians(f32 degrees) { return TAU * degrees / 360.0f; }
-inline f32 degrees(f32 radians) { return 360.0f * radians / TAU; }
+inline Angle arcsin(f32 x)         { return angle::radians(::asinf(x));     }
+inline Angle arccos(f32 x)         { return angle::radians(::acosf(x));     }
+inline Angle arctan(f32 x)         { return angle::radians(::atanf(x));     }
+inline Angle arctan2(f32 y, f32 x) { return angle::radians(::atan2f(y, x)); }
 
 // Hyperbolic
 inline f32 sinh(f32 x) { return ::sinhf(x); }
@@ -5392,10 +5514,10 @@ complex_angle(const Complex& a)
 }
 
 inline Complex
-magnitude_angle(f32 magnitude, f32 radians)
+magnitude_angle(f32 magnitude, Angle a)
 {
-	f32 real = magnitude * cos(radians);
-	f32 imag = magnitude * sin(radians);
+	f32 real = magnitude * math::cos(a);
+	f32 imag = magnitude * math::sin(a);
 	return {real, imag};
 }
 
@@ -5449,7 +5571,7 @@ inverse(const Quaternion& a)
 	return math::conjugate(a) * m;
 }
 
-inline f32
+inline Angle
 quaternion_angle(const Quaternion& a)
 {
 	return 2.0f * math::arccos(a.w);
@@ -5469,33 +5591,33 @@ quaternion_axis(const Quaternion& a)
 }
 
 inline Quaternion
-axis_angle(const Vector3& axis, f32 radians)
+axis_angle(const Vector3& axis, Angle angle)
 {
 	Vector3 a = math::normalize(axis);
-	f32 s = math::sin(0.5f * radians);
+	f32 s = math::sin(0.5f * angle);
 
 	Quaternion q;
 	q.xyz = a * s;
-	q.w = math::cos(0.5f * radians);
+	q.w = math::cos(0.5f * angle);
 
 	return q;
 }
 
-inline f32
+inline Angle
 quaternion_roll(const Quaternion& a)
 {
 	return math::arctan2(2.0f * a.x * a.y + a.z * a.w,
 					     a.x * a.x + a.w * a.w - a.y * a.y - a.z * a.z);
 }
 
-inline f32
+inline Angle
 quaternion_pitch(const Quaternion& a)
 {
 	return math::arctan2(2.0f * a.y * a.z + a.w * a.x,
 					     a.w * a.w - a.x * a.x - a.y * a.y + a.z * a.z);
 }
 
-inline f32
+inline Angle
 quaternion_yaw(const Quaternion& a)
 {
 	return math::arcsin(-2.0f * (a.x * a.z - a.w * a.y));
@@ -5544,9 +5666,9 @@ slerp(const Quaternion& x, const Quaternion& y, f32 t)
 						  lerp(x.w, y.w, t)};
 	}
 
-	f32 angle = math::arccos(cos_theta);
+	Angle angle = math::arccos(cos_theta);
 
-	Quaternion result = math::sin(1.0f - (t * angle)) * x + math::sin(t * angle) * z;
+	Quaternion result = math::sin(angle::radians(1.0f) - (t * angle)) * x + math::sin(t * angle) * z;
 	return result * (1.0f / math::sin(angle));
 }
 
@@ -5921,10 +6043,10 @@ translate(const Vector3& v)
 }
 
 inline Matrix4
-rotate(const Vector3& v, f32 radians)
+rotate(const Vector3& v, Angle angle)
 {
-	const f32 c = math::cos(radians);
-	const f32 s = math::sin(radians);
+	const f32 c = math::cos(angle);
+	const f32 s = math::sin(angle);
 
 	const Vector3 axis = math::normalize(v);
 	const Vector3 t    = (1.0f - c) * axis;
@@ -5980,12 +6102,12 @@ ortho(f32 left, f32 right, f32 bottom, f32 top, f32 z_near, f32 z_far)
 }
 
 inline Matrix4
-perspective(f32 fovy_radians, f32 aspect, f32 z_near, f32 z_far)
+perspective(Angle fovy, f32 aspect, f32 z_near, f32 z_far)
 {
 	GB_ASSERT(math::abs(aspect) > 0.0f,
-			  "math::perspective `fovy_radians` is %f", fovy_radians);
+			  "math::perspective `fovy` is %f rad", angle::as_radians(fovy));
 
-	f32 tan_half_fovy = math::tan(0.5f * fovy_radians);
+	f32 tan_half_fovy = math::tan(0.5f * fovy);
 
 	Matrix4 result = {};
 	result[0][0]   = 1.0f / (aspect * tan_half_fovy);
@@ -5998,9 +6120,9 @@ perspective(f32 fovy_radians, f32 aspect, f32 z_near, f32 z_far)
 }
 
 inline Matrix4
-infinite_perspective(f32 fovy_radians, f32 aspect, f32 z_near)
+infinite_perspective(Angle fovy, f32 aspect, f32 z_near)
 {
-	f32 range  = math::tan(0.5f * fovy_radians) * z_near;
+	f32 range  = math::tan(0.5f * fovy) * z_near;
 	f32 left   = -range * aspect;
 	f32 right  =  range * aspect;
 	f32 bottom = -range;
