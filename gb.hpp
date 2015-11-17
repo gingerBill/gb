@@ -1,8 +1,9 @@
-// gb.hpp - v0.20 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.20a - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
 Version History:
+	0.20a - #ifndef for many macros
 	0.20  - Angle
 	0.19  - Cache friendly Transform and String fixes
 	0.18  - Hash_Table bug fixes
@@ -65,6 +66,7 @@ Context:
 			- Complex
 			- Quaternion
 			- Matrix(2,3,4)
+			- Angle
 			- Euler_Angles
 			- Transform
 			- Aabb
@@ -74,12 +76,6 @@ Context:
 		- Functions & Constants
 		- Type Functions
 	- Random
-		- Generator_Type
-		- Geneartor Definition (Template/Concept)
-			- Mt19937_32
-			- Mt19937_64
-			- Random_Device
-		- Functions
 */
 
 #ifndef GB_INCLUDE_GB_HPP
@@ -91,17 +87,20 @@ Context:
 
 // NOTE(bill): Because static means three different things in C/C++
 //             Great Design(!)
+#ifndef global
 #define global        static
 #define internal      static
 #define local_persist static
+#endif
 
 #if defined(_MSC_VER)
 	#define _ALLOW_KEYWORD_MACROS
+
+	#ifndef alignof // Needed for MSVC 2013 'cause Microsoft "loves" standards
+	#define alignof(x) __alignof(x)
+	#endif
 #endif
 
-#if !defined(alignof) // Needed for MSVC 2013 'cause Microsoft "loves" standards
-	#define alignof(x) __alignof(x)
-#endif
 
 ////////////////////////////////
 ///                          ///
@@ -109,16 +108,26 @@ Context:
 ///                          ///
 ////////////////////////////////
 #if defined(_WIN32) || defined(_WIN64)
+	#ifndef GB_SYSTEM_WINDOWS
 	#define GB_SYSTEM_WINDOWS 1
+	#endif
 #elif defined(__APPLE__) && defined(__MACH__)
+	#ifndef GB_SYSTEM_OSX
 	#define GB_SYSTEM_OSX 1
+	#endif
 #elif defined(__unix__)
+	#ifndef GB_SYSTEM_UNIX
 	#define GB_SYSTEM_UNIX 1
+	#endif
 
 	#if defined(__linux__)
+		#ifndef GB_SYSTEM_LINUX
 		#define GB_SYSTEM_LINUX 1
+		#endif
 	#elif defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
+		#ifndef GB_SYSTEM_FREEBSD
 		#define GB_SYSTEM_FREEBSD 1
+		#endif
 	#else
 		#error This UNIX operating system is not supported by gb.hpp
 	#endif
@@ -133,21 +142,30 @@ Context:
 ////////////////////////////////
 #if defined(_WIN32) || defined(_WIN64)
 	#if defined(_WIN64)
+		#ifndef GB_ARCH_64_BIT
 		#define GB_ARCH_64_BIT 1
+		#endif
 	#else
+		#ifndef GB_ARCH_32_BIT
 		#define GB_ARCH_32_BIT 1
+		#endif
 	#endif
 #endif
 
 // TODO(bill): Check if this KEPLER_ENVIRONMENT works on clang
 #if defined(__GNUC__)
 	#if defined(__x86_64__) || defined(__ppc64__)
+		#ifndef GB_ARCH_64_BIT
 		#define GB_ARCH_64_BIT 1
+		#endif
 	#else
+		#ifndef GB_ARCH_32_BIT
 		#define GB_ARCH_32_BIT 1
+		#endif
 	#endif
 #endif
 
+// TODO(bill): Get this to work
 // #if !defined(GB_LITTLE_EDIAN) && !defined(GB_BIG_EDIAN)
 
 // 	// Source: http://sourceforge.net/p/predef/wiki/Endianness/
@@ -225,45 +243,50 @@ Context:
 	#include <sys/time.h>
 #endif
 
-#if !defined(NDEBUG)
-	#define GB_ASSERT(x, ...) ((void)(::gb__assert_handler((x), #x, __FILE__, __LINE__, ##__VA_ARGS__)))
-#else
-	#define GB_ASSERT(x, ...) ((void)sizeof(x))
-#endif
-
-#if !defined(GB_ARRAY_BOUND_CHECKING)
+#ifndef GB_ARRAY_BOUND_CHECKING
 #define GB_ARRAY_BOUND_CHECKING 1
 #endif
 
 
+#ifndef GB_DISABLE_COPY
 #define GB_DISABLE_COPY(Type) \
 	Type(const Type&) = delete;      \
 	Type& operator=(const Type&) = delete
+#endif
 
-/// Helper function used as a better alternative to assert which allows for
-/// optional printf style error messages
-extern "C" inline void
-gb__assert_handler(bool condition, const char* condition_str,
-				   const char* filename, size_t line,
-				   const char* error_text = nullptr, ...)
-{
-	if (condition)
-		return;
+#if !defined(GB_ASSERT)
+	#if !defined(NDEBUG)
+		#define GB_ASSERT(x, ...) ((void)(::gb__assert_handler((x), #x, __FILE__, __LINE__, ##__VA_ARGS__)))
 
-	fprintf(stderr, "ASSERT! %s(%lu): %s", filename, line, condition_str);
-	if (error_text)
-	{
-		fprintf(stderr, " - ");
+		/// Helper function used as a better alternative to assert which allows for
+		/// optional printf style error messages
+		extern "C" inline void
+		gb__assert_handler(bool condition, const char* condition_str,
+						   const char* filename, size_t line,
+						   const char* error_text = nullptr, ...)
+		{
+			if (condition)
+				return;
 
-		va_list args;
-		va_start(args, error_text);
-		vfprintf(stderr, error_text, args);
-		va_end(args);
-	}
-	fprintf(stderr, "\n");
-	// TODO(bill): Get a better way to abort
-	*(int*)0 = 0;
-}
+			fprintf(stderr, "ASSERT! %s(%lu): %s", filename, line, condition_str);
+			if (error_text)
+			{
+				fprintf(stderr, " - ");
+
+				va_list args;
+				va_start(args, error_text);
+				vfprintf(stderr, error_text, args);
+				va_end(args);
+			}
+			fprintf(stderr, "\n");
+			// TODO(bill): Get a better way to abort
+			*(int*)0 = 0;
+		}
+
+	#else
+		#define GB_ASSERT(x, ...) ((void)sizeof(x))
+	#endif
+#endif
 
 ////////////////////////////////
 ///                          ///
@@ -271,34 +294,32 @@ gb__assert_handler(bool condition, const char* condition_str,
 ///                          ///
 ////////////////////////////////
 #if defined(_MSC_VER)
+	extern "C" inline int
+	gb__vsnprintf_compatible(char* buffer, size_t size, const char* format, va_list args)
+	{
+		int result = -1;
+		if (size > 0)
+			result = _vsnprintf_s(buffer, size, _TRUNCATE, format, args);
+		if (result == -1)
+			return _vscprintf(format, args);
 
-extern "C" inline int
-gb__vsnprintf_compatible(char* buffer, size_t size, const char* format, va_list args)
-{
-	int result = -1;
-	if (size > 0)
-		result = _vsnprintf_s(buffer, size, _TRUNCATE, format, args);
-	if (result == -1)
-		return _vscprintf(format, args);
+		return result;
+	}
 
-	return result;
-}
+	extern "C" inline int
+	gb__snprintf_compatible(char* buffer, size_t size, const char* format, ...)
+	{
+		va_list args;
+		va_start(args, format);
+		int result = gb__vsnprintf_compatible(buffer, size, format, args);
+		va_end(args);
+		return result;
+	}
 
-extern "C" inline int
-gb__snprintf_compatible(char* buffer, size_t size, const char* format, ...)
-{
-	va_list args;
-	va_start(args, format);
-	int result = gb__vsnprintf_compatible(buffer, size, format, args);
-	va_end(args);
-	return result;
-}
-
-#if !defined(GB_DO_NOT_USE_MSVC_SPRINTF_FIX)
-	#define snprintf  gb__snprintf_compatible
-	#define vsnprintf gb__vsnprintf_compatible
-#endif // GB_DO_NOT_USE_MSVC_SPRINTF_FIX
-
+	#if !defined(GB_DO_NOT_USE_MSVC_SPRINTF_FIX)
+		#define snprintf  gb__snprintf_compatible
+		#define vsnprintf gb__vsnprintf_compatible
+	#endif // GB_DO_NOT_USE_MSVC_SPRINTF_FIX
 #endif
 
 #if !defined(__GB_NAMESPACE_PREFIX) && !defined(GB_NO_GB_NAMESPACE)
@@ -327,96 +348,101 @@ __GB_NAMESPACE_START
 ////////////////////////////////
 
 
+#ifndef GB_BASIC_TYPES
+#define GB_BASIC_TYPES
+	#if defined(_MSC_VER)
+		using u8  = unsigned __int8;
+		using s8  =   signed __int8;
+		using u16 = unsigned __int16;
+		using s16 =   signed __int16;
+		using u32 = unsigned __int32;
+		using s32 =   signed __int32;
+		using u64 = unsigned __int64;
+		using s64 =   signed __int64;
+	#else
+		using u8  = unsigned char;
+		using s8  =   signed char;
+		using u16 = unsigned short;
+		using s16 =   signed short;
+		using u32 = unsigned int;
+		using s32 =   signed int;
+		using u64 = unsigned long long;
+		using s64 =   signed long long;
+	#endif
 
-#if defined(_MSC_VER)
-	using u8  = unsigned __int8;
-	using s8  =   signed __int8;
-	using u16 = unsigned __int16;
-	using s16 =   signed __int16;
-	using u32 = unsigned __int32;
-	using s32 =   signed __int32;
-	using u64 = unsigned __int64;
-	using s64 =   signed __int64;
-#else
-	using u8  = unsigned char;
-	using s8  =   signed char;
-	using u16 = unsigned short;
-	using s16 =   signed short;
-	using u32 = unsigned int;
-	using s32 =   signed int;
-	using u64 = unsigned long long;
-	using s64 =   signed long long;
+	static_assert( sizeof(u8) == 1,  "u8 is not  8 bits");
+	static_assert(sizeof(u16) == 2, "u16 is not 16 bits");
+	static_assert(sizeof(u32) == 4, "u32 is not 32 bits");
+	static_assert(sizeof(u64) == 8, "u64 is not 64 bits");
+
+	using f32 = float;
+	using f64 = double;
+
+	#if defined(GB_B8_AS_BOOL)
+		using b8 = bool;
+	#else
+		using b8 = s8;
+	#endif
+	using b32 = s32;
+
+	// NOTE(bill): (std::)size_t is not used not because it's a bad concept but on
+	// the platforms that I will be using:
+	// sizeof(size_t) == sizeof(usize) == sizeof(s64)
+	// NOTE(bill): This also allows for a signed version of size_t which is similar
+	// to ptrdiff_t
+	// NOTE(bill): If (u)intptr is a better fit, please use that.
+	// NOTE(bill): Also, I hate the `_t` suffix
+	#if defined(GB_ARCH_64_BIT)
+		using ssize = s64;
+		using usize = u64;
+	#elif defined(GB_ARCH_32_BIT)
+		using usize = s32;
+		using usize = u32;
+	#else
+		#error Unknown architecture bit size
+	#endif
+
+	static_assert(sizeof(usize) == sizeof(size_t),
+				  "`usize` is not the same size as `size_t`");
+	static_assert(sizeof(ssize) == sizeof(usize),
+				  "`ssize` is not the same size as `usize`");
+
+	using intptr  = intptr_t;
+	using uintptr = uintptr_t;
+
+	using ptrdiff = ptrdiff_t;
+
 #endif
 
-static_assert( sizeof(u8) == 1,  "u8 is not  8 bits");
-static_assert(sizeof(u16) == 2, "u16 is not 16 bits");
-static_assert(sizeof(u32) == 4, "u32 is not 32 bits");
-static_assert(sizeof(u64) == 8, "u64 is not 64 bits");
+#if !defined(GB_U8_MIN)
+	#define GB_U8_MIN 0u
+	#define GB_U8_MAX 0xffu
+	#define GB_S8_MIN (-0x7f - 1)
+	#define GB_S8_MAX 0x7f
 
-using f32 = float;
-using f64 = double;
+	#define GB_U16_MIN 0u
+	#define GB_U16_MAX 0xffffu
+	#define GB_S16_MIN (-0x7fff - 1)
+	#define GB_S16_MAX 0x7fff
 
-#if defined(GB_B8_AS_BOOL)
-	using b8 = bool;
-#else
-	using b8 = s8;
-#endif
-using b32 = s32;
+	#define GB_U32_MIN 0u
+	#define GB_U32_MAX 0xffffffffu
+	#define GB_S32_MIN (-0x7fffffff - 1)
+	#define GB_S32_MAX 0x7fffffff
 
-// NOTE(bill): (std::)size_t is not used not because it's a bad concept but on
-// the platforms that I will be using:
-// sizeof(size_t) == sizeof(usize) == sizeof(s64)
-// NOTE(bill): This also allows for a signed version of size_t which is similar
-// to ptrdiff_t
-// NOTE(bill): If (u)intptr is a better fit, please use that.
-// NOTE(bill): Also, I hate the `_t` suffix
-#if defined(GB_ARCH_64_BIT)
-	using ssize = s64;
-	using usize = u64;
-#elif defined(GB_ARCH_32_BIT)
-	using usize = s32;
-	using usize = u32;
-#else
-	#error Unknown architecture bit size
+	#define GB_U64_MIN 0ull
+	#define GB_U64_MAX 0xffffffffffffffffull
+	#define GB_S64_MIN (-0x7fffffffffffffffll - 1)
+	#define GB_S64_MAX 0x7fffffffffffffffll
 #endif
 
-static_assert(sizeof(usize) == sizeof(size_t),
-			  "`usize` is not the same size as `size_t`");
-static_assert(sizeof(ssize) == sizeof(usize),
-			  "`ssize` is not the same size as `usize`");
-
-using intptr  = intptr_t;
-using uintptr = uintptr_t;
-
-using ptrdiff = ptrdiff_t;
-
-#define GB_U8_MIN 0u
-#define GB_U8_MAX 0xffu
-#define GB_S8_MIN (-0x7f - 1)
-#define GB_S8_MAX 0x7f
-
-#define GB_U16_MIN 0u
-#define GB_U16_MAX 0xffffu
-#define GB_S16_MIN (-0x7fff - 1)
-#define GB_S16_MAX 0x7fff
-
-#define GB_U32_MIN 0u
-#define GB_U32_MAX 0xffffffffu
-#define GB_S32_MIN (-0x7fffffff - 1)
-#define GB_S32_MAX 0x7fffffff
-
-#define GB_U64_MIN 0ull
-#define GB_U64_MAX 0xffffffffffffffffull
-#define GB_S64_MIN (-0x7fffffffffffffffll - 1)
-#define GB_S64_MAX 0x7fffffffffffffffll
-
-#if defined(GB_ARCH_64_BIT)
+#if defined(GB_ARCH_64_BIT) && !defined(GB_USIZE_MIX)
 	#define GB_USIZE_MIX GB_U64_MIN
 	#define GB_USIZE_MAX GB_U64_MAX
 
 	#define GB_SSIZE_MIX GB_S64_MIN
 	#define GB_SSIZE_MAX GB_S64_MAX
-#elif defined(GB_ARCH_32_BIT)
+#elif defined(GB_ARCH_32_BIT) && !defined(GB_USIZE_MIX)
 	#define GB_USIZE_MIX GB_U32_MIN
 	#define GB_USIZE_MAX GB_U32_MAX
 
@@ -424,7 +450,7 @@ using ptrdiff = ptrdiff_t;
 	#define GB_SSIZE_MAX GB_S32_MAX
 #endif
 
-#if defined(GB_BASIC_WITHOUT_NAMESPACE)
+#if defined(GB_BASIC_WITHOUT_NAMESPACE) && !defined(U8_MIN)
 	#define U8_MIN 0u
 	#define U8_MAX 0xffu
 	#define S8_MIN (-0x7f - 1)
@@ -445,13 +471,13 @@ using ptrdiff = ptrdiff_t;
 	#define S64_MIN (-0x7fffffffffffffffll - 1)
 	#define S64_MAX 0x7fffffffffffffffll
 
-	#if defined(GB_ARCH_64_BIT)
+	#if defined(GB_ARCH_64_BIT) && !defined(GB_USIZE_MIX)
 		#define USIZE_MIX U64_MIN
 		#define USIZE_MAX U64_MAX
 
 		#define SSIZE_MIX S64_MIN
 		#define SSIZE_MAX S64_MAX
-	#elif defined(GB_ARCH_32_BIT)
+	#elif defined(GB_ARCH_32_BIT) && !defined(GB_USIZE_MIX)
 		#define USIZE_MIX U32_MIN
 		#define USIZE_MAX U32_MAX
 
@@ -564,60 +590,68 @@ move(T&& t)
 {
 	return static_cast<Remove_Reference<T>&&>(t);
 }
+__GB_NAMESPACE_END
 
 ////////////////////////////////
 ///                          ///
 /// Defer                    ///
 ///                          ///
 ////////////////////////////////
-namespace impl
-{
-template <typename Func>
-struct Defer
-{
-	Func f;
+#ifndef GB_DEFER
+#define GB_DEFER
+	__GB_NAMESPACE_START
+	namespace impl
+	{
+	template <typename Func>
+	struct Defer
+	{
+		Func f;
 
-	Defer(Func&& f) : f{forward<Func>(f)} {}
-	~Defer() { f(); };
-};
+		Defer(Func&& f) : f{forward<Func>(f)} {}
+		~Defer() { f(); };
+	};
 
-template <typename Func>
-inline Defer<Func>
-defer_func(Func&& f) { return Defer<Func>(forward<Func>(f)); }
-} // namespace impl
-__GB_NAMESPACE_END
+	template <typename Func>
+	inline Defer<Func>
+	defer_func(Func&& f) { return Defer<Func>(forward<Func>(f)); }
+	} // namespace impl
+	__GB_NAMESPACE_END
 
-// NOTE(bill): These macros are in the global namespace thus, defer can be treated without a __GB_NAMESPACE_PREFIX:: prefix
-#define GB_DEFER_1(x, y) x##y
-#define GB_DEFER_2(x, y) GB_DEFER_1(x, y)
-#define GB_DEFER_3(x)    GB_DEFER_2(GB_DEFER_2(GB_DEFER_2(x, __COUNTER__), _), __LINE__)
-#define defer(code) auto GB_DEFER_3(_defer_) = __GB_NAMESPACE_PREFIX::impl::defer_func([&](){code;})
+	// NOTE(bill): These macros are in the global namespace thus, defer can be treated without a __GB_NAMESPACE_PREFIX:: prefix
+	#define GB_DEFER_1(x, y) x##y
+	#define GB_DEFER_2(x, y) GB_DEFER_1(x, y)
+	#define GB_DEFER_3(x)    GB_DEFER_2(GB_DEFER_2(GB_DEFER_2(x, __COUNTER__), _), __LINE__)
+	#define defer(code) auto GB_DEFER_3(_defer_) = __GB_NAMESPACE_PREFIX::impl::defer_func([&](){code;})
+#endif
 
 #if !defined(GB_CASTS_WITHOUT_NAMESPACE)
 __GB_NAMESPACE_START
 #endif // GB_CASTS_WITHOUT_NAMESPACE
 
-// IMPORTANT NOTE(bill): Very similar to doing `*(T*)(&u)` but easier/clearer to write
-// however, it can be dangerous if sizeof(T) > sizeof(U) e.g. unintialized memory, undefined behavior
-// *(T*)(&u) ~~ pseudo_cast<T>(u)
-template <typename T, typename U>
-inline T
-pseudo_cast(const U& u)
-{
-	return reinterpret_cast<const T&>(u);
-}
+#ifndef GB_SPECIAL_CASTS
+#define GB_SPECIAL_CASTS
+	// IMPORTANT NOTE(bill): Very similar to doing `*(T*)(&u)` but easier/clearer to write
+	// however, it can be dangerous if sizeof(T) > sizeof(U) e.g. unintialized memory, undefined behavior
+	// *(T*)(&u) ~~ pseudo_cast<T>(u)
+	template <typename T, typename U>
+	inline T
+	pseudo_cast(const U& u)
+	{
+		return reinterpret_cast<const T&>(u);
+	}
 
-// NOTE(bill): Very similar to doing `*(T*)(&u)`
-template <typename Dest, typename Source>
-inline Dest
-bit_cast(const Source& source)
-{
-	static_assert(sizeof(Dest) <= sizeof(Source),
-	              "bit_cast<Dest>(const Source&) - sizeof(Dest) <= sizeof(Source)");
-	Dest dest;
-	::memcpy(&dest, &source, sizeof(Dest));
-	return dest;
-}
+	// NOTE(bill): Very similar to doing `*(T*)(&u)`
+	template <typename Dest, typename Source>
+	inline Dest
+	bit_cast(const Source& source)
+	{
+		static_assert(sizeof(Dest) <= sizeof(Source),
+		              "bit_cast<Dest>(const Source&) - sizeof(Dest) <= sizeof(Source)");
+		Dest dest;
+		::memcpy(&dest, &source, sizeof(Dest));
+		return dest;
+	}
+#endif
 
 // FORENOTE(bill): There used to be a magic_cast that was equivalent to
 // a C-style cast but I removed it as I could not get it work as intented
