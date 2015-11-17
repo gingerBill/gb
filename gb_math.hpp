@@ -1,9 +1,10 @@
-// gb_math.hpp - v0.02 - public domain C++11 math library - no warranty implied; use at your own risk
+// gb_math.hpp - v0.02a - public domain C++11 math library - no warranty implied; use at your own risk
 // A C++11 math library geared towards game development
 // This is meant to be used the gb.hpp library but it doesn't have to be
 
 /*
 Version History:
+	0.02a - Better `static` keywords
 	0.02  - More Angle Units and templated min/max/clamp/lerp
 	0.01  - Initial Version
 
@@ -45,10 +46,10 @@ Context:
 
 // NOTE(bill): Because static means three different things in C/C++
 //             Great Design(!)
-#ifndef global
-#define global        static
-#define internal      static
-#define local_persist static
+#ifndef global_variable
+#define global_variable  static
+#define internal_linkage static
+#define local_persist    static
 #endif
 
 #if defined(_MSC_VER)
@@ -2297,9 +2298,9 @@ template <typename T>
 inline void
 swap(T* a, T* b)
 {
-	T c = gb::move(*a);
-	*a  = gb::move(*b);
-	*b  = gb::move(c);
+	T c = __GB_NAMESPACE_PREFIX::move(*a);
+	*a  = __GB_NAMESPACE_PREFIX::move(*b);
+	*b  = __GB_NAMESPACE_PREFIX::move(c);
 }
 
 template <typename T, usize N>
@@ -3651,7 +3652,7 @@ uniform_f64(Random* r, f64 min_inc, f64 max_inc)
 }
 
 
-global s32 g_perlin_randtab[512] =
+global_variable s32 g_perlin_randtab[512] =
 {
    23, 125, 161, 52, 103, 117, 70, 37, 247, 101, 203, 169, 124, 126, 44, 123,
    152, 238, 145, 45, 171, 114, 253, 10, 192, 136, 4, 157, 249, 30, 35, 72,
@@ -3690,7 +3691,7 @@ global s32 g_perlin_randtab[512] =
 };
 
 
-internal f32
+internal_linkage f32
 perlin_grad(s32 hash, f32 x, f32 y, f32 z)
 {
 	local_persist f32 basis[12][4] =

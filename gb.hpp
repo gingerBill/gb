@@ -1,8 +1,9 @@
-// gb.hpp - v0.21 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.21a - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
 Version History:
+	0.21a - Better `static` keywords
 	0.21  - Separate Math Library
 	0.20a - #ifndef for many macros
 	0.20  - Angle
@@ -72,10 +73,10 @@ Context:
 
 // NOTE(bill): Because static means three different things in C/C++
 //             Great Design(!)
-#ifndef global
-#define global        static
-#define internal      static
-#define local_persist static
+#ifndef global_variable
+#define global_variable  static
+#define internal_linkage static
+#define local_persist    static
 #endif
 
 #if defined(_MSC_VER)
@@ -536,7 +537,7 @@ template <typename T> struct Remove_Reference_Def<T&>  { using Type = T; };
 template <typename T> struct Remove_Reference_Def<T&&> { using Type = T; };
 template <typename T> using  Remove_Reference = typename Remove_Reference_Def<T>::Type;
 
-template <typename T, T v> struct Integral_Constant { global const T VALUE = v; using Value_Type = T; using Type = Integral_Constant; };
+template <typename T, T v> struct Integral_Constant { global_variable const T VALUE = v; using Value_Type = T; using Type = Integral_Constant; };
 
 template <typename T, usize N = 0>      struct Extent          : Integral_Constant<usize, 0> {};
 template <typename T>                   struct Extent<T[], 0>  : Integral_Constant<usize, 0> {};
@@ -2369,7 +2370,7 @@ destroy(Thread* t)
 	semaphore::destroy(&t->semaphore);
 }
 
-internal s32
+internal_linkage s32
 run(Thread* t)
 {
 	semaphore::post(&t->semaphore);
@@ -2377,7 +2378,7 @@ run(Thread* t)
 }
 
 #if defined(GB_SYSTEM_WINDOWS)
-internal DWORD WINAPI
+internal_linkage DWORD WINAPI
 thread_proc(void* arg)
 {
 	Thread* t = static_cast<Thread*>(arg);
@@ -2386,7 +2387,7 @@ thread_proc(void* arg)
 }
 
 #else
-internal void*
+internal_linkage void*
 thread_proc(void* arg)
 {
 	local_persist s32 result = -1;
@@ -2704,7 +2705,7 @@ void append(String* str, const void* other, Size other_len)
 namespace impl
 {
 // NOTE(bill): ptr _must_ be allocated with Allocator* a
-internal inline void*
+internal_linkage inline void*
 string_realloc(Allocator* a, void* ptr, usize old_size, usize new_size)
 {
 	if (!ptr)
@@ -3024,7 +3025,7 @@ adler32(const void* key, u32 num_bytes)
 	return (b << 16) | a;
 }
 
-global const u32 GB_CRC32_TABLE[256] = {
+global_variable const u32 GB_CRC32_TABLE[256] = {
 	0x00000000, 0x77073096, 0xee0e612c, 0x990951ba,
 	0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3,
 	0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988,
@@ -3091,7 +3092,7 @@ global const u32 GB_CRC32_TABLE[256] = {
 	0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d,
 };
 
-global const u64 GB_CRC64_TABLE[256] = {
+global_variable const u64 GB_CRC64_TABLE[256] = {
 	0x0000000000000000ull, 0x42F0E1EBA9EA3693ull, 0x85E1C3D753D46D26ull, 0xC711223CFA3E5BB5ull,
 	0x493366450E42ECDFull, 0x0BC387AEA7A8DA4Cull, 0xCCD2A5925D9681F9ull, 0x8E224479F47CB76Aull,
 	0x9266CC8A1C85D9BEull, 0xD0962D61B56FEF2Dull, 0x17870F5D4F51B498ull, 0x5577EEB6E6BB820Bull,
@@ -3378,7 +3379,7 @@ namespace time
 {
 #if defined(GB_SYSTEM_WINDOWS)
 
-internal LARGE_INTEGER
+internal_linkage LARGE_INTEGER
 win32_get_frequency()
 {
 	LARGE_INTEGER f;
@@ -3400,7 +3401,7 @@ now()
 
 	// Get the frequency of the performance counter
 	// It is constant across the program's lifetime
-	internal LARGE_INTEGER s_frequency = win32_get_frequency();
+	local_persist LARGE_INTEGER s_frequency = win32_get_frequency();
 
 	// Get the current time
 	LARGE_INTEGER t;
@@ -3514,7 +3515,7 @@ namespace file
 {
 #if defined(GB_SYSTEM_WINDOWS)
 
-internal char*
+internal_linkage char*
 duplicate_string(const char* string)
 {
 	usize len = strlen(string);
@@ -3547,7 +3548,7 @@ new_from_fd(File* file, uintptr h, const char* name)
 	return true;
 }
 
-internal bool
+internal_linkage bool
 win32_open_file(File* file, const char* name, u32 flag, u32 perm)
 {
 	// TODO(bill):
@@ -3590,7 +3591,7 @@ close(File* file)
 	return false;
 }
 
-// internal bool
+// internal_linkage bool
 // win32_pread(File* file, void* buffer, u32 bytes_to_read, s64 offset)
 // {
 // 	mutex::lock(&file->mutex);
