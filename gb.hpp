@@ -1,8 +1,9 @@
-// gb.hpp - v0.21b - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.21c - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
 Version History:
+	0.21c - Fix Another Typo causing unresolved external symbol
 	0.21b - Typo fixes
 	0.21a - Better `static` keywords
 	0.21  - Separate Math Library
@@ -1324,7 +1325,7 @@ make(Allocator* allocator, usize count)
 
 template <typename T>
 inline void
-dealloc(Array<T>* a)
+free(Array<T>* a)
 {
 	if (a->allocator)
 		dealloc(a->allocator, a->data);
