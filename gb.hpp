@@ -1,8 +1,9 @@
-// gb.hpp - v0.22 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.23 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
 Version History:
+	0.23  - Move Semantics for Array and Hash_Table
 	0.22  - Code rearrangment into namespaces
 	0.21d - Fix array::free
 	0.21c - Fix Another Typo causing unresolved external symbol
@@ -861,11 +862,6 @@ struct Allocator
 /// the allocation and align them to the desired alignment
 struct Heap_Allocator : Allocator
 {
-	struct Header
-	{
-		s64 size;
-	};
-
 	Mutex mutex                 = mutex::make();
 	s64   total_allocated_count = 0;
 	s64   allocation_count      = 0;
@@ -922,12 +918,6 @@ struct Temp_Allocator : Allocator
 	virtual s64 total_allocated() { return -1; }
 };
 
-
-namespace heap_allocator
-{
-Heap_Allocator::Header* get_header_ptr(const void* ptr);
-} // namespace heap_allocator
-
 namespace arena_allocator
 {
 void clear(Arena_Allocator* arena);
@@ -957,7 +947,6 @@ bool equals(const void* a, const void* b, usize bytes);
 
 inline void* alloc(Allocator* a, usize size, usize align = GB_DEFAULT_ALIGNMENT) { GB_ASSERT(a != nullptr); return a->alloc(size, align); }
 inline void dealloc(Allocator* a, const void* ptr) { GB_ASSERT(a != nullptr); return a->dealloc(ptr); }
-// TODO(bill): Should I overload free() or not would that be too confusing?
 
 template <typename T>
 inline T* alloc_struct(Allocator* a) { return static_cast<T*>(alloc(a, sizeof(T), alignof(T))); }
@@ -1064,28 +1053,18 @@ struct Array
 	T*         data;
 
 	Array() = default;
-	Array(const Array& array);
 	explicit Array(Allocator* a, usize count = 0);
+
 	~Array();
+
+	Array(const Array& array);
+	Array(Array&& array);
+
 	Array& operator=(const Array& array);
+	Array& operator=(Array&& array);
 
-	inline const T&
-	operator[](usize index) const
-	{
-#if GB_ARRAY_BOUND_CHECKING
-		GB_ASSERT(index < static_cast<usize>(capacity), "Array out of bounds");
-#endif
-		return data[index];
-	}
-
-	inline T&
-	operator[](usize index)
-	{
-#if GB_ARRAY_BOUND_CHECKING
-		GB_ASSERT(index < static_cast<usize>(capacity), "Array out of bounds");
-#endif
-		return data[index];
-	}
+	const T& operator[](usize index) const;
+	      T& operator[](usize index);
 };
 
 namespace array
@@ -1096,6 +1075,7 @@ template <typename T> void     free(Array<T>* array);
 
 /// Appends `item` to the end of the array
 template <typename T> void append(Array<T>* a, const T& item);
+template <typename T> void append(Array<T>* a, T&& item);
 /// Appends `items[count]` to the end of the array
 template <typename T> void append(Array<T>* a, const T* items, usize count);
 
@@ -1158,6 +1138,7 @@ template <typename T> bool has(const Hash_Table<T>& h, u64 key);
 template <typename T> const T& get(const Hash_Table<T>& h, u64 key, const T& default_value);
 /// Sets the value for the key in the hash table
 template <typename T> void set(Hash_Table<T>* h, u64 key, const T& value);
+template <typename T> void set(Hash_Table<T>* h, u64 key, T&& value);
 /// Removes the key from the hash table if it exists
 template <typename T> void remove(Hash_Table<T>* h, u64 key);
 /// Resizes the hash table's lookup table to the specified size
@@ -1184,6 +1165,7 @@ template <typename T> typename const Hash_Table<T>::Entry* find_next(const Hash_
 
 /// Inserts the `value` as an additional value for the specified key
 template <typename T> void insert(Hash_Table<T>* h, u64 key, const T& value);
+template <typename T> void insert(Hash_Table<T>* h, u64 key, T&& value);
 /// Removes a specified entry `e` from the hash table
 template <typename T> void remove_entry(Hash_Table<T>* h, typename const Hash_Table<T>::Entry* e);
 /// Removes all entries with from the hash table with the specified key
@@ -1513,10 +1495,25 @@ Array<T>::Array(const Array<T>& other)
 
 template <typename T>
 inline
+Array<T>::Array(Array<T>&& other)
+: allocator(nullptr)
+, count(0)
+, capacity(0)
+, data(nullptr)
+{
+	*this = move(other);
+}
+
+
+template <typename T>
+inline
 Array<T>::~Array()
 {
 	if (allocator && capacity > 0)
 		dealloc(allocator, data);
+	count    = 0;
+	capacity = 0;
+	data     = nullptr;
 }
 
 
@@ -1530,6 +1527,44 @@ Array<T>::operator=(const Array<T>& other)
 	array::resize(this, n);
 	memory::copy(data, other.data, n * sizeof(T));
 	return *this;
+}
+
+
+template <typename T>
+Array<T>&
+Array<T>::operator=(Array<T>&& other)
+{
+	if (this != &other)
+	{
+		if (allocator && capacity > 0)
+			dealloc(allocator, data);
+
+		*this = move(other);
+	}
+
+	return *this;
+}
+
+
+
+template <typename T>
+inline const T&
+Array<T>::operator[](usize index) const
+{
+#if GB_ARRAY_BOUND_CHECKING
+	GB_ASSERT(index < static_cast<usize>(capacity), "Array out of bounds");
+#endif
+	return data[index];
+}
+
+template <typename T>
+inline T&
+Array<T>::operator[](usize index)
+{
+#if GB_ARRAY_BOUND_CHECKING
+	GB_ASSERT(index < static_cast<usize>(capacity), "Array out of bounds");
+#endif
+	return data[index];
 }
 
 
@@ -1557,9 +1592,9 @@ free(Array<T>* a)
 {
 	if (a->allocator)
 		dealloc(a->allocator, a->data);
-	a->count = 0;
+	a->count    = 0;
 	a->capacity = 0;
-	a->data = nullptr;
+	a->data     = nullptr;
 }
 
 template <typename T>
@@ -1571,6 +1606,16 @@ append(Array<T>* a, const T& item)
 	a->data[a->count++] = item;
 }
 
+
+template <typename T>
+inline void
+append(Array<T>* a, T&& item)
+{
+	if (a->capacity < a->count + 1)
+		array::grow(a);
+	a->data[a->count++] = move(item);
+}
+
 template <typename T>
 inline void
 append(Array<T>* a, const T* items, usize count)
@@ -1578,7 +1623,7 @@ append(Array<T>* a, const T* items, usize count)
 	if (a->capacity <= a->count + static_cast<s64>(count))
 		array::grow(a, a->count + count);
 
-	memory::copy(&a->data[a->count], items, count * sizeof(T));
+	memory::copy(a->data + a->count, items, count * sizeof(T));
 	a->count += count;
 }
 
@@ -1595,7 +1640,7 @@ template <typename T>
 inline void
 clear(Array<T>* a)
 {
-	array::resize(a, 0);
+	a->count = 0;
 }
 
 template <typename T>
@@ -1640,7 +1685,8 @@ template <typename T>
 inline void
 grow(Array<T>* a, usize min_capacity)
 {
-	usize capacity = 2 * a->capacity + 2;
+	// TODO(bill): Decide on decent growing formula for Array
+	usize capacity = 2 * a->capacity + 8;
 	if (capacity < min_capacity)
 		capacity = min_capacity;
 	set_capacity(a, capacity);
@@ -1932,6 +1978,19 @@ set(Hash_Table<T>* h, u64 key, const T& value)
 
 template <typename T>
 inline void
+set(Hash_Table<T>* h, u64 key, T&& value)
+{
+	if (h->hashes.count == 0)
+		impl::grow(h);
+
+	const s64 index = impl::find_or_make_entry(h, key);
+	h->entries[index].value = move(value);
+	if (impl::is_full(h))
+		impl::grow(h);
+}
+
+template <typename T>
+inline void
 remove(Hash_Table<T>* h, u64 key)
 {
 	impl::find_and_erase_entry(h, key);
@@ -2036,6 +2095,20 @@ insert(Hash_Table<T>* h, u64 key, const T& value)
 
 	auto next = hash_table::impl::make_entry(h, key);
 	h->entries[next].value = value;
+
+	if (hash_table::impl::is_full(h))
+		hash_table::impl::grow(h);
+}
+
+template <typename T>
+inline void
+insert(Hash_Table<T>* h, u64 key, T&& value)
+{
+	if (h->hashes.count == 0)
+		hash_table::impl::grow(h);
+
+	auto next = hash_table::impl::make_entry(h, key);
+	h->entries[next].value = move(value);
 
 	if (hash_table::impl::is_full(h))
 		hash_table::impl::grow(h);
@@ -2563,7 +2636,7 @@ is_running(const Thread& thread)
 
 
 
-#define GB_HEAP_ALLOCATOR_HEADER_PAD_VALUE (usize)(-1)
+//#define GB_HEAP_ALLOCATOR_HEADER_PAD_VALUE (usize)(-1)
 Heap_Allocator::~Heap_Allocator()
 {
 #if 0
@@ -2573,37 +2646,15 @@ Heap_Allocator::~Heap_Allocator()
 #endif
 }
 
-namespace heap_allocator
-{
-inline Heap_Allocator::Header*
-get_header_ptr(const void* ptr)
-{
-	const usize* data = reinterpret_cast<const usize*>(ptr) - 1;
-
-	while (*data == GB_HEAP_ALLOCATOR_HEADER_PAD_VALUE)
-		data--;
-
-	return (Heap_Allocator::Header*)(data);
-}
-} // namespace heap_allocator
-
 void*
 Heap_Allocator::alloc(usize size, usize align)
 {
 	mutex::lock(&mutex);
 	defer (mutex::unlock(&mutex));
 
-	const usize total = size + align + sizeof(Header);
-	Header* h = static_cast<Header*>(::malloc(total));
-	h->size   = total;
+	usize total = size + align - (size % align);
+	void* data = malloc(total);
 
-	void* data = memory::align_forward(h + 1, align);
-	{ // Pad header
-		usize* ptr = reinterpret_cast<usize*>(h+1);
-
-		while (ptr != data)
-			*ptr++ = GB_HEAP_ALLOCATOR_HEADER_PAD_VALUE;
-	}
 	total_allocated_count += total;
 	allocation_count++;
 
@@ -2619,13 +2670,10 @@ Heap_Allocator::dealloc(const void* ptr)
 	mutex::lock(&mutex);
 	defer (mutex::unlock(&mutex));
 
-
-	Header* h = heap_allocator::get_header_ptr(ptr);
-
-	total_allocated_count -= h->size;
+	total_allocated_count -= this->allocated_size(ptr);
 	allocation_count--;
 
-	::free(h);
+	::free(const_cast<void*>(ptr));
 }
 
 s64
@@ -2634,7 +2682,15 @@ Heap_Allocator::allocated_size(const void* ptr)
 	mutex::lock(&mutex);
 	defer (mutex::unlock(&mutex));
 
-	return heap_allocator::get_header_ptr(ptr)->size;
+#if defined(GB_SYSTEM_WINDOWS)
+	return static_cast<usize>(_msize(const_cast<void*>(ptr)));
+#elif defined(GB_SYSTEM_OSX)
+	return static_cast<usize>(malloc_size(ptr));
+#else
+	return static_cast<usize>(malloc_usable_size(const_cast<void*>(ptr)));
+	return
+#endif
+
 }
 
 s64
