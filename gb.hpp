@@ -1,8 +1,9 @@
-// gb.hpp - v0.21a - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.21b - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
 Version History:
+	0.21b - Typo fixes
 	0.21a - Better `static` keywords
 	0.21  - Separate Math Library
 	0.20a - #ifndef for many macros
@@ -38,7 +39,7 @@ WARNING
 	- This also means that many functions are not documented.
 	- This library is not compatible with STL at all! (By design)
 
-Context:
+CONTENTS:
 	- Common Macros
 	- Assert
 	- Types
@@ -373,7 +374,7 @@ __GB_NAMESPACE_START
 
 	// NOTE(bill): (std::)size_t is not used not because it's a bad concept but on
 	// the platforms that I will be using:
-	// sizeof(size_t) == sizeof(usize) == sizeof(s64)
+	// sizeof(size_t) == sizeof(usize) == sizeof(ssize)
 	// NOTE(bill): This also allows for a signed version of size_t which is similar
 	// to ptrdiff_t
 	// NOTE(bill): If (u)intptr is a better fit, please use that.

@@ -1,9 +1,10 @@
-// gb_math.hpp - v0.02a - public domain C++11 math library - no warranty implied; use at your own risk
+// gb_math.hpp - v0.02b - public domain C++11 math library - no warranty implied; use at your own risk
 // A C++11 math library geared towards game development
 // This is meant to be used the gb.hpp library but it doesn't have to be
 
 /*
 Version History:
+	0.02b - Typo fixes
 	0.02a - Better `static` keywords
 	0.02  - More Angle Units and templated min/max/clamp/lerp
 	0.01  - Initial Version
@@ -18,7 +19,7 @@ WARNING
 	- This also means that many functions are not documented.
 	- This library was developed in conjunction with `gb.hpp`
 
-Context:
+CONTENTS:
 	- Common Macros
 	- Assert
 	- Types
@@ -312,7 +313,7 @@ __GB_NAMESPACE_START
 
 	// NOTE(bill): (std::)size_t is not used not because it's a bad concept but on
 	// the platforms that I will be using:
-	// sizeof(size_t) == sizeof(usize) == sizeof(s64)
+	// sizeof(size_t) == sizeof(usize) == sizeof(ssize)
 	// NOTE(bill): This also allows for a signed version of size_t which is similar
 	// to ptrdiff_t
 	// NOTE(bill): If (u)intptr is a better fit, please use that.

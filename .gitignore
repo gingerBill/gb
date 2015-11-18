@@ -222,3 +222,5 @@ _Pvt_Extensions
 misc/
 *.sublime*
 test.*
+src
+*.sln
