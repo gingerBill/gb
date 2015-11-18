@@ -222,5 +222,6 @@ _Pvt_Extensions
 misc/
 *.sublime*
 test.*
-src
+src/
 *.sln
+run.bat

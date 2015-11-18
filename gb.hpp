@@ -1,8 +1,9 @@
-// gb.hpp - v0.21d - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.22 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
 Version History:
+	0.22  - Code rearrangment into namespaces
 	0.21d - Fix array::free
 	0.21c - Fix Another Typo causing unresolved external symbol
 	0.21b - Typo fixes
@@ -611,6 +612,38 @@ __GB_NAMESPACE_END
 	#define GB_DEFER_2(x, y) GB_DEFER_1(x, y)
 	#define GB_DEFER_3(x)    GB_DEFER_2(GB_DEFER_2(GB_DEFER_2(x, __COUNTER__), _), __LINE__)
 	#define defer(code) auto GB_DEFER_3(_defer_) = __GB_NAMESPACE_PREFIX::impl::defer_func([&](){code;})
+
+	/* EXAMPLES
+
+	// `defer (...)` will defer a statement till the end of scope
+
+	FILE* file = fopen("test.txt", "rb");
+	if (file == nullptr)
+	{
+		// Handle Error
+	}
+	defer (fclose()); // Will always be called at the end of scope
+
+	//
+
+	auto m = mutex::make();
+	defer (mutex::destroy(&m)); // Mutex will be destroyed at the end of scope
+
+	{
+		mutex::lock(&m);
+		defer (mutex::unlock(&m)); // Mutex will unlock at end of scope
+
+		// Do whatever
+	}
+
+	// You can scope multiple statements together if needed with {...}
+	defer ({
+		func1();
+		func2();
+		func3();
+	});
+
+	*/
 #endif
 
 #if !defined(GB_CASTS_WITHOUT_NAMESPACE)
@@ -619,16 +652,6 @@ __GB_NAMESPACE_START
 
 #ifndef GB_SPECIAL_CASTS
 #define GB_SPECIAL_CASTS
-	// IMPORTANT NOTE(bill): Very similar to doing `*(T*)(&u)` but easier/clearer to write
-	// however, it can be dangerous if sizeof(T) > sizeof(U) e.g. unintialized memory, undefined behavior
-	// *(T*)(&u) ~~ pseudo_cast<T>(u)
-	template <typename T, typename U>
-	inline T
-	pseudo_cast(const U& u)
-	{
-		return reinterpret_cast<const T&>(u);
-	}
-
 	// NOTE(bill): Very similar to doing `*(T*)(&u)`
 	template <typename Dest, typename Source>
 	inline Dest
@@ -639,6 +662,16 @@ __GB_NAMESPACE_START
 		Dest dest;
 		::memcpy(&dest, &source, sizeof(Dest));
 		return dest;
+	}
+
+	// IMPORTANT NOTE(bill): Very similar to doing `*(T*)(&u)` but easier/clearer to write
+	// however, it can be dangerous if sizeof(T) > sizeof(U) e.g. unintialized memory, undefined behavior
+	// *(T*)(&u) ~~ pseudo_cast<T>(u)
+	template <typename T, typename U>
+	inline T
+	pseudo_cast(const U& u)
+	{
+		return reinterpret_cast<const T&>(u);
 	}
 #endif
 
@@ -719,6 +752,8 @@ void post(Semaphore* semaphore, u32 count = 1);
 void wait(Semaphore* semaphore);
 } // namespace semaphore
 
+// TODO(bill): Should I make a std::function<> equivalent to allow for captured lambdas?
+// TODO(bill): Is this thread function definitions good enough?
 using Thread_Function = s32(void*);
 
 struct Thread
@@ -781,6 +816,47 @@ struct Allocator
 	GB_DISABLE_COPY(Allocator);
 };
 
+// TODO(bill): Should `Allocator` not even be a pure virtual base class?
+/*
+// Alternative Allocator types
+struct Allocator
+{
+	void* data;
+	void* (*alloc)(usize size, usize align);
+	void  (*dealloc)(const void* ptr);
+	s64   (*allocated_size)(const void* ptr);
+	s64   (*total_allocated)(void);
+};
+
+// or
+
+enum class Allocator_Mode
+{
+	ALLOC,
+	DEALLOC,
+	ALLOCATED_SIZE,
+	TOTAL_ALLOCATED,
+};
+
+using Allocator_Function = void*(Allocator_Mode mode,
+                                 s64 size, s64 align,
+                                 void* old_memory_pointer,
+                                 s64* output_size,
+                                 void* allocator_data, s64 flags);
+
+struct Allocator
+{
+	void* data;
+	Allocator_Function* function;
+};
+
+// Both of these may be better and more customizable but I do not know. I need to think about this.
+// And discuss with others.
+// The latter method would allow for one function call but the allocation is usually much slower than
+// dereferencing the function pointer
+*/
+
+
 /// An allocator that used the malloc(). Allocations are padded with the size of
 /// the allocation and align them to the desired alignment
 struct Heap_Allocator : Allocator
@@ -801,8 +877,6 @@ struct Heap_Allocator : Allocator
 	virtual void  dealloc(const void* ptr);
 	virtual s64 allocated_size(const void* ptr);
 	virtual s64 total_allocated();
-
-	Header* get_header_ptr(const void* ptr);
 };
 
 struct Arena_Allocator : Allocator
@@ -849,6 +923,23 @@ struct Temp_Allocator : Allocator
 };
 
 
+namespace heap_allocator
+{
+Heap_Allocator::Header* get_header_ptr(const void* ptr);
+} // namespace heap_allocator
+
+namespace arena_allocator
+{
+void clear(Arena_Allocator* arena);
+} // namespace arena_allocator
+
+
+namespace temporary_arena_memory
+{
+Temporary_Arena_Memory make(Arena_Allocator* arena);
+void free(Temporary_Arena_Memory* tmp);
+} // namespace temporary_arena_memory
+
 namespace memory
 {
 void* align_forward(void* ptr, usize align);
@@ -866,6 +957,7 @@ bool equals(const void* a, const void* b, usize bytes);
 
 inline void* alloc(Allocator* a, usize size, usize align = GB_DEFAULT_ALIGNMENT) { GB_ASSERT(a != nullptr); return a->alloc(size, align); }
 inline void dealloc(Allocator* a, const void* ptr) { GB_ASSERT(a != nullptr); return a->dealloc(ptr); }
+// TODO(bill): Should I overload free() or not would that be too confusing?
 
 template <typename T>
 inline T* alloc_struct(Allocator* a) { return static_cast<T*>(alloc(a, sizeof(T), alignof(T))); }
@@ -875,154 +967,6 @@ inline T* alloc_array(Allocator* a, usize count) { return static_cast<T*>(alloc(
 
 template <typename T, usize count>
 inline T* alloc_array(Allocator* a) { return static_cast<T*>(alloc(a, count * sizeof(T), alignof(T))); }
-
-inline void
-clear_arena(Arena_Allocator* arena)
-{
-	GB_ASSERT(arena->temp_count == 0,
-			  "%ld Temporary_Arena_Memory have not be cleared", arena->temp_count);
-
-	arena->total_allocated_count = 0;
-}
-
-inline Temporary_Arena_Memory
-make_temporary_arena_memory(Arena_Allocator* arena)
-{
-	Temporary_Arena_Memory tmp = {};
-	tmp.arena = arena;
-	tmp.original_count = arena->total_allocated_count;
-}
-
-inline void
-free_temporary_arena_memory(Temporary_Arena_Memory* tmp)
-{
-	if (tmp->arena == nullptr)
-		return;
-	GB_ASSERT(tmp->arena->total_allocated() >= tmp->original_count);
-	tmp->arena->total_allocated_count = tmp->original_count;
-	GB_ASSERT(tmp->arena->temp_count > 0);
-	tmp->arena->temp_count--;
-}
-
-
-template <usize BUFFER_SIZE>
-Temp_Allocator<BUFFER_SIZE>::Temp_Allocator(Allocator* backing_)
-: backing(backing_)
-, chunk_size(4 * 1024) // 4K
-{
-	current_pointer = physical_start = buffer;
-	physical_end = physical_start + BUFFER_SIZE;
-	*static_cast<void**>(physical_start) = 0;
-	current_pointer = memory::pointer_add(current_pointer, sizeof(void*));
-}
-
-template <usize BUFFER_SIZE>
-Temp_Allocator<BUFFER_SIZE>::~Temp_Allocator()
-{
-	void* ptr = *static_cast<void**>(buffer);
-	while (ptr)
-	{
-		void* next = *static_cast<void**>(ptr);
-		backing_->dealloc(ptr);
-		ptr = next;
-	}
-
-}
-
-template <usize BUFFER_SIZE>
-void*
-Temp_Allocator<BUFFER_SIZE>::alloc(usize size, usize align)
-{
-	current_pointer = static_cast<u8*>(memory::align_forward(current_pointer, align));
-	if (size > static_cast<usize>(physical_end) - current_pointer)
-	{
-		usize to_allocate = sizeof(void*) + size + align;
-		if (to_allocate < chunk_size)
-			to_allocate = chunk_size;
-		chunk_size *= 2;
-		void* ptr = backing_->alloc(to_allocate);
-		*static_cast<void**>(physical_start) = ptr;
-		current_pointer = physical_start = static_cast<u8*>(ptr);
-		*static_cast<void**>(physical_start) = 0;
-		current_pointer = memory::pointer_add(current_pointer, sizeof(void*));
-		current_pointer = static_cast<u8*>(memory::align_forward(current_pointer, align));
-	}
-
-	void* result = current_pointer;
-	current_pointer += size;
-	return (result);
-}
-
-namespace memory
-{
-inline void*
-align_forward(void* ptr, usize align)
-{
-	GB_ASSERT(GB_IS_POWER_OF_TWO(align),
-	          "Alignment must be a power of two and not zero -- %llu", align);
-
-	uintptr p = uintptr(ptr);
-	const usize modulo = p % align;
-	if (modulo)
-		p += (align - modulo);
-	return reinterpret_cast<void*>(p);
-}
-
-inline void*
-pointer_add(void* ptr, usize bytes)
-{
-	return static_cast<void*>(static_cast<u8*>(ptr) + bytes);
-}
-
-inline const void*
-pointer_add(const void* ptr, usize bytes)
-{
-	return static_cast<const void*>(static_cast<const u8*>(ptr) + bytes);
-}
-
-inline void*
-pointer_sub(void* ptr, usize bytes)
-{
-	return static_cast<void*>(static_cast<u8*>(ptr) - bytes);
-}
-
-inline const void*
-pointer_sub(const void* ptr, usize bytes)
-{
-	return static_cast<const void*>(static_cast<const u8*>(ptr) - bytes);
-}
-
-inline void*
-set(void* ptr, u8 value, usize bytes)
-{
-	return memset(ptr, value, bytes);
-}
-
-inline void*
-zero(void* ptr, usize bytes)
-{
-	return memory::set(ptr, 0, bytes);
-}
-
-
-inline void*
-copy(void* dest, const void* src, usize bytes)
-{
-	return memcpy(dest, src, bytes);
-}
-
-inline void*
-move(void* dest, const void* src, usize bytes)
-{
-	return memmove(dest, src, bytes);
-}
-
-inline bool
-equals(const void* a, const void* b, usize bytes)
-{
-	return (memcmp(a, b, bytes) == 0);
-}
-} // namespace memory
 
 ////////////////////////////////
 ///                          ///
@@ -1247,12 +1191,295 @@ template <typename T> void remove_all(Hash_Table<T>* h, u64 key);
 } // namespace multi_hash_table
 
 
+////////////////////////////////
+///                          ///
+/// Hash                     ///
+///                          ///
+////////////////////////////////
+
+namespace hash
+{
+u32 adler32(const void* key, u32 num_bytes);
+
+u32 crc32(const void* key, u32 num_bytes);
+u64 crc64(const void* key, usize num_bytes);
+
+// TODO(bill): Complete hashing functions
+// u32 fnv32(const void* key, usize num_bytes);
+// u64 fnv64(const void* key, usize num_bytes);
+// u32 fnv32a(const void* key, usize num_bytes);
+// u64 fnv64a(const void* key, usize num_bytes);
+
+u32 murmur32(const void* key, u32 num_bytes, u32 seed = 0x9747b28c);
+u64 murmur64(const void* key, usize num_bytes, u64 seed = 0x9747b28c);
+} // namespace hash
+
+////////////////////////////////
+///                          ///
+/// Time                     ///
+///                          ///
+////////////////////////////////
+
+struct Time
+{
+	s64 microseconds;
+};
+
+extern const Time TIME_ZERO;
+
+namespace time
+{
+Time now();
+void sleep(Time time);
+
+Time seconds(f32 s);
+Time milliseconds(s32 ms);
+Time microseconds(s64 us);
+
+f32 as_seconds(Time t);
+s32 as_milliseconds(Time t);
+s64 as_microseconds(Time t);
+} // namespace time
+
+bool operator==(Time left, Time right);
+bool operator!=(Time left, Time right);
+
+bool operator<(Time left, Time right);
+bool operator>(Time left, Time right);
+
+bool operator<=(Time left, Time right);
+bool operator>=(Time left, Time right);
+
+Time operator-(Time right);
+
+Time operator+(Time left, Time right);
+Time operator-(Time left, Time right);
+
+Time& operator+=(Time& left, Time right);
+Time& operator-=(Time& left, Time right);
+
+Time operator*(Time left, f32 right);
+Time operator*(Time left, s64 right);
+Time operator*(f32 left, Time right);
+Time operator*(s64 left, Time right);
+
+Time& operator*=(Time& left, f32 right);
+Time& operator*=(Time& left, s64 right);
+
+Time operator/(Time left, f32 right);
+Time operator/(Time left, s64 right);
+
+Time& operator/=(Time& left, f32 right);
+Time& operator/=(Time& left, s64 right);
+
+f32 operator/(Time left, Time right);
+
+Time  operator%(Time left, Time right);
+Time& operator%=(Time& left, Time right);
+
+
+////////////////////////////////
+///                          ///
+/// OS                       ///
+///                          ///
+////////////////////////////////
+
+namespace os
+{
+u64 time_stamp_counter();
+} // namespace os
+
+#if 0
+// TODO(bill): still in development
+struct File
+{
+#if defined(GB_SYSTEM_WINDOWS)
+	HANDLE win32_handle;
+	Mutex mutex;
+
+	char* name; // TODO(bill): uses malloc
+
+	b32 is_console;
+#else
+	#error Implement file system
+#endif
+};
+
+namespace file
+{
+enum Flag : u32
+{
+	READ  = 0x1,
+	WRITE = 0x2,
+};
+
+uintptr fd(const File* file);
+
+bool new_from_fd(File* file, uintptr fd, const char* name);
+
+bool open(File* file, const char* filename, u32 flag, u32 perm);
+bool close(File* file);
+
+bool create(File* file, const char* filename, u32 flag);
+
+bool read(File* file, void* buffer, u32 bytes_to_read);
+bool write(File* file, const void* memory, u32 bytes_to_write);
+
+bool read_at(File* file, void* buffer, u32 bytes_to_read, s64 offset);
+bool write_at(File* file, const void* memory, u32 bytes_to_write, s64 offset);
+
+s64 size(File* file);
+
+bool set_pos(File* file, s64 pos);
+bool get_pos(File* file, s64* pos);
+} // namespace file
+#endif
+
+
+////////////////////////////////
+///                          ///
+/// Implementations          ///
+///                          ///
+////////////////////////////////
+
+////////////////////////////////
+///                          ///
+/// Allocators               ///
+///                          ///
+////////////////////////////////
+
+template <usize BUFFER_SIZE>
+Temp_Allocator<BUFFER_SIZE>::Temp_Allocator(Allocator* backing_)
+: backing(backing_)
+, chunk_size(4 * 1024) // 4K - page size
+{
+	current_pointer = physical_start = buffer;
+	physical_end = physical_start + BUFFER_SIZE;
+	*static_cast<void**>(physical_start) = 0;
+	current_pointer = memory::pointer_add(current_pointer, sizeof(void*));
+}
+
+template <usize BUFFER_SIZE>
+Temp_Allocator<BUFFER_SIZE>::~Temp_Allocator()
+{
+	void* ptr = *static_cast<void**>(buffer);
+	while (ptr)
+	{
+		void* next = *static_cast<void**>(ptr);
+		backing_->dealloc(ptr);
+		ptr = next;
+	}
+
+}
+
+template <usize BUFFER_SIZE>
+void*
+Temp_Allocator<BUFFER_SIZE>::alloc(usize size, usize align)
+{
+	current_pointer = static_cast<u8*>(memory::align_forward(current_pointer, align));
+	if (size > static_cast<usize>(physical_end) - current_pointer)
+	{
+		usize to_allocate = sizeof(void*) + size + align;
+		if (to_allocate < chunk_size)
+			to_allocate = chunk_size;
+		chunk_size *= 2;
+		void* ptr = backing_->alloc(to_allocate);
+		*static_cast<void**>(physical_start) = ptr;
+		current_pointer = physical_start = static_cast<u8*>(ptr);
+		*static_cast<void**>(physical_start) = 0;
+		current_pointer = memory::pointer_add(current_pointer, sizeof(void*));
+		current_pointer = static_cast<u8*>(memory::align_forward(current_pointer, align));
+	}
+
+	void* result = current_pointer;
+	current_pointer += size;
+	return (result);
+}
+
+
+////////////////////////////////
+///                          ///
+/// Memory                   ///
+///                          ///
+////////////////////////////////
+
+namespace memory
+{
+inline void*
+align_forward(void* ptr, usize align)
+{
+	GB_ASSERT(GB_IS_POWER_OF_TWO(align),
+	          "Alignment must be a power of two and not zero -- %llu", align);
+
+	uintptr p = uintptr(ptr);
+	const usize modulo = p % align;
+	if (modulo)
+		p += (align - modulo);
+	return reinterpret_cast<void*>(p);
+}
+
+inline void*
+pointer_add(void* ptr, usize bytes)
+{
+	return static_cast<void*>(static_cast<u8*>(ptr) + bytes);
+}
+
+inline const void*
+pointer_add(const void* ptr, usize bytes)
+{
+	return static_cast<const void*>(static_cast<const u8*>(ptr) + bytes);
+}
+
+inline void*
+pointer_sub(void* ptr, usize bytes)
+{
+	return static_cast<void*>(static_cast<u8*>(ptr) - bytes);
+}
+
+inline const void*
+pointer_sub(const void* ptr, usize bytes)
+{
+	return static_cast<const void*>(static_cast<const u8*>(ptr) - bytes);
+}
+
+inline void*
+set(void* ptr, u8 value, usize bytes)
+{
+	return memset(ptr, value, bytes);
+}
+
+inline void*
+zero(void* ptr, usize bytes)
+{
+	return memory::set(ptr, 0, bytes);
+}
+
+
+inline void*
+copy(void* dest, const void* src, usize bytes)
+{
+	return memcpy(dest, src, bytes);
+}
+
+inline void*
+move(void* dest, const void* src, usize bytes)
+{
+	return memmove(dest, src, bytes);
+}
+
+inline bool
+equals(const void* a, const void* b, usize bytes)
+{
+	return (memcmp(a, b, bytes) == 0);
+}
+} // namespace memory
 
 ////////////////////////////////
 ///                          ///
 /// Array                    ///
 ///                          ///
 ////////////////////////////////
+
 template <typename T>
 inline
 Array<T>::Array(Allocator* a, usize count_)
@@ -1425,6 +1652,7 @@ grow(Array<T>* a, usize min_capacity)
 /// Hash Table               ///
 ///                          ///
 ////////////////////////////////
+
 template <typename T>
 inline
 Hash_Table<T>::Hash_Table()
@@ -1831,148 +2059,10 @@ remove_all(Hash_Table<T>* h, u64 key)
 }
 } // namespace multi_hash_table
 
-////////////////////////////////
-///                          ///
-/// Hash                     ///
-///                          ///
-////////////////////////////////
-
-namespace hash
-{
-u32 adler32(const void* key, u32 num_bytes);
-
-u32 crc32(const void* key, u32 num_bytes);
-u64 crc64(const void* key, usize num_bytes);
-
-// TODO(bill): Complete hashing functions
-// u32 fnv32(const void* key, usize num_bytes);
-// u64 fnv64(const void* key, usize num_bytes);
-// u32 fnv32a(const void* key, usize num_bytes);
-// u64 fnv64a(const void* key, usize num_bytes);
-
-u32 murmur32(const void* key, u32 num_bytes, u32 seed = 0x9747b28c);
-u64 murmur64(const void* key, usize num_bytes, u64 seed = 0x9747b28c);
-} // namespace hash
-
-////////////////////////////////
-///                          ///
-/// Time                     ///
-///                          ///
-////////////////////////////////
-
-struct Time
-{
-	s64 microseconds;
-};
-
-extern const Time TIME_ZERO;
-
-// NOTE(bill): namespace time cannot be used for numerous reasons
-
-namespace time
-{
-Time now();
-void sleep(Time time);
-
-Time seconds(f32 s);
-Time milliseconds(s32 ms);
-Time microseconds(s64 us);
-
-f32 as_seconds(Time t);
-s32 as_milliseconds(Time t);
-s64 as_microseconds(Time t);
-} // namespace time
-
-bool operator==(Time left, Time right);
-bool operator!=(Time left, Time right);
-
-bool operator<(Time left, Time right);
-bool operator>(Time left, Time right);
-
-bool operator<=(Time left, Time right);
-bool operator>=(Time left, Time right);
-
-Time operator-(Time right);
-
-Time operator+(Time left, Time right);
-Time operator-(Time left, Time right);
-
-Time& operator+=(Time& left, Time right);
-Time& operator-=(Time& left, Time right);
-
-Time operator*(Time left, f32 right);
-Time operator*(Time left, s64 right);
-Time operator*(f32 left, Time right);
-Time operator*(s64 left, Time right);
-
-Time& operator*=(Time& left, f32 right);
-Time& operator*=(Time& left, s64 right);
-
-Time operator/(Time left, f32 right);
-Time operator/(Time left, s64 right);
-
-Time& operator/=(Time& left, f32 right);
-Time& operator/=(Time& left, s64 right);
-
-f32 operator/(Time left, Time right);
-
-Time  operator%(Time left, Time right);
-Time& operator%=(Time& left, Time right);
 
 
 
 
-////////////////////////////////
-///                          ///
-/// OS                       ///
-///                          ///
-////////////////////////////////
-
-#if 0
-// TODO(bill): still in development
-struct File
-{
-#if defined(GB_SYSTEM_WINDOWS)
-	HANDLE win32_handle;
-	Mutex mutex;
-
-	char* name; // TODO(bill): uses malloc
-
-	b32 is_console;
-#else
-	#error Implement file system
-#endif
-};
-
-namespace file
-{
-enum Flag : u32
-{
-	READ  = 0x1,
-	WRITE = 0x2,
-};
-
-uintptr fd(const File* file);
-
-bool new_from_fd(File* file, uintptr fd, const char* name);
-
-bool open(File* file, const char* filename, u32 flag, u32 perm);
-bool close(File* file);
-
-bool create(File* file, const char* filename, u32 flag);
-
-bool read(File* file, void* buffer, u32 bytes_to_read);
-bool write(File* file, const void* memory, u32 bytes_to_write);
-
-bool read_at(File* file, void* buffer, u32 bytes_to_read, s64 offset);
-bool write_at(File* file, const void* memory, u32 bytes_to_write, s64 offset);
-
-s64 size(File* file);
-
-bool set_pos(File* file, s64 pos);
-bool get_pos(File* file, s64* pos);
-} // namespace file
-#endif
 
 __GB_NAMESPACE_END
 
@@ -2483,6 +2573,20 @@ Heap_Allocator::~Heap_Allocator()
 #endif
 }
 
+namespace heap_allocator
+{
+inline Heap_Allocator::Header*
+get_header_ptr(const void* ptr)
+{
+	const usize* data = reinterpret_cast<const usize*>(ptr) - 1;
+
+	while (*data == GB_HEAP_ALLOCATOR_HEADER_PAD_VALUE)
+		data--;
+
+	return (Heap_Allocator::Header*)(data);
+}
+} // namespace heap_allocator
+
 void*
 Heap_Allocator::alloc(usize size, usize align)
 {
@@ -2516,7 +2620,7 @@ Heap_Allocator::dealloc(const void* ptr)
 	defer (mutex::unlock(&mutex));
 
 
-	Header* h = get_header_ptr(ptr);
+	Header* h = heap_allocator::get_header_ptr(ptr);
 
 	total_allocated_count -= h->size;
 	allocation_count--;
@@ -2530,24 +2634,13 @@ Heap_Allocator::allocated_size(const void* ptr)
 	mutex::lock(&mutex);
 	defer (mutex::unlock(&mutex));
 
-	return get_header_ptr(ptr)->size;
+	return heap_allocator::get_header_ptr(ptr)->size;
 }
 
 s64
 Heap_Allocator::total_allocated()
 {
 	return total_allocated_count;
-}
-
-Heap_Allocator::Header*
-Heap_Allocator::get_header_ptr(const void* ptr)
-{
-	const usize* data = reinterpret_cast<const usize*>(ptr) - 1;
-
-	while (*data == GB_HEAP_ALLOCATOR_HEADER_PAD_VALUE)
-		data--;
-
-	return (Heap_Allocator::Header*)(data);
 }
 
 Arena_Allocator::Arena_Allocator(Allocator* backing_, usize size)
@@ -2597,6 +2690,42 @@ inline void Arena_Allocator::dealloc(const void*) {}
 inline s64 Arena_Allocator::allocated_size(const void*) { return -1; }
 
 inline s64 Arena_Allocator::total_allocated() { return total_allocated_count; }
+
+namespace arena_allocator
+{
+inline void
+clear(Arena_Allocator* arena)
+{
+	GB_ASSERT(arena->temp_count == 0,
+			  "%ld Temporary_Arena_Memory have not be cleared", arena->temp_count);
+
+	arena->total_allocated_count = 0;
+}
+} // namespace arena_allocator
+
+
+namespace temporary_arena_memory
+{
+inline Temporary_Arena_Memory
+make(Arena_Allocator* arena)
+{
+	Temporary_Arena_Memory tmp = {};
+	tmp.arena = arena;
+	tmp.original_count = arena->total_allocated_count;
+}
+
+inline void
+free(Temporary_Arena_Memory* tmp)
+{
+	if (tmp->arena == nullptr)
+		return;
+	GB_ASSERT(tmp->arena->total_allocated() >= tmp->original_count);
+	tmp->arena->total_allocated_count = tmp->original_count;
+	GB_ASSERT(tmp->arena->temp_count > 0);
+	tmp->arena->temp_count--;
+}
+} // namespace temporary_arena_memory
+
 
 ////////////////////////////////
 ///                          ///
@@ -3516,6 +3645,22 @@ Time& operator%=(Time& left, Time right) { return (left = left % right); }
 /// OS                       ///
 ///                          ///
 ////////////////////////////////
+
+namespace os
+{
+GB_FORCE_INLINE u64
+time_stamp_counter()
+{
+#if GB_SYSTEM_WINDOWS
+	return __rdtsc();
+#else
+	// TODO(bill): Check that rdtsc() works
+	return rdtsc();
+#endif
+}
+} // namespace os
+
+
 #if 0
 namespace file
 {
