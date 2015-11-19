@@ -619,6 +619,7 @@ struct Plane
 bool operator==(const Vector2& a, const Vector2& b);
 bool operator!=(const Vector2& a, const Vector2& b);
 
+Vector2 operator+(const Vector2& a);
 Vector2 operator-(const Vector2& a);
 
 Vector2 operator+(const Vector2& a, const Vector2& b);
@@ -641,6 +642,7 @@ Vector2& operator/=(Vector2& a, f32 scalar);
 bool operator==(const Vector3& a, const Vector3& b);
 bool operator!=(const Vector3& a, const Vector3& b);
 
+Vector3 operator+(const Vector3& a);
 Vector3 operator-(const Vector3& a);
 
 Vector3 operator+(const Vector3& a, const Vector3& b);
@@ -663,6 +665,7 @@ Vector3& operator/=(Vector3& a, f32 scalar);
 bool operator==(const Vector4& a, const Vector4& b);
 bool operator!=(const Vector4& a, const Vector4& b);
 
+Vector4 operator+(const Vector4& a);
 Vector4 operator-(const Vector4& a);
 
 Vector4 operator+(const Vector4& a, const Vector4& b);
@@ -685,6 +688,7 @@ Vector4& operator/=(Vector4& a, f32 scalar);
 bool operator==(const Complex& a, const Complex& b);
 bool operator!=(const Complex& a, const Complex& b);
 
+Complex operator+(const Complex& a);
 Complex operator-(const Complex& a);
 
 Complex operator+(const Complex& a, const Complex& b);
@@ -700,6 +704,7 @@ Complex operator/(const Complex& a, f32 s);
 bool operator==(const Quaternion& a, const Quaternion& b);
 bool operator!=(const Quaternion& a, const Quaternion& b);
 
+Quaternion operator+(const Quaternion& a);
 Quaternion operator-(const Quaternion& a);
 
 Quaternion operator+(const Quaternion& a, const Quaternion& b);
@@ -716,6 +721,9 @@ Vector3 operator*(const Quaternion& a, const Vector3& v); // Rotate v by a
 // Matrix2 Operators
 bool operator==(const Matrix2& a, const Matrix2& b);
 bool operator!=(const Matrix2& a, const Matrix2& b);
+
+Matrix2 operator+(const Matrix2& a);
+Matrix2 operator-(const Matrix2& a);
 
 Matrix2 operator+(const Matrix2& a, const Matrix2& b);
 Matrix2 operator-(const Matrix2& a, const Matrix2& b);
@@ -735,6 +743,9 @@ Matrix2& operator*=(Matrix2& a, const Matrix2& b);
 bool operator==(const Matrix3& a, const Matrix3& b);
 bool operator!=(const Matrix3& a, const Matrix3& b);
 
+Matrix3 operator+(const Matrix3& a);
+Matrix3 operator-(const Matrix3& a);
+
 Matrix3 operator+(const Matrix3& a, const Matrix3& b);
 Matrix3 operator-(const Matrix3& a, const Matrix3& b);
 
@@ -752,6 +763,9 @@ Matrix3& operator*=(Matrix3& a, const Matrix3& b);
 // Matrix4 Operators
 bool operator==(const Matrix4& a, const Matrix4& b);
 bool operator!=(const Matrix4& a, const Matrix4& b);
+
+Matrix4 operator+(const Matrix4& a);
+Matrix4 operator-(const Matrix4& a);
 
 Matrix4 operator+(const Matrix4& a, const Matrix4& b);
 Matrix4 operator-(const Matrix4& a, const Matrix4& b);
@@ -771,6 +785,7 @@ Matrix4& operator*=(Matrix4& a, const Matrix4& b);
 bool operator==(Angle a, Angle b);
 bool operator!=(Angle a, Angle b);
 
+Angle operator+(Angle a);
 Angle operator-(Angle a);
 
 Angle operator+(Angle a, Angle b);
@@ -892,6 +907,7 @@ s32 kronecker_delta(s32 i, s32 j);
 s64 kronecker_delta(s64 i, s64 j);
 f32 kronecker_delta(f32 i, f32 j);
 
+// NOTE(bill): Just incase
 #undef min
 #undef max
 
@@ -1035,40 +1051,6 @@ look_at_quaternion(const Vector3& eye, const Vector3& center, const Vector3& up 
 Vector3 transform_point(const Transform& transform, const Vector3& point);
 Transform inverse(const Transform& t);
 Matrix4 transform_to_matrix4(const Transform& t);
-
-
-template <typename T>
-inline const T&
-min(const T& a, const T& b)
-{
-	return a < b ? a : b;
-}
-
-template <typename T>
-inline const T&
-max(const T& a, const T& b)
-{
-	return a > b ? a : b;
-}
-
-template <typename T>
-inline T
-clamp(const T& x, const T& min, const T& max)
-{
-	if (x < min)
-		return min;
-	if (x > max)
-		return max;
-	return x;
-}
-
-template <typename T>
-inline T
-lerp(const T& x, const T& y, f32 t)
-{
-	return x + (y - x) * t;
-
-}
 } // namespace math
 
 namespace aabb
@@ -1152,6 +1134,27 @@ f32 perlin_3d(f32 x, f32 y, f32 z, s32 x_wrap = 0, s32 y_wrap = 0, s32 z_wrap = 
 // f32 simplex_4d_octave(f32 x, f32 y, f32 z, f32 w, f32 octaves, f32 persistence, f32 scale);
 
 } // namespace random
+
+
+namespace math
+{
+template <typename T> inline const T& min(const T& a, const T& b) { return a < b ? a : b; }
+template <typename T> inline const T& max(const T& a, const T& b) { return a > b ? a : b; }
+
+template <typename T>
+inline T
+clamp(const T& x, const T& min, const T& max)
+{
+	if (x < min)
+		return min;
+	if (x > max)
+		return max;
+	return x;
+}
+
+template <typename T> inline T lerp(const T& x, const T& y, f32 t) { return x + (y - x) * t; }
+} // namespace math
+
 __GB_NAMESPACE_END
 
 #endif // GB_INCLUDE_GB_HPP
@@ -1267,6 +1270,12 @@ operator!=(const Vector2& a, const Vector2& b)
 }
 
 inline Vector2
+operator+(const Vector2& a)
+{
+	return a;
+}
+
+inline Vector2
 operator-(const Vector2& a)
 {
 	return {-a.x, -a.y};
@@ -1361,6 +1370,12 @@ inline bool
 operator!=(const Vector3& a, const Vector3& b)
 {
 	return !operator==(a, b);
+}
+
+inline Vector3
+operator+(const Vector3& a)
+{
+	return a;
 }
 
 inline Vector3
@@ -1465,6 +1480,12 @@ operator!=(const Vector4& a, const Vector4& b)
 }
 
 inline Vector4
+operator+(const Vector4& a)
+{
+	return a;
+}
+
+inline Vector4
 operator-(const Vector4& a)
 {
 	return {-a.x, -a.y, -a.z, -a.w};
@@ -1566,8 +1587,13 @@ operator==(const Complex& a, const Complex& b)
 inline bool
 operator!=(const Complex& a, const Complex& b)
 {
-	return
-	operator==(a, b);
+	return !operator==(a, b);
+}
+
+inline Complex
+operator+(const Complex& a)
+{
+	return a;
 }
 
 inline Complex
@@ -1629,6 +1655,12 @@ inline bool
 operator!=(const Quaternion& a, const Quaternion& b)
 {
 	return !operator==(a, b);
+}
+
+inline Quaternion
+operator+(const Quaternion& a)
+{
+	return {+a.x, +a.y, +a.z, +a.w};
 }
 
 inline Quaternion
@@ -1705,6 +1737,18 @@ inline bool
 operator!=(const Matrix2& a, const Matrix2& b)
 {
 	return !operator==(a, b);
+}
+
+inline Matrix2
+operator+(const Matrix2& a)
+{
+	return a;
+}
+
+inline Matrix2
+operator-(const Matrix2& a)
+{
+	return {-a.x, -a.y};
 }
 
 inline Matrix2
@@ -1806,6 +1850,18 @@ operator!=(const Matrix3& a, const Matrix3& b)
 }
 
 inline Matrix3
+operator+(const Matrix3& a)
+{
+	return a;
+}
+
+inline Matrix3
+operator-(const Matrix3& a)
+{
+	return {-a.x, -a.y, -a.z};
+}
+
+inline Matrix3
 operator+(const Matrix3& a, const Matrix3& b)
 {
 	Matrix3 mat;
@@ -1892,8 +1948,6 @@ operator*=(Matrix3& a, const Matrix3& b)
 }
 
 
-
-
 // Matrix4 Operators
 inline bool
 operator==(const Matrix4& a, const Matrix4& b)
@@ -1910,6 +1964,18 @@ inline bool
 operator!=(const Matrix4& a, const Matrix4& b)
 {
 	return !operator==(a, b);
+}
+
+inline Matrix4
+operator+(const Matrix4& a)
+{
+	return a;
+}
+
+inline Matrix4
+operator-(const Matrix4& a)
+{
+	return {-a.x, -a.y, -a.z, -a.w};
 }
 
 inline Matrix4
@@ -2016,6 +2082,12 @@ inline bool
 operator!=(Angle a, Angle b)
 {
 	return !operator==(a, b);
+}
+
+inline Angle
+operator+(Angle a)
+{
+	return {+a.radians};
 }
 
 inline Angle
@@ -3347,7 +3419,7 @@ transform_affine(const Aabb& aabb, const Matrix4& m)
 
 namespace sphere
 {
-inline Sphere
+Sphere
 calculate_min_bounding(const void* vertices, usize num_vertices, usize stride, usize offset, f32 step)
 {
 	auto gen = random::make(0);
@@ -3398,7 +3470,7 @@ calculate_min_bounding(const void* vertices, usize num_vertices, usize stride, u
 	return result;
 }
 
-inline Sphere
+Sphere
 calculate_max_bounding(const void* vertices, usize num_vertices, usize stride, usize offset)
 {
 	Aabb aabb = aabb::calculate(vertices, num_vertices, stride, offset);
@@ -3452,7 +3524,7 @@ to_aabb(const Sphere& s)
 inline bool
 contains_point(const Sphere& s, const Vector3& point)
 {
-	Vector3 dr = point - s.center;
+	Vector3 dr   = point - s.center;
 	f32 distance = math::dot(dr, dr);
 	return distance < s.radius * s.radius;
 }
@@ -3653,7 +3725,7 @@ uniform_f64(Random* r, f64 min_inc, f64 max_inc)
 }
 
 
-global_variable s32 g_perlin_randtab[512] =
+global_variable const s32 g_perlin_randtab[512] =
 {
    23, 125, 161, 52, 103, 117, 70, 37, 247, 101, 203, 169, 124, 126, 44, 123,
    152, 238, 145, 45, 171, 114, 253, 10, 192, 136, 4, 157, 249, 30, 35, 72,
@@ -3695,7 +3767,7 @@ global_variable s32 g_perlin_randtab[512] =
 internal_linkage f32
 perlin_grad(s32 hash, f32 x, f32 y, f32 z)
 {
-	local_persist f32 basis[12][4] =
+	local_persist const f32 basis[12][4] =
 	{
 		{ 1, 1, 0},
 		{-1, 1, 0},
@@ -3711,7 +3783,7 @@ perlin_grad(s32 hash, f32 x, f32 y, f32 z)
 		{ 0,-1,-1},
 	};
 
-	local_persist u8 indices[64] =
+	local_persist const u8 indices[64] =
 	{
 		0,1,2,3,4,5,6,7,8,9,10,11,
 		0,9,1,11,
@@ -3732,45 +3804,54 @@ perlin_3d(f32 x, f32 y, f32 z, s32 x_wrap, s32 y_wrap, s32 z_wrap)
 	u32 x_mask = (x_wrap-1) & 255;
 	u32 y_mask = (y_wrap-1) & 255;
 	u32 z_mask = (z_wrap-1) & 255;
-	s32 px = (s32)math::floor(x);
-	s32 py = (s32)math::floor(y);
-	s32 pz = (s32)math::floor(z);
-	s32 x0 = px & x_mask, x1 = (px+1) & x_mask;
-	s32 y0 = py & y_mask, y1 = (py+1) & y_mask;
-	s32 z0 = pz & z_mask, z1 = (pz+1) & z_mask;
 
-#define GB__PERLIN_EASE(t) (((t*6-15)*t + 10) *t*t*t)
-	x -= px; f32 u = GB__PERLIN_EASE(x);
-	y -= py; f32 v = GB__PERLIN_EASE(y);
-	z -= pz; f32 w = GB__PERLIN_EASE(z);
+	s32 px = static_cast<s32>(math::floor(x));
+	s32 py = static_cast<s32>(math::floor(y));
+	s32 pz = static_cast<s32>(math::floor(z));
+
+	s32 x0 = (px)   & x_mask;
+	s32 x1 = (px+1) & x_mask;
+	s32 y0 = (py)   & y_mask;
+	s32 y1 = (py+1) & y_mask;
+	s32 z0 = (pz)   & z_mask;
+	s32 z1 = (pz+1) & z_mask;
+
+	x -= px;
+	y -= py;
+	z -= pz;
+
+#define GB__PERLIN_EASE(t) (((6*t - 15)*t + 10)*t*t*t)
+	f32 u = GB__PERLIN_EASE(x);
+	f32 v = GB__PERLIN_EASE(y);
+	f32 w = GB__PERLIN_EASE(z);
 #undef GB__PERLIN_EASE
 
 	s32 r0 = g_perlin_randtab[x0];
 	s32 r1 = g_perlin_randtab[x1];
 
-	s32 r00 = g_perlin_randtab[r0+y0];
-	s32 r01 = g_perlin_randtab[r0+y1];
-	s32 r10 = g_perlin_randtab[r1+y0];
-	s32 r11 = g_perlin_randtab[r1+y1];
+	s32 r00 = g_perlin_randtab[r0 + y0];
+	s32 r01 = g_perlin_randtab[r0 + y1];
+	s32 r10 = g_perlin_randtab[r1 + y0];
+	s32 r11 = g_perlin_randtab[r1 + y1];
 
-	f32 n000 = perlin_grad(g_perlin_randtab[r00+z0], x  , y  , z   );
-	f32 n001 = perlin_grad(g_perlin_randtab[r00+z1], x  , y  , z-1 );
-	f32 n010 = perlin_grad(g_perlin_randtab[r01+z0], x  , y-1, z   );
-	f32 n011 = perlin_grad(g_perlin_randtab[r01+z1], x  , y-1, z-1 );
-	f32 n100 = perlin_grad(g_perlin_randtab[r10+z0], x-1, y  , z   );
-	f32 n101 = perlin_grad(g_perlin_randtab[r10+z1], x-1, y  , z-1 );
-	f32 n110 = perlin_grad(g_perlin_randtab[r11+z0], x-1, y-1, z   );
-	f32 n111 = perlin_grad(g_perlin_randtab[r11+z1], x-1, y-1, z-1 );
+	f32 n000 = perlin_grad(g_perlin_randtab[r00 + z0], x,     y,     z    );
+	f32 n001 = perlin_grad(g_perlin_randtab[r00 + z1], x,     y,     z - 1);
+	f32 n010 = perlin_grad(g_perlin_randtab[r01 + z0], x,     y - 1, z    );
+	f32 n011 = perlin_grad(g_perlin_randtab[r01 + z1], x,     y - 1, z - 1);
+	f32 n100 = perlin_grad(g_perlin_randtab[r10 + z0], x - 1, y,     z    );
+	f32 n101 = perlin_grad(g_perlin_randtab[r10 + z1], x - 1, y,     z - 1);
+	f32 n110 = perlin_grad(g_perlin_randtab[r11 + z0], x - 1, y - 1, z    );
+	f32 n111 = perlin_grad(g_perlin_randtab[r11 + z1], x - 1, y - 1, z - 1);
 
-	f32 n00 = math::lerp(n000,n001,w);
-	f32 n01 = math::lerp(n010,n011,w);
-	f32 n10 = math::lerp(n100,n101,w);
-	f32 n11 = math::lerp(n110,n111,w);
+	f32 n00 = math::lerp(n000, n001, w);
+	f32 n01 = math::lerp(n010, n011, w);
+	f32 n10 = math::lerp(n100, n101, w);
+	f32 n11 = math::lerp(n110, n111, w);
 
-	f32 n0 = math::lerp(n00,n01,v);
-	f32 n1 = math::lerp(n10,n11,v);
+	f32 n0 = math::lerp(n00, n01, v);
+	f32 n1 = math::lerp(n10, n11, v);
 
-	return math::lerp(n0,n1,u);
+	return math::lerp(n0, n1, u);
 }
 
 } // namespace random

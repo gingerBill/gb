@@ -20,8 +20,8 @@ CONTENTS:
 	- C++11 Move Semantics
 	- Defer
 	- Casts
-		- pseudo_cast
 		- bit_cast
+		- pseudo_cast
 	- Memory
 		- Mutex
 		- Atomics
@@ -254,8 +254,14 @@ CONTENTS:
 				va_end(args);
 			}
 			fprintf(stderr, "\n");
-			// TODO(bill): Get a better way to abort
-			*(int*)0 = 0;
+
+		#if defined(GB_COMPILER_MSVC)
+			__debugbreak();
+		#elif defined(GB_COMPILER_GNU_GCC)
+			__builtin_trap();
+		#else
+			#error Implement aborting function
+		#endif
 		}
 
 	#else
@@ -486,22 +492,22 @@ template <typename T> using  Add_Volatile = typename Add_Volatile_Def<T>::Type;
 
 template <typename T> using  Add_Const_Volatile = Add_Const<Add_Volatile<T>>;
 
-template <typename T> struct Add_Lvalue_Reference_Def      { using Type = T&; };
-template <typename T> struct Add_Lvalue_Reference_Def<T&>  { using Type = T&; };
-template <typename T> struct Add_Lvalue_Reference_Def<T&&> { using Type = T&; };
-template <> struct Add_Lvalue_Reference_Def<void>                { using Type = void;                };
-template <> struct Add_Lvalue_Reference_Def<const void>          { using Type = const void;          };
-template <> struct Add_Lvalue_Reference_Def<volatile void>       { using Type = volatile void;       };
-template <> struct Add_Lvalue_Reference_Def<const volatile void> { using Type = const volatile void; };
-template <typename T> using Add_Lvalue_Reference = typename Add_Lvalue_Reference_Def<T>::Type;
+template <typename T> struct Add_Lvalue_Reference_Def                      { using Type = T&;                  };
+template <typename T> struct Add_Lvalue_Reference_Def<T&>                  { using Type = T&;                  };
+template <typename T> struct Add_Lvalue_Reference_Def<T&&>                 { using Type = T&;                  };
+template <>           struct Add_Lvalue_Reference_Def<void>                { using Type = void;                };
+template <>           struct Add_Lvalue_Reference_Def<const void>          { using Type = const void;          };
+template <>           struct Add_Lvalue_Reference_Def<volatile void>       { using Type = volatile void;       };
+template <>           struct Add_Lvalue_Reference_Def<const volatile void> { using Type = const volatile void; };
+template <typename T> using  Add_Lvalue_Reference = typename Add_Lvalue_Reference_Def<T>::Type;
 
-template <typename T> struct Add_Rvalue_Reference_Def      { using Type = T&&; };
-template <typename T> struct Add_Rvalue_Reference_Def<T&>  { using Type = T&; };
-template <typename T> struct Add_Rvalue_Reference_Def<T&&> { using Type = T&&; };
-template <> struct Add_Rvalue_Reference_Def<void>                { using Type = void;                };
-template <> struct Add_Rvalue_Reference_Def<const void>          { using Type = const void;          };
-template <> struct Add_Rvalue_Reference_Def<volatile void>       { using Type = volatile void;       };
-template <> struct Add_Rvalue_Reference_Def<const volatile void> { using Type = const volatile void; };
+template <typename T> struct Add_Rvalue_Reference_Def                      { using Type = T&&;                 };
+template <typename T> struct Add_Rvalue_Reference_Def<T&>                  { using Type = T&;                  };
+template <typename T> struct Add_Rvalue_Reference_Def<T&&>                 { using Type = T&&;                 };
+template <>           struct Add_Rvalue_Reference_Def<void>                { using Type = void;                };
+template <>           struct Add_Rvalue_Reference_Def<const void>          { using Type = const void;          };
+template <>           struct Add_Rvalue_Reference_Def<volatile void>       { using Type = volatile void;       };
+template <>           struct Add_Rvalue_Reference_Def<const volatile void> { using Type = const volatile void; };
 template <typename T> using  Add_Rvalue_Reference = typename Add_Rvalue_Reference_Def<T>::Type;
 
 
@@ -533,8 +539,8 @@ template <typename T> using  Remove_Reference = typename Remove_Reference_Def<T>
 template <typename T, T v> struct Integral_Constant { global_variable const T VALUE = v; using Value_Type = T; using Type = Integral_Constant; };
 
 template <typename T, usize N = 0>      struct Extent          : Integral_Constant<usize, 0> {};
-template <typename T>                   struct Extent<T[], 0>  : Integral_Constant<usize, 0> {};
-template <typename T, usize N>          struct Extent<T[], N>  : Integral_Constant<usize, Extent<T, N-1>::VALUE> {};
+template <typename T>                   struct Extent<T[],  0> : Integral_Constant<usize, 0> {};
+template <typename T, usize N>          struct Extent<T[],  N> : Integral_Constant<usize, Extent<T, N-1>::VALUE> {};
 template <typename T, usize N>          struct Extent<T[N], 0> : Integral_Constant<usize, N> {};
 template <typename T, usize I, usize N> struct Extent<T[I], N> : Integral_Constant<usize, Extent<T, N-1>::VALUE> {};
 
@@ -673,7 +679,57 @@ __GB_NAMESPACE_START
 		u8 arr[4] = {0x78, 0x56, 0x34, 0x12};
 		u32 var = bit_cast<u32>(arr); // Little edian => 0x12345678
 
-		// TODO(bill): write pseudo_cast example
+		// pseudo_cast - except from gb_math.hpp
+		Sphere
+		calculate_min_bounding(const void* vertices, usize num_vertices, usize stride, usize offset, f32 step)
+		{
+			auto gen = random::make(0);
+
+			const u8* vertex = reinterpret_cast<const u8*>(vertices);
+			vertex += offset;
+
+			Vector3 position = pseudo_cast<Vector3>(vertex[0]);
+			Vector3 center = position;
+			center += pseudo_cast<Vector3>(vertex[1 * stride]);
+			center *= 0.5f;
+
+			Vector3 d = position - center;
+			f32 max_dist_sq = math::dot(d, d);
+			f32 radius_step = step * 0.37f;
+
+			bool done;
+			do
+			{
+				done = true;
+				for (u32 i = 0, index = random::uniform_u32(&gen, 0, num_vertices-1);
+					 i < num_vertices;
+					 i++, index = (index + 1)%num_vertices)
+				{
+					Vector3 position = pseudo_cast<Vector3>(vertex[index * stride]);
+
+					d = position - center;
+					f32 dist_sq = math::dot(d, d);
+
+					if (dist_sq > max_dist_sq)
+					{
+						done = false;
+
+						center = d * radius_step;
+						max_dist_sq = math::lerp(max_dist_sq, dist_sq, step);
+
+						break;
+					}
+				}
+			}
+			while (!done);
+
+			Sphere result;
+
+			result.center = center;
+			result.radius = math::sqrt(max_dist_sq);
+
+			return result;
+		}
 
 	 */
 #endif
@@ -720,21 +776,21 @@ struct Atomic64 { u64 nonatomic; };
 namespace atomic
 {
 // TODO(bill): Should these functions have suffixes or is the overloading fine?
-u32 load(const volatile Atomic32* object);
+u32  load(const volatile Atomic32* object);
 void store(volatile Atomic32* object, u32 value);
-u32 compare_exchange_strong(volatile Atomic32* object, u32 expected, u32 desired);
-u32 exchanged(volatile Atomic32* object, u32 desired);
-u32 fetch_add(volatile Atomic32* object, s32 operand);
-u32 fetch_and(volatile Atomic32* object, u32 operand);
-u32 fetch_or(volatile Atomic32* object, u32 operand);
+u32  compare_exchange_strong(volatile Atomic32* object, u32 expected, u32 desired);
+u32  exchanged(volatile Atomic32* object, u32 desired);
+u32  fetch_add(volatile Atomic32* object, s32 operand);
+u32  fetch_and(volatile Atomic32* object, u32 operand);
+u32  fetch_or(volatile Atomic32* object, u32 operand);
 
-u64 load(const volatile Atomic64* object);
+u64  load(const volatile Atomic64* object);
 void store(volatile Atomic64* object, u64 value);
-u64 compare_exchange_strong(volatile Atomic64* object, u64 expected, u64 desired);
-u64 exchanged(volatile Atomic64* object, u64 desired);
-u64 fetch_add(volatile Atomic64* object, s64 operand);
-u64 fetch_and(volatile Atomic64* object, u64 operand);
-u64 fetch_or(volatile Atomic64* object, u64 operand);
+u64  compare_exchange_strong(volatile Atomic64* object, u64 expected, u64 desired);
+u64  exchanged(volatile Atomic64* object, u64 desired);
+u64  fetch_add(volatile Atomic64* object, s64 operand);
+u64  fetch_and(volatile Atomic64* object, u64 operand);
+u64  fetch_or(volatile Atomic64* object, u64 operand);
 } // namespace atomic
 
 struct Semaphore
@@ -782,7 +838,7 @@ void destroy(Thread* t);
 void start(Thread* t, Thread_Function* func, void* data = nullptr, usize stack_size = 0);
 void stop(Thread* t);
 bool is_running(const Thread& t);
-u32 current_id();
+u32  current_id();
 } // namespace thread
 
 
@@ -861,8 +917,8 @@ struct Allocator
 */
 
 
-/// An allocator that used the malloc(). Allocations are padded with the size of
-/// the allocation and align them to the desired alignment
+/// An allocator that uses the `malloc()`.
+/// Allocations are padded with to align them to the desired alignment
 struct Heap_Allocator : Allocator
 {
 	Mutex mutex                 = mutex::make();
@@ -874,9 +930,37 @@ struct Heap_Allocator : Allocator
 
 	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT);
 	virtual void  dealloc(const void* ptr);
-	virtual s64 allocated_size(const void* ptr);
-	virtual s64 total_allocated();
+	virtual s64   allocated_size(const void* ptr);
+	virtual s64   total_allocated();
 };
+
+template <usize BUFFER_SIZE>
+struct Temp_Allocator : Allocator
+{
+	u8         buffer[BUFFER_SIZE];
+	Allocator* backing;
+	u8*        physical_start;
+	u8*        current_pointer;
+	u8*        physical_end;
+	usize      chunk_size; // Chunks to allocate from backing allocator
+
+	explicit Temp_Allocator(Allocator* backing);
+	virtual ~Temp_Allocator();
+
+	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT);
+	virtual void  dealloc(const void*) {}
+	virtual s64   allocated_size(const void*) { return -1; }
+	virtual s64   total_allocated() { return -1; }
+};
+
+// Predefined Temp_Allocator sizes to prevent unneeded template instantiation
+template <> using Temp_Allocator64   = Temp_Allocator<64>;
+template <> using Temp_Allocator128  = Temp_Allocator<128>;
+template <> using Temp_Allocator256  = Temp_Allocator<256>;
+template <> using Temp_Allocator512  = Temp_Allocator<512>;
+template <> using Temp_Allocator1024 = Temp_Allocator<1024>;
+template <> using Temp_Allocator2048 = Temp_Allocator<2048>;
+template <> using Temp_Allocator4096 = Temp_Allocator<4096>;
 
 struct Arena_Allocator : Allocator
 {
@@ -892,8 +976,8 @@ struct Arena_Allocator : Allocator
 
 	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT);
 	virtual void  dealloc(const void* ptr);
-	virtual s64 allocated_size(const void* ptr);
-	virtual s64 total_allocated();
+	virtual s64   allocated_size(const void* ptr);
+	virtual s64   total_allocated();
 };
 
 struct Temporary_Arena_Memory
@@ -902,30 +986,10 @@ struct Temporary_Arena_Memory
 	s64              original_count;
 };
 
-template <usize BUFFER_SIZE>
-struct Temp_Allocator : Allocator
-{
-	u8 buffer[BUFFER_SIZE];
-	Allocator* backing;
-	u8*   physical_start;
-	u8*   current_pointer;
-	u8*   physical_end;
-	usize chunk_size; // Chunks to allocate from backing allocator
-
-	explicit Temp_Allocator(Allocator* backing);
-	virtual ~Temp_Allocator();
-
-	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT);
-	virtual void  dealloc(const void*) {}
-	virtual s64 allocated_size(const void*) { return -1; }
-	virtual s64 total_allocated() { return -1; }
-};
-
 namespace arena_allocator
 {
 void clear(Arena_Allocator* arena);
 } // namespace arena_allocator
-
 
 namespace temporary_arena_memory
 {
@@ -942,18 +1006,28 @@ const void* pointer_add(const void* ptr, usize bytes);
 const void* pointer_sub(const void* ptr, usize bytes);
 
 void* set(void* ptr, u8 value, usize bytes);
+
 void* zero(void* ptr, usize bytes);
 void* copy(void* dest, const void* src, usize bytes);
 void* move(void* dest, const void* src, usize bytes);
 bool equals(const void* a, const void* b, usize bytes);
+
+template <typename T>
+T* zero_struct(T* ptr);
+
+template <typename T>
+T* copy_array(T* dest_array, const T* src_array, usize count);
+
+// TODO(bill): Should I implement something like std::copy, std::fill, std::fill_n ???
 } // namespace memory
 
-inline void* alloc(Allocator* a, usize size, usize align = GB_DEFAULT_ALIGNMENT) { GB_ASSERT(a != nullptr); return a->alloc(size, align); }
-inline void dealloc(Allocator* a, const void* ptr) { GB_ASSERT(a != nullptr); return a->dealloc(ptr); }
+void* alloc(Allocator* a, usize size, usize align = GB_DEFAULT_ALIGNMENT);
+void  dealloc(Allocator* a, const void* ptr);
 
 template <typename T>
 inline T* alloc_struct(Allocator* a) { return static_cast<T*>(alloc(a, sizeof(T), alignof(T))); }
 
+// TODO(bill): Should I keep both or only one of them?
 template <typename T>
 inline T* alloc_array(Allocator* a, usize count) { return static_cast<T*>(alloc(a, count * sizeof(T), alignof(T))); }
 
@@ -1239,6 +1313,7 @@ bool operator>(Time left, Time right);
 bool operator<=(Time left, Time right);
 bool operator>=(Time left, Time right);
 
+Time operator+(Time right);
 Time operator-(Time right);
 
 Time operator+(Time left, Time right);
@@ -1345,21 +1420,20 @@ Temp_Allocator<BUFFER_SIZE>::Temp_Allocator(Allocator* backing_)
 {
 	current_pointer = physical_start = buffer;
 	physical_end = physical_start + BUFFER_SIZE;
-	*static_cast<void**>(physical_start) = 0;
+	*reinterpret_cast<void**>(physical_start) = nullptr;
 	current_pointer = memory::pointer_add(current_pointer, sizeof(void*));
 }
 
 template <usize BUFFER_SIZE>
 Temp_Allocator<BUFFER_SIZE>::~Temp_Allocator()
 {
-	void* ptr = *static_cast<void**>(buffer);
+	void* ptr = *reinterpret_cast<void**>(buffer);
 	while (ptr)
 	{
 		void* next = *static_cast<void**>(ptr);
-		backing_->dealloc(ptr);
+		backing->dealloc(ptr);
 		ptr = next;
 	}
-
 }
 
 template <usize BUFFER_SIZE>
@@ -1367,17 +1441,17 @@ void*
 Temp_Allocator<BUFFER_SIZE>::alloc(usize size, usize align)
 {
 	current_pointer = static_cast<u8*>(memory::align_forward(current_pointer, align));
-	if (size > static_cast<usize>(physical_end) - current_pointer)
+	if (static_cast<intptr>(size) > (physical_end - current_pointer))
 	{
 		usize to_allocate = sizeof(void*) + size + align;
 		if (to_allocate < chunk_size)
 			to_allocate = chunk_size;
 		chunk_size *= 2;
-		void* ptr = backing_->alloc(to_allocate);
-		*static_cast<void**>(physical_start) = ptr;
+		void* ptr = backing->alloc(to_allocate);
+		*reinterpret_cast<void**>(physical_start) = ptr;
 		current_pointer = physical_start = static_cast<u8*>(ptr);
-		*static_cast<void**>(physical_start) = 0;
-		current_pointer = memory::pointer_add(current_pointer, sizeof(void*));
+		*reinterpret_cast<void**>(physical_start) = 0;
+		current_pointer = static_cast<u8*>(memory::pointer_add(current_pointer, sizeof(void*)));
 		current_pointer = static_cast<u8*>(memory::align_forward(current_pointer, align));
 	}
 
@@ -1385,84 +1459,6 @@ Temp_Allocator<BUFFER_SIZE>::alloc(usize size, usize align)
 	current_pointer += size;
 	return (result);
 }
-
-
-////////////////////////////////
-///                          ///
-/// Memory                   ///
-///                          ///
-////////////////////////////////
-
-namespace memory
-{
-inline void*
-align_forward(void* ptr, usize align)
-{
-	GB_ASSERT(GB_IS_POWER_OF_TWO(align),
-	          "Alignment must be a power of two and not zero -- %llu", align);
-
-	uintptr p = uintptr(ptr);
-	const usize modulo = p % align;
-	if (modulo)
-		p += (align - modulo);
-	return reinterpret_cast<void*>(p);
-}
-
-inline void*
-pointer_add(void* ptr, usize bytes)
-{
-	return static_cast<void*>(static_cast<u8*>(ptr) + bytes);
-}
-
-inline const void*
-pointer_add(const void* ptr, usize bytes)
-{
-	return static_cast<const void*>(static_cast<const u8*>(ptr) + bytes);
-}
-
-inline void*
-pointer_sub(void* ptr, usize bytes)
-{
-	return static_cast<void*>(static_cast<u8*>(ptr) - bytes);
-}
-
-inline const void*
-pointer_sub(const void* ptr, usize bytes)
-{
-	return static_cast<const void*>(static_cast<const u8*>(ptr) - bytes);
-}
-
-inline void*
-set(void* ptr, u8 value, usize bytes)
-{
-	return memset(ptr, value, bytes);
-}
-
-inline void*
-zero(void* ptr, usize bytes)
-{
-	return memory::set(ptr, 0, bytes);
-}
-
-
-inline void*
-copy(void* dest, const void* src, usize bytes)
-{
-	return memcpy(dest, src, bytes);
-}
-
-inline void*
-move(void* dest, const void* src, usize bytes)
-{
-	return memmove(dest, src, bytes);
-}
-
-inline bool
-equals(const void* a, const void* b, usize bytes)
-{
-	return (memcmp(a, b, bytes) == 0);
-}
-} // namespace memory
 
 ////////////////////////////////
 ///                          ///
@@ -2167,6 +2163,24 @@ remove_all(Hash_Table<T>* h, u64 key)
 } // namespace multi_hash_table
 
 
+namespace memory
+{
+template <typename T>
+inline T*
+zero_struct(T* ptr)
+{
+	return static_cast<T*>(memory::zero(ptr, sizeof(T)));
+}
+
+template <typename T>
+inline T*
+copy_array(T* dest_array, const T* src_array, usize count)
+{
+	return static_cast<T>(memory::copy(dest_array, src_array, count * sizeof(T)));
+}
+} // namespace memory
+
+
 
 
 
@@ -2252,7 +2266,7 @@ __GB_NAMESPACE_START
 
 namespace mutex
 {
-Mutex
+inline Mutex
 make()
 {
 	Mutex m = {};
@@ -2264,7 +2278,7 @@ make()
 	return m;
 }
 
-void
+inline void
 destroy(Mutex* m)
 {
 #if defined(GB_SYSTEM_WINDOWS)
@@ -2275,7 +2289,8 @@ destroy(Mutex* m)
 }
 
 
-void lock(Mutex* m)
+inline void
+lock(Mutex* m)
 {
 #if defined(GB_SYSTEM_WINDOWS)
 	WaitForSingleObject(m->win32_mutex, INFINITE);
@@ -2284,7 +2299,8 @@ void lock(Mutex* m)
 #endif
 }
 
-bool try_lock(Mutex* m)
+inline bool
+try_lock(Mutex* m)
 {
 #if defined(GB_SYSTEM_WINDOWS)
 	return WaitForSingleObject(m->win32_mutex, 0) == WAIT_OBJECT_0;
@@ -2294,7 +2310,8 @@ bool try_lock(Mutex* m)
 }
 
 
-void unlock(Mutex* m)
+inline void
+unlock(Mutex* m)
 {
 #if defined(GB_SYSTEM_WINDOWS)
 	ReleaseMutex(m->win32_mutex);
@@ -2734,7 +2751,7 @@ Heap_Allocator::dealloc(const void* ptr)
 	::free(const_cast<void*>(ptr));
 }
 
-s64
+inline s64
 Heap_Allocator::allocated_size(const void* ptr)
 {
 	mutex::lock(&mutex);
@@ -2746,12 +2763,10 @@ Heap_Allocator::allocated_size(const void* ptr)
 	return static_cast<usize>(malloc_size(ptr));
 #else
 	return static_cast<usize>(malloc_usable_size(const_cast<void*>(ptr)));
-	return
 #endif
-
 }
 
-s64
+inline s64
 Heap_Allocator::total_allocated()
 {
 	return total_allocated_count;
@@ -2785,7 +2800,8 @@ Arena_Allocator::~Arena_Allocator()
 			  "Memory leak of %ld bytes, maybe you forgot to call clear_arena()?", total_allocated_count);
 }
 
-void* Arena_Allocator::alloc(usize size, usize align)
+void*
+Arena_Allocator::alloc(usize size, usize align)
 {
 	s64 actual_size = size + align;
 
@@ -2845,18 +2861,111 @@ free(Temporary_Arena_Memory* tmp)
 
 ////////////////////////////////
 ///                          ///
+/// Memory                   ///
+///                          ///
+////////////////////////////////
+
+namespace memory
+{
+inline void*
+align_forward(void* ptr, usize align)
+{
+	GB_ASSERT(GB_IS_POWER_OF_TWO(align),
+	          "Alignment must be a power of two and not zero -- %llu", align);
+
+	uintptr p = uintptr(ptr);
+	const usize modulo = p % align;
+	if (modulo)
+		p += (align - modulo);
+	return reinterpret_cast<void*>(p);
+}
+
+inline void*
+pointer_add(void* ptr, usize bytes)
+{
+	return static_cast<void*>(static_cast<u8*>(ptr) + bytes);
+}
+
+inline const void*
+pointer_add(const void* ptr, usize bytes)
+{
+	return static_cast<const void*>(static_cast<const u8*>(ptr) + bytes);
+}
+
+inline void*
+pointer_sub(void* ptr, usize bytes)
+{
+	return static_cast<void*>(static_cast<u8*>(ptr) - bytes);
+}
+
+inline const void*
+pointer_sub(const void* ptr, usize bytes)
+{
+	return static_cast<const void*>(static_cast<const u8*>(ptr) - bytes);
+}
+
+GB_FORCE_INLINE void*
+set(void* ptr, u8 value, usize bytes)
+{
+	return memset(ptr, value, bytes);
+}
+
+GB_FORCE_INLINE void*
+zero(void* ptr, usize bytes)
+{
+	return memory::set(ptr, 0, bytes);
+}
+
+GB_FORCE_INLINE void*
+copy(void* dest, const void* src, usize bytes)
+{
+	return memcpy(dest, src, bytes);
+}
+
+GB_FORCE_INLINE void*
+move(void* dest, const void* src, usize bytes)
+{
+	return memmove(dest, src, bytes);
+}
+
+GB_FORCE_INLINE bool
+equals(const void* a, const void* b, usize bytes)
+{
+	return (memcmp(a, b, bytes) == 0);
+}
+} // namespace memory
+
+inline void*
+alloc(Allocator* a, usize size, usize align)
+{
+	GB_ASSERT(a != nullptr);
+	return a->alloc(size, align);
+}
+
+inline void
+dealloc(Allocator* a, const void* ptr)
+{
+	GB_ASSERT(a != nullptr);
+	if (ptr)
+		a->dealloc(ptr);
+}
+
+////////////////////////////////
+///                          ///
 /// String                   ///
 ///                          ///
 ////////////////////////////////
 
 namespace string
 {
-String make(Allocator* a, const char* str)
+inline String
+make(Allocator* a, const char* str)
 {
 	return string::make(a, str, (string::Size)strlen(str));
 }
 
-String make(Allocator* a, const void* init_str, Size len)
+String
+make(Allocator* a, const void* init_str, Size len)
 {
 	usize header_size = sizeof(string::Header);
 	void* ptr = alloc(a, header_size + len + 1);
@@ -2878,7 +2987,8 @@ String make(Allocator* a, const void* init_str, Size len)
 	return str;
 }
 
-void free(String str)
+void
+free(String str)
 {
 	if (str == nullptr)
 		return;
@@ -2888,22 +2998,26 @@ void free(String str)
 		dealloc(a, h);
 }
 
-String duplicate(Allocator* a, const String str)
+inline String
+duplicate(Allocator* a, const String str)
 {
 	return string::make(a, str, string::length(str));
 }
 
-Size length(const String str)
+inline Size
+length(const String str)
 {
 	return string::header(str)->len;
 }
 
-Size capacity(const String str)
+inline Size
+capacity(const String str)
 {
 	return string::header(str)->cap;
 }
 
-Size available_space(const String str)
+inline Size
+available_space(const String str)
 {
 	string::Header* h = string::header(str);
 	if (h->cap > h->len)
@@ -2911,13 +3025,15 @@ Size available_space(const String str)
 	return 0;
 }
 
-void clear(String str)
+inline void
+clear(String str)
 {
 	string::header(str)->len = 0;
 	str[0] = '\0';
 }
 
-void append(String* str, char c)
+void
+append(String* str, char c)
 {
 	Size curr_len = string::length(*str);
 
@@ -2930,17 +3046,20 @@ void append(String* str, char c)
 	string::header(*str)->len = curr_len + 1;
 }
 
-void append(String* str, const String other)
+inline void
+append(String* str, const String other)
 {
 	string::append(str, other, string::length(other));
 }
 
-void append_cstring(String* str, const char* other)
+inline void
+append_cstring(String* str, const char* other)
 {
 	string::append(str, other, (Size)strlen(other));
 }
 
-void append(String* str, const void* other, Size other_len)
+void
+append(String* str, const void* other, Size other_len)
 {
 	Size curr_len = string::length(*str);
 
@@ -3729,6 +3848,7 @@ bool operator>(Time left, Time right) { return left.microseconds > right.microse
 bool operator<=(Time left, Time right) { return left.microseconds <= right.microseconds; }
 bool operator>=(Time left, Time right) { return left.microseconds >= right.microseconds; }
 
+Time operator+(Time right) { return {+right.microseconds}; }
 Time operator-(Time right) { return {-right.microseconds}; }
 
 Time operator+(Time left, Time right) { return {left.microseconds + right.microseconds}; }
@@ -3954,6 +4074,7 @@ __GB_NAMESPACE_END
 
 /*
 Version History:
+	0.24  - More documentation and bug fixes
 	0.23  - Move Semantics for Array and Hash_Table
 	0.22  - Code rearrangment into namespaces
 	0.21d - Fix array::free
