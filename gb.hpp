@@ -1,4 +1,4 @@
-// gb.hpp - v0.24 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.24a - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
@@ -224,8 +224,8 @@ CONTENTS:
 
 
 #ifndef GB_DISABLE_COPY
-#define GB_DISABLE_COPY(Type) \
-	Type(const Type&) = delete;      \
+#define GB_DISABLE_COPY(Type)   \
+	Type(const Type&) = delete; \
 	Type& operator=(const Type&) = delete
 #endif
 
@@ -954,13 +954,13 @@ struct Temp_Allocator : Allocator
 };
 
 // Predefined Temp_Allocator sizes to prevent unneeded template instantiation
-template <> using Temp_Allocator64   = Temp_Allocator<64>;
-template <> using Temp_Allocator128  = Temp_Allocator<128>;
-template <> using Temp_Allocator256  = Temp_Allocator<256>;
-template <> using Temp_Allocator512  = Temp_Allocator<512>;
-template <> using Temp_Allocator1024 = Temp_Allocator<1024>;
-template <> using Temp_Allocator2048 = Temp_Allocator<2048>;
-template <> using Temp_Allocator4096 = Temp_Allocator<4096>;
+using Temp_Allocator64   = Temp_Allocator<64>;
+using Temp_Allocator128  = Temp_Allocator<128>;
+using Temp_Allocator256  = Temp_Allocator<256>;
+using Temp_Allocator512  = Temp_Allocator<512>;
+using Temp_Allocator1024 = Temp_Allocator<1024>;
+using Temp_Allocator2048 = Temp_Allocator<2048>;
+using Temp_Allocator4096 = Temp_Allocator<4096>;
 
 struct Arena_Allocator : Allocator
 {
@@ -1023,6 +1023,8 @@ T* copy_array(T* dest_array, const T* src_array, usize count);
 
 void* alloc(Allocator* a, usize size, usize align = GB_DEFAULT_ALIGNMENT);
 void  dealloc(Allocator* a, const void* ptr);
+s64   allocated_size(Allocator* a, const void* ptr);
+s64   total_allocated(Allocator* a);
 
 template <typename T>
 inline T* alloc_struct(Allocator* a) { return static_cast<T*>(alloc(a, sizeof(T), alignof(T))); }
@@ -1421,7 +1423,7 @@ Temp_Allocator<BUFFER_SIZE>::Temp_Allocator(Allocator* backing_)
 	current_pointer = physical_start = buffer;
 	physical_end = physical_start + BUFFER_SIZE;
 	*reinterpret_cast<void**>(physical_start) = nullptr;
-	current_pointer = memory::pointer_add(current_pointer, sizeof(void*));
+	current_pointer = static_cast<u8*>(memory::pointer_add(current_pointer, sizeof(void*)));
 }
 
 template <usize BUFFER_SIZE>
@@ -1783,13 +1785,13 @@ struct Find_Result
 };
 
 template <typename T> usize add_entry(Hash_Table<T>* h, u64 key);
-template <typename T> void erase(Hash_Table<T>* h, const Find_Result& fr);
-template <typename T> Find_Result find_result(const Hash_Table<T>& h, u64 key);
-template <typename T> Find_Result find_result(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e);
-template <typename T> s64 make_entry(Hash_Table<T>* h, u64 key);
+template <typename T> void  erase(Hash_Table<T>* h, const Find_Result& fr);
+template <typename T> Find_Result find_result_from_key(const Hash_Table<T>& h, u64 key);
+template <typename T> Find_Result find_result_from_entry(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e);
+template <typename T> s64  make_entry(Hash_Table<T>* h, u64 key);
 template <typename T> void find_and_erase_entry(Hash_Table<T>* h, u64 key);
-template <typename T> s64 find_entry_or_fail(const Hash_Table<T>& h, u64 key);
-template <typename T> s64 find_or_make_entry(Hash_Table<T>* h, u64 key);
+template <typename T> s64  find_entry_or_fail(const Hash_Table<T>& h, u64 key);
+template <typename T> s64  find_or_make_entry(Hash_Table<T>* h, u64 key);
 template <typename T> void rehash(Hash_Table<T>* h, usize new_capacity);
 template <typename T> void grow(Hash_Table<T>* h);
 template <typename T> bool is_full(Hash_Table<T>* h);
@@ -1816,14 +1818,14 @@ erase(Hash_Table<T>* h, const Find_Result& fr)
 	else
 		h->entries[fr.data_prev].next = h->entries[fr.entry_index].next;
 
-	array::pop(h->entries); // updated array count
+	array::pop(&h->entries); // Update array count
 
 	if (fr.entry_index == h->entries.count)
 		return;
 
 	h->entries[fr.entry_index] = h->entries[h->entries.count];
 
-	auto last = impl::find_result(h, h->entries[fr.entry_index].key);
+	auto last = impl::find_result_from_key(*h, h->entries[fr.entry_index].key);
 
 	if (last.data_prev < 0)
 		h->hashes[last.hash_index] = fr.entry_index;
@@ -1833,11 +1835,11 @@ erase(Hash_Table<T>* h, const Find_Result& fr)
 
 template <typename T>
 Find_Result
-find_result(const Hash_Table<T>& h, u64 key)
+find_result_from_key(const Hash_Table<T>& h, u64 key)
 {
 	Find_Result fr;
-	fr.hash_index = -1;
-	fr.data_prev  = -1;
+	fr.hash_index  = -1;
+	fr.data_prev   = -1;
 	fr.entry_index = -1;
 
 	if (h.hashes.count == 0)
@@ -1859,17 +1861,17 @@ find_result(const Hash_Table<T>& h, u64 key)
 
 template <typename T>
 Find_Result
-find_result(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
+find_result_from_entry(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
 {
 	Find_Result fr;
-	fr.hash_index = -1;
-	fr.data_prev  = -1;
+	fr.hash_index  = -1;
+	fr.data_prev   = -1;
 	fr.entry_index = -1;
 
 	if (h.hashes.count == 0 || !e)
 		return fr;
 
-	fr.hash_index = key % h.hashes.count;
+	fr.hash_index = e->key % h.hashes.count;
 	fr.entry_index = h.hashes[fr.hash_index];
 	while (fr.entry_index >= 0)
 	{
@@ -1886,7 +1888,7 @@ template <typename T>
 s64
 make_entry(Hash_Table<T>* h, u64 key)
 {
-	const Find_Result fr = impl::find_result(*h, key);
+	const Find_Result fr = impl::find_result_from_key(*h, key);
 	const s64 index      = impl::add_entry(h, key);
 
 	if (fr.data_prev < 0)
@@ -1903,23 +1905,23 @@ template <typename T>
 void
 find_and_erase_entry(Hash_Table<T>* h, u64 key)
 {
-	const Find_Result fr = impl::find_result(h, key);
+	const Find_Result fr = impl::find_result_from_key(*h, key);
 	if (fr.entry_index >= 0)
-		hash_table::erase(h, fr);
+		impl::erase(h, fr);
 }
 
 template <typename T>
 s64
 find_entry_or_fail(const Hash_Table<T>& h, u64 key)
 {
-	return impl::find_result(h, key).entry_index;
+	return impl::find_result_from_key(h, key).entry_index;
 }
 
 template <typename T>
 s64
 find_or_make_entry(Hash_Table<T>* h, u64 key)
 {
-	const auto fr = find_result(*h, key);
+	const auto fr = impl::find_result_from_key(*h, key);
 	if (fr.entry_index >= 0)
 		return fr.entry_index;
 
@@ -2091,7 +2093,7 @@ template <typename T>
 inline typename const Hash_Table<T>::Entry*
 find_first(const Hash_Table<T>& h, u64 key)
 {
-	const s64 index = multi_hash_table::find_first(h, key);
+	const s64 index = hash_table::impl::find_entry_or_fail(h, key);
 	if (index < 0)
 		return nullptr;
 	return &h.entries[index];
@@ -2107,7 +2109,7 @@ find_next(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
 	auto index = e->next;
 	while (index >= 0)
 	{
-		if (h.entries[index].ley == e->key)
+		if (h.entries[index].key == e->key)
 			return &h.entries[index];
 		index = h.entries[index].next;
 	}
@@ -2148,7 +2150,7 @@ template <typename T>
 inline void
 remove_entry(Hash_Table<T>* h, typename const Hash_Table<T>::Entry* e)
 {
-	const auto fr = hash_table::impl::find_result(h, e);
+	const auto fr = hash_table::impl::find_result_from_entry(*h, e);
 	if (fr.entry_index >= 0)
 		hash_table::impl::erase(h, fr);
 }
@@ -2157,7 +2159,7 @@ template <typename T>
 inline void
 remove_all(Hash_Table<T>* h, u64 key)
 {
-	while (hash_table::has(h, key))
+	while (hash_table::has(*h, key))
 		hash_table::remove(h, key);
 }
 } // namespace multi_hash_table
@@ -2949,6 +2951,21 @@ dealloc(Allocator* a, const void* ptr)
 	if (ptr)
 		a->dealloc(ptr);
 }
+
+inline s64
+allocated_size(Allocator* a, const void* ptr)
+{
+	GB_ASSERT(a != nullptr);
+	return a->allocated_size(ptr);
+}
+
+inline s64
+total_allocated(Allocator* a)
+{
+	GB_ASSERT(a != nullptr);
+	return a->total_allocated();
+}
+
 
 ////////////////////////////////
 ///                          ///
@@ -4074,6 +4091,7 @@ __GB_NAMESPACE_END
 
 /*
 Version History:
+	0.24a - Hash_Table Bug Fixes
 	0.24  - More documentation and bug fixes
 	0.23  - Move Semantics for Array and Hash_Table
 	0.22  - Code rearrangment into namespaces
