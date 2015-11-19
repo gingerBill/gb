@@ -1,38 +1,7 @@
-// gb.hpp - v0.23 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.24 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
-Version History:
-	0.23  - Move Semantics for Array and Hash_Table
-	0.22  - Code rearrangment into namespaces
-	0.21d - Fix array::free
-	0.21c - Fix Another Typo causing unresolved external symbol
-	0.21b - Typo fixes
-	0.21a - Better `static` keywords
-	0.21  - Separate Math Library
-	0.20a - #ifndef for many macros
-	0.20  - Angle
-	0.19  - Cache friendly Transform and String fixes
-	0.18  - Hash_Table bug fixes
-	0.17  - Death to OOP
-	0.16  - All References are const convention
-	0.15  - Namespaced Types
-	0.14  - Casts and Quaternion Look At
-	0.13a - Fix Todos
-	0.13  - Basic Type Traits
-	0.12  - Random
-	0.11  - Complex
-	0.10  - Atomics
-	0.09  - Bug Fixes
-	0.08  - Matrix(2,3)
-	0.07  - Bug Fixes
-	0.06  - Os spec ideas
-	0.05  - Transform Type and Quaternion Functions
-	0.04  - String
-	0.03  - Hash Functions
-	0.02  - Hash Table
-	0.01  - Initial Version
-
 LICENSE
 	This software is in the public domain. Where that dedication is not
 	recognized, you are granted a perpetual, irrevocable license to copy,
@@ -124,6 +93,21 @@ CONTENTS:
 	#endif
 #else
 	#error This operating system is not supported by gb.hpp
+#endif
+
+
+#if defined(_MSC_VER)
+	// Microsoft Visual Studio
+	#define GB_COMPILER_MSVC 1
+#elif defined(__clang__)
+	// Clang
+	#define GB_COMPILER_CLANG 1
+#elif defined(__GNUC__) || defined(__GNUG__) && !(defined(__clang__) || defined(__INTEL_COMPILER))
+	// GNU GCC/G++ Compiler
+	#define GB_COMPILER_GNU_GCC 1
+#elif defined(__INTEL_COMPILER)
+	// Intel C++ Compiler
+	#define GB_COMPILER_INTEL 1
 #endif
 
 ////////////////////////////////
@@ -313,16 +297,20 @@ CONTENTS:
 	#endif // GB_DO_NOT_USE_MSVC_SPRINTF_FIX
 #endif
 
-#if !defined(__GB_NAMESPACE_PREFIX) && !defined(GB_NO_GB_NAMESPACE)
-	#define __GB_NAMESPACE_PREFIX gb
-#else
-	#define __GB_NAMESPACE_PREFIX
-#endif
 
 #if defined(GB_NO_GB_NAMESPACE)
 	#define __GB_NAMESPACE_START
 	#define __GB_NAMESPACE_END
+	#define __GB_NAMESPACE_PREFIX
 #else
+	#ifndef __GB_NAMESPACE_PREFIX
+	#define __GB_NAMESPACE_PREFIX gb
+	#endif
+
+	// NOTE(bill): __GB_NAMESPACE_PREFIX cannot be blank
+	// This is why macros that not meant to be touched have `__` prefix
+	// You can change them if you know what you are doing
+
 	#define __GB_NAMESPACE_START namespace __GB_NAMESPACE_PREFIX {
 	#define __GB_NAMESPACE_END   } // namespace __GB_NAMESPACE_PREFIX
 #endif
@@ -370,11 +358,11 @@ __GB_NAMESPACE_START
 	using f64 = double;
 
 	#if defined(GB_B8_AS_BOOL)
-		using b8 = bool;
+		using bool8 = bool;
 	#else
-		using b8 = s8;
+		using bool8 = s8;
 	#endif
-	using b32 = s32;
+	using bool32 = s32;
 
 	// NOTE(bill): (std::)size_t is not used not because it's a bad concept but on
 	// the platforms that I will be using:
@@ -550,9 +538,9 @@ template <typename T, usize N>          struct Extent<T[], N>  : Integral_Consta
 template <typename T, usize N>          struct Extent<T[N], 0> : Integral_Constant<usize, N> {};
 template <typename T, usize I, usize N> struct Extent<T[I], N> : Integral_Constant<usize, Extent<T, N-1>::VALUE> {};
 
-template <typename T>          struct Remove_Extend_Def       { using Type = T; };
-template <typename T>          struct Remove_Extend_Def<T[]>  { using Type = T; };
-template <typename T, usize N> struct Remove_Extend_Def<T[N]> { using Type = T; };
+template <typename T>          struct Remove_Extent_Def       { using Type = T; };
+template <typename T>          struct Remove_Extent_Def<T[]>  { using Type = T; };
+template <typename T, usize N> struct Remove_Extent_Def<T[N]> { using Type = T; };
 
 // TODO NOTE(bill): Do I _need_ all of these template traits?
 
@@ -561,6 +549,7 @@ template <typename T, usize N> struct Remove_Extend_Def<T[N]> { using Type = T; 
 /// C++11 Move Semantics     ///
 ///                          ///
 ////////////////////////////////
+
 template <typename T>
 inline T&&
 forward(Remove_Reference<T>& t)
@@ -588,6 +577,7 @@ __GB_NAMESPACE_END
 /// Defer                    ///
 ///                          ///
 ////////////////////////////////
+
 #ifndef GB_DEFER
 #define GB_DEFER
 	__GB_NAMESPACE_START
@@ -623,7 +613,7 @@ __GB_NAMESPACE_END
 	{
 		// Handle Error
 	}
-	defer (fclose()); // Will always be called at the end of scope
+	defer (fclose(file)); // Will always be called at the end of scope
 
 	//
 
@@ -674,6 +664,18 @@ __GB_NAMESPACE_START
 	{
 		return reinterpret_cast<const T&>(u);
 	}
+
+	/*
+		EXAMPLES:
+
+		// bit_cast
+
+		u8 arr[4] = {0x78, 0x56, 0x34, 0x12};
+		u32 var = bit_cast<u32>(arr); // Little edian => 0x12345678
+
+		// TODO(bill): write pseudo_cast example
+
+	 */
 #endif
 
 // FORENOTE(bill): There used to be a magic_cast that was equivalent to
@@ -685,6 +687,7 @@ __GB_NAMESPACE_END
 #endif // GB_CASTS_WITHOUT_NAMESPACE
 
 __GB_NAMESPACE_START
+
 ////////////////////////////////
 ///                          ///
 /// Memory                   ///
@@ -717,21 +720,21 @@ struct Atomic64 { u64 nonatomic; };
 namespace atomic
 {
 // TODO(bill): Should these functions have suffixes or is the overloading fine?
-u32 load(const Atomic32* object);
-void store(Atomic32* object, u32 value);
-u32 compare_exchange_strong(Atomic32* object, u32 expected, u32 desired);
-u32 exchanged(Atomic32* object, u32 desired);
-u32 fetch_add(Atomic32* object, s32 operand);
-u32 fetch_and(Atomic32* object, u32 operand);
-u32 fetch_or(Atomic32* object, u32 operand);
+u32 load(const volatile Atomic32* object);
+void store(volatile Atomic32* object, u32 value);
+u32 compare_exchange_strong(volatile Atomic32* object, u32 expected, u32 desired);
+u32 exchanged(volatile Atomic32* object, u32 desired);
+u32 fetch_add(volatile Atomic32* object, s32 operand);
+u32 fetch_and(volatile Atomic32* object, u32 operand);
+u32 fetch_or(volatile Atomic32* object, u32 operand);
 
-u64 load(const Atomic64* object);
-void store(Atomic64* object, u64 value);
-u64 compare_exchange_strong(Atomic64* object, u64 expected, u64 desired);
-u64 exchanged(Atomic64* object, u64 desired);
-u64 fetch_add(Atomic64* object, s64 operand);
-u64 fetch_and(Atomic64* object, u64 operand);
-u64 fetch_or(Atomic64* object, u64 operand);
+u64 load(const volatile Atomic64* object);
+void store(volatile Atomic64* object, u64 value);
+u64 compare_exchange_strong(volatile Atomic64* object, u64 expected, u64 desired);
+u64 exchanged(volatile Atomic64* object, u64 desired);
+u64 fetch_add(volatile Atomic64* object, s64 operand);
+u64 fetch_and(volatile Atomic64* object, u64 operand);
+u64 fetch_or(volatile Atomic64* object, u64 operand);
 } // namespace atomic
 
 struct Semaphore
@@ -753,9 +756,8 @@ void post(Semaphore* semaphore, u32 count = 1);
 void wait(Semaphore* semaphore);
 } // namespace semaphore
 
-// TODO(bill): Should I make a std::function<> equivalent to allow for captured lambdas?
 // TODO(bill): Is this thread function definitions good enough?
-using Thread_Function = s32(void*);
+using Thread_Function = void(void*);
 
 struct Thread
 {
@@ -770,7 +772,7 @@ struct Thread
 
 	Semaphore semaphore;
 	usize     stack_size;
-	b32       is_running;
+	bool32    is_running;
 };
 
 namespace thread
@@ -780,6 +782,7 @@ void destroy(Thread* t);
 void start(Thread* t, Thread_Function* func, void* data = nullptr, usize stack_size = 0);
 void stop(Thread* t);
 bool is_running(const Thread& t);
+u32 current_id();
 } // namespace thread
 
 
@@ -800,6 +803,8 @@ struct Allocator
 	Allocator() {}
 	virtual ~Allocator() {}
 
+	GB_DISABLE_COPY(Allocator);
+
 	/// Allocates the specified amount of memory aligned to the specified alignment
 	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT) = 0;
 	/// Deallocates/frees an allocation made with alloc()
@@ -813,8 +818,6 @@ struct Allocator
 	///
 	/// If the allocator does not track memory, the function will return -1
 	virtual s64 total_allocated() = 0;
-
-	GB_DISABLE_COPY(Allocator);
 };
 
 // TODO(bill): Should `Allocator` not even be a pure virtual base class?
@@ -1080,7 +1083,7 @@ template <typename T> void append(Array<T>* a, T&& item);
 template <typename T> void append(Array<T>* a, const T* items, usize count);
 
 /// Pops the last item form the array. The array cannot be empty.
-template <typename T> void pop_back(Array<T>* a);
+template <typename T> void pop(Array<T>* a);
 
 /// Removes all items from the array - does not free memory
 template <typename T> void clear(Array<T>* a);
@@ -1123,8 +1126,12 @@ struct Hash_Table
 	Hash_Table();
 	explicit Hash_Table(Allocator* a);
 	Hash_Table(const Hash_Table<T>& other);
-	Hash_Table<T>& operator=(const Hash_Table<T>& other);
+	Hash_Table(Hash_Table<T>&& other);
+
 	~Hash_Table() = default;
+
+	Hash_Table<T>& operator=(const Hash_Table<T>& other);
+	Hash_Table<T>& operator=(Hash_Table<T>&& other);
 };
 
 namespace hash_table
@@ -1266,6 +1273,7 @@ Time& operator%=(Time& left, Time right);
 ///                          ///
 ////////////////////////////////
 
+// TODO(bill): Should this be system:: vs os:: ?
 namespace os
 {
 u64 time_stamp_counter();
@@ -1281,7 +1289,7 @@ struct File
 
 	char* name; // TODO(bill): uses malloc
 
-	b32 is_console;
+	bool32 is_console;
 #else
 	#error Implement file system
 #endif
@@ -1539,7 +1547,15 @@ Array<T>::operator=(Array<T>&& other)
 		if (allocator && capacity > 0)
 			dealloc(allocator, data);
 
-		*this = move(other);
+		allocator = other.allocator;
+		count     = other.count;
+		capacity  = other.capacity;
+		data      = other.data;
+
+		other.allocator = nullptr;
+		other.count     = 0;
+		other.capacity  = 0;
+		other.data      = nullptr;
 	}
 
 	return *this;
@@ -1629,7 +1645,7 @@ append(Array<T>* a, const T* items, usize count)
 
 template <typename T>
 inline void
-pop_back(Array<T>* a)
+pop(Array<T>* a)
 {
 	GB_ASSERT(a->count > 0);
 
@@ -1724,11 +1740,29 @@ Hash_Table<T>::Hash_Table(const Hash_Table<T>& other)
 }
 
 template <typename T>
+inline
+Hash_Table<T>::Hash_Table(Hash_Table<T>&& other)
+: hashes(move(other.hashes))
+, entries(move(other.entries))
+{
+}
+
+
+template <typename T>
 inline Hash_Table<T>&
 Hash_Table<T>::operator=(const Hash_Table<T>& other)
 {
 	hashes  = other.hashes;
 	entries = other.entries;
+	return *this;
+}
+
+template <typename T>
+inline Hash_Table<T>&
+Hash_Table<T>::operator=(Hash_Table<T>&& other)
+{
+	hashes  = move(other.hashes);
+	entries = move(other.entries);
 	return *this;
 }
 
@@ -1786,7 +1820,7 @@ erase(Hash_Table<T>* h, const Find_Result& fr)
 	else
 		h->entries[fr.data_prev].next = h->entries[fr.entry_index].next;
 
-	array::pop_back(h->entries); // updated array count
+	array::pop(h->entries); // updated array count
 
 	if (fr.entry_index == h->entries.count)
 		return;
@@ -2275,49 +2309,49 @@ namespace atomic
 {
 #if defined(_MSC_VER)
 inline u32
-load(const Atomic32* object)
+load(const volatile Atomic32* object)
 {
 	return object->nonatomic;
 }
 
 inline void
-store(Atomic32* object, u32 value)
+store(volatile Atomic32* object, u32 value)
 {
 	object->nonatomic = value;
 }
 
 inline u32
-compare_exchange_strong(Atomic32* object, u32 expected, u32 desired)
+compare_exchange_strong(volatile Atomic32* object, u32 expected, u32 desired)
 {
-	return _InterlockedCompareExchange(reinterpret_cast<long*>(object), desired, expected);
+	return _InterlockedCompareExchange(reinterpret_cast<volatile long*>(object), desired, expected);
 }
 
 inline u32
-exchanged(Atomic32* object, u32 desired)
+exchanged(volatile Atomic32* object, u32 desired)
 {
-	return _InterlockedExchange(reinterpret_cast<long*>(object), desired);
+	return _InterlockedExchange(reinterpret_cast<volatile long*>(object), desired);
 }
 
 inline u32
-fetch_add(Atomic32* object, s32 operand)
+fetch_add(volatile Atomic32* object, s32 operand)
 {
-	return _InterlockedExchangeAdd(reinterpret_cast<long*>(object), operand);
+	return _InterlockedExchangeAdd(reinterpret_cast<volatile long*>(object), operand);
 }
 
 inline u32
-fetch_and(Atomic32* object, u32 operand)
+fetch_and(volatile Atomic32* object, u32 operand)
 {
-	return _InterlockedAnd(reinterpret_cast<long*>(object), operand);
+	return _InterlockedAnd(reinterpret_cast<volatile long*>(object), operand);
 }
 
 inline u32
-fetch_or_32(Atomic32* object, u32 operand)
+fetch_or_32(volatile Atomic32* object, u32 operand)
 {
-	return _InterlockedOr(reinterpret_cast<long*>(object), operand);
+	return _InterlockedOr(reinterpret_cast<volatile long*>(object), operand);
 }
 
 inline u64
-load(const Atomic64* object)
+load(const volatile Atomic64* object)
 {
 #if defined(GB_ARCH_64_BIT)
 	return object->nonatomic;
@@ -2338,12 +2372,12 @@ load(const Atomic64* object)
 }
 
 inline void
-store(Atomic64* object, u64 value)
+store(volatile Atomic64* object, u64 value)
 {
 #if defined(GB_ARCH_64_BIT)
 	object->nonatomic = value;
 #else
-	// NOTE(bill): The most compatible way to get an atomic 64-bit load on x86 is with cmpxchg8b
+	// NOTE(bill): The most compatible way to get an atomic 64-bit store on x86 is with cmpxchg8b
 	__asm
 	{
 		mov esi, object;
@@ -2357,21 +2391,21 @@ store(Atomic64* object, u64 value)
 }
 
 inline u64
-compare_exchange_strong(Atomic64* object, u64 expected, u64 desired)
+compare_exchange_strong(volatile Atomic64* object, u64 expected, u64 desired)
 {
-	_InterlockedCompareExchange64(reinterpret_cast<s64*>(object), desired, expected);
+	_InterlockedCompareExchange64(reinterpret_cast<volatile s64*>(object), desired, expected);
 }
 
 inline u64
-exchanged(Atomic64* object, u64 desired)
+exchanged(volatile Atomic64* object, u64 desired)
 {
 #if defined(GB_ARCH_64_BIT)
-	return _InterlockedExchange64(reinterpret_cast<s64*>(object), desired);
+	return _InterlockedExchange64(reinterpret_cast<volatile s64*>(object), desired);
 #else
 	u64 expected = object->nonatomic;
 	while (true)
 	{
-		u64 original = _InterlockedCompareExchange64(reinterpret_cast<s64*>(object), desired, expected);
+		u64 original = _InterlockedCompareExchange64(reinterpret_cast<volatile s64*>(object), desired, expected);
 		if (original == expected)
 			return original;
 		expected = original;
@@ -2380,15 +2414,15 @@ exchanged(Atomic64* object, u64 desired)
 }
 
 inline u64
-fetch_add(Atomic64* object, s64 operand)
+fetch_add(volatile Atomic64* object, s64 operand)
 {
 #if defined(GB_ARCH_64_BIT)
-	return _InterlockedExchangeAdd64(reinterpret_cast<s64*>(object), operand);
+	return _InterlockedExchangeAdd64(reinterpret_cast<volatile s64*>(object), operand);
 #else
 	u64 expected = object->nonatomic;
 	while (true)
 	{
-		u64 original = _InterlockedExchange64(reinterpret_cast<s64*>(object), expected + operand, expected);
+		u64 original = _InterlockedExchange64(reinterpret_cast<volatile s64*>(object), expected + operand, expected);
 		if (original == expected)
 			return original;
 		expected = original;
@@ -2397,15 +2431,15 @@ fetch_add(Atomic64* object, s64 operand)
 }
 
 inline u64
-fetch_and(Atomic64* object, u64 operand)
+fetch_and(volatile Atomic64* object, u64 operand)
 {
 #if defined(GB_ARCH_64_BIT)
-	return _InterlockedAnd64(reinterpret_cast<s64*>(object), operand);
+	return _InterlockedAnd64(reinterpret_cast<volatile s64*>(object), operand);
 #else
 	u64 expected = object->nonatomic;
 	while (true)
 	{
-		u64 original = _InterlockedCompareExchange64(reinterpret_cast<s64*>(object), expected & operand, expected);
+		u64 original = _InterlockedCompareExchange64(reinterpret_cast<volatile s64*>(object), expected & operand, expected);
 		if (original == expected)
 			return original;
 		expected = original;
@@ -2414,15 +2448,15 @@ fetch_and(Atomic64* object, u64 operand)
 }
 
 inline u64
-fetch_or(Atomic64* object, u64 operand)
+fetch_or(volatile Atomic64* object, u64 operand)
 {
 #if defined(GB_ARCH_64_BIT)
-	return _InterlockedAnd64(reinterpret_cast<s64*>(object), operand);
+	return _InterlockedAnd64(reinterpret_cast<volatile s64*>(object), operand);
 #else
 	u64 expected = object->nonatomic;
 	while (true)
 	{
-		u64 original = _InterlockedCompareExchange64(reinterpret_cast<s64*>(object), expected | operand, expected);
+		u64 original = _InterlockedCompareExchange64(reinterpret_cast<volatile s64*>(object), expected | operand, expected);
 		if (original == expected)
 			return original;
 		expected = original;
@@ -2539,31 +2573,28 @@ destroy(Thread* t)
 	semaphore::destroy(&t->semaphore);
 }
 
-internal_linkage s32
+internal_linkage void
 run(Thread* t)
 {
 	semaphore::post(&t->semaphore);
-	return t->function(t->data);
+	t->function(t->data);
 }
 
 #if defined(GB_SYSTEM_WINDOWS)
 internal_linkage DWORD WINAPI
 thread_proc(void* arg)
 {
-	Thread* t = static_cast<Thread*>(arg);
-	s32 result = thread::run(t);
-	return result;
+	thread::run(static_cast<Thread*>(arg));
+	return 0;
 }
 
 #else
 internal_linkage void*
 thread_proc(void* arg)
 {
-	local_persist s32 result = -1;
-	result = thread::run(static_cast<Thread*>(arg));
-	return (void*)&result;
+	thread::run(static_cast<Thread*>(arg));
+	return nullptr;
 }
-
 #endif
 
 void
@@ -2624,11 +2655,38 @@ stop(Thread* t)
 	t->is_running = false;
 }
 
-bool
+inline bool
 is_running(const Thread& thread)
 {
 	return thread.is_running != 0;
 }
+
+inline u32
+current_id()
+{
+	u32 thread_id;
+
+
+#if defined(GB_SYSTEM_WINDOWS)
+	u8* thread_local_storage = reinterpret_cast<u8*>(__readgsqword(0x30));
+	thread_id = *reinterpret_cast<u32*>(thread_local_storage + 0x48);
+
+#elif defined(GB_SYSTEM_OSX) && defined(GB_ARCH_64_BIT)
+	u32 thread_id;
+	asm("mov %%gs:0x00,%0" : "=r"(thread_id));
+#elif defined(GB_ARCH_32_BIT)
+	asm("mov %%gs:0x08,%0" : "=r"(thread_id));
+#elif defined(GB_ARCH_64_BIT)
+	asm("mov %%gs:0x10,%0" : "=r"(thread_id));
+#else
+	#error Unsupported architecture for thread::current_id()
+#endif
+
+
+	return thread_id;
+}
+
+
 } // namespace thread
 
 
@@ -2768,6 +2826,8 @@ make(Arena_Allocator* arena)
 	Temporary_Arena_Memory tmp = {};
 	tmp.arena = arena;
 	tmp.original_count = arena->total_allocated_count;
+	arena->temp_count++;
+	return tmp;
 }
 
 inline void
@@ -3891,3 +3951,36 @@ close(File* file)
 __GB_NAMESPACE_END
 
 #endif // GB_IMPLEMENTATION
+
+/*
+Version History:
+	0.23  - Move Semantics for Array and Hash_Table
+	0.22  - Code rearrangment into namespaces
+	0.21d - Fix array::free
+	0.21c - Fix Another Typo causing unresolved external symbol
+	0.21b - Typo fixes
+	0.21a - Better `static` keywords
+	0.21  - Separate Math Library
+	0.20a - #ifndef for many macros
+	0.20  - Angle
+	0.19  - Cache friendly Transform and String fixes
+	0.18  - Hash_Table bug fixes
+	0.17  - Death to OOP
+	0.16  - All References are const convention
+	0.15  - Namespaced Types
+	0.14  - Casts and Quaternion Look At
+	0.13a - Fix Todos
+	0.13  - Basic Type Traits
+	0.12  - Random
+	0.11  - Complex
+	0.10  - Atomics
+	0.09  - Bug Fixes
+	0.08  - Matrix(2,3)
+	0.07  - Bug Fixes
+	0.06  - Os spec ideas
+	0.05  - Transform Type and Quaternion Functions
+	0.04  - String
+	0.03  - Hash Functions
+	0.02  - Hash Table
+	0.01  - Initial Version
+*/
