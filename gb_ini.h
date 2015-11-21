@@ -357,7 +357,7 @@ gb__string_copy(char* dst, const char* src, size_t size)
 struct gb_Ini_Error
 gb_ini_parse(const char* filename, gb_Ini_Handler* handler_func, void* data)
 {
-	struct gb_Ini_Error err = {GB_INI_ERROR_NONE, 0};
+	struct gb_Ini_Error err = {GB_INI_ERROR_FILE_ERROR, 0};
 
 	FILE* file = fopen(filename, "r");
 	if (!file)
@@ -436,7 +436,7 @@ gb_ini_parse_file(FILE* file, gb_Ini_Handler* handler_func, void* data)
 				gb__right_whitespace_strip(value);
 
 				gb__string_copy(prev_name, name, sizeof(prev_name));
-				if (!handler_func(data, section, name, value) && err.type)
+				if (!handler_func(data, section, name, value) && !err.type)
 				{
 					err.type = GB_INI_ERROR_HANDLER_ERROR;
 					err.line_num = line_num;
