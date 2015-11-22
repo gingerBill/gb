@@ -1,4 +1,4 @@
-// gb.hpp - v0.24a - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.24b - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
@@ -331,7 +331,6 @@ __GB_NAMESPACE_START
 /// Types                    ///
 ///                          ///
 ////////////////////////////////
-
 
 #ifndef GB_BASIC_TYPES
 #define GB_BASIC_TYPES
@@ -750,6 +749,9 @@ __GB_NAMESPACE_START
 ///                          ///
 ////////////////////////////////
 
+template <typename T, usize N>
+inline usize array_count(T(& )[N]) { return N; }
+
 /// Mutex
 struct Mutex
 {
@@ -853,6 +855,71 @@ u32  current_id();
 	#endif
 #endif GB_DEFAULT_ALIGNMENT
 
+
+// NOTE(bill): This is just an idea I have been having
+#if 0 || defined(GB_USE_C_STYLE_ALLOCATOR)
+
+struct Allocator
+{
+	// TODO(bill): Should I even have these typedefs?
+	using Alloc           = void*(struct Allocator* a, usize size, usize align);
+	using Dealloc         = void (struct Allocator* a, const void* ptr);
+	using Allocated_Size  = s64  (struct Allocator* a, const void* ptr);
+	using Total_Allocated = s64  (struct Allocator* a);
+
+	void* data;
+
+	Alloc*           alloc;
+	Dealloc*         dealloc;
+	Allocated_Size*  allocated_size;
+	Total_Allocated* total_allocated;
+};
+
+namespace heap_allocator
+{
+struct Data
+{
+	Mutex mutex               = mutex::make();
+	s64 total_allocated_count = 0;
+	s64 allocation_count      = 0;
+};
+
+Allocator make();
+void destroy(Allocator* heap_allocator);
+} // namespace heap_allocator
+
+
+namespace arena_allocator
+{
+struct Data
+{
+	Allocator* backing;
+	void*      physical_start;
+	s64        total_size;
+	s64        total_allocated_count;
+	s64        temp_count;
+};
+
+Allocator make(Allocator* backing, usize size);
+Allocator make(void* start, usize size);
+void destroy(Allocator* arena);
+void clear(Allocator* arena);
+} // namespace arena_allocator
+
+namespace temporary_arena_memory
+{
+struct Data
+{
+	Allocator* arena;
+	s64        original_count;
+};
+Data make(Allocator* arena);
+void free(Data* tmp);
+} // namespace temporary_arena_memory
+
+
+#else
+
 /// Base class for memory allocators
 struct Allocator
 {
@@ -875,46 +942,6 @@ struct Allocator
 	/// If the allocator does not track memory, the function will return -1
 	virtual s64 total_allocated() = 0;
 };
-
-// TODO(bill): Should `Allocator` not even be a pure virtual base class?
-/*
-// Alternative Allocator types
-struct Allocator
-{
-	void* data;
-	void* (*alloc)(usize size, usize align);
-	void  (*dealloc)(const void* ptr);
-	s64   (*allocated_size)(const void* ptr);
-	s64   (*total_allocated)(void);
-};
-
-// or
-
-enum class Allocator_Mode
-{
-	ALLOC,
-	DEALLOC,
-	ALLOCATED_SIZE,
-	TOTAL_ALLOCATED,
-};
-
-using Allocator_Function = void*(Allocator_Mode mode,
-                                 s64 size, s64 align,
-                                 void* old_memory_pointer,
-                                 s64* output_size,
-                                 void* allocator_data, s64 flags);
-
-struct Allocator
-{
-	void* data;
-	Allocator_Function* function;
-};
-
-// Both of these may be better and more customizable but I do not know. I need to think about this.
-// And discuss with others.
-// The latter method would allow for one function call but the allocation is usually much slower than
-// dereferencing the function pointer
-*/
 
 
 /// An allocator that uses the `malloc()`.
@@ -954,13 +981,13 @@ struct Temp_Allocator : Allocator
 };
 
 // Predefined Temp_Allocator sizes to prevent unneeded template instantiation
-using Temp_Allocator64   = Temp_Allocator<64>;
-using Temp_Allocator128  = Temp_Allocator<128>;
-using Temp_Allocator256  = Temp_Allocator<256>;
-using Temp_Allocator512  = Temp_Allocator<512>;
-using Temp_Allocator1024 = Temp_Allocator<1024>;
-using Temp_Allocator2048 = Temp_Allocator<2048>;
-using Temp_Allocator4096 = Temp_Allocator<4096>;
+using Temp_Allocator_64   = Temp_Allocator<64>;
+using Temp_Allocator_128  = Temp_Allocator<128>;
+using Temp_Allocator_256  = Temp_Allocator<256>;
+using Temp_Allocator_512  = Temp_Allocator<512>;
+using Temp_Allocator_1024 = Temp_Allocator<1024>;
+using Temp_Allocator_2048 = Temp_Allocator<2048>;
+using Temp_Allocator_4096 = Temp_Allocator<4096>;
 
 struct Arena_Allocator : Allocator
 {
@@ -997,6 +1024,9 @@ Temporary_Arena_Memory make(Arena_Allocator* arena);
 void free(Temporary_Arena_Memory* tmp);
 } // namespace temporary_arena_memory
 
+#endif
+
+
 namespace memory
 {
 void* align_forward(void* ptr, usize align);
@@ -1008,33 +1038,29 @@ const void* pointer_sub(const void* ptr, usize bytes);
 void* set(void* ptr, u8 value, usize bytes);
 
 void* zero(void* ptr, usize bytes);
-void* copy(void* dest, const void* src, usize bytes);
-void* move(void* dest, const void* src, usize bytes);
+void* copy(const void* src, usize bytes, void* dest);
+void* move(const void* src, usize bytes, void* dest);
 bool equals(const void* a, const void* b, usize bytes);
 
 template <typename T>
 T* zero_struct(T* ptr);
 
 template <typename T>
-T* copy_array(T* dest_array, const T* src_array, usize count);
+T* copy_array(const T* src_array, usize count, T* dest_array);
 
 // TODO(bill): Should I implement something like std::copy, std::fill, std::fill_n ???
 } // namespace memory
 
 void* alloc(Allocator* a, usize size, usize align = GB_DEFAULT_ALIGNMENT);
-void  dealloc(Allocator* a, const void* ptr);
+void  dealloc(Allocator* a, const void* ptr); // TODO(bill): Should `ptr` be `const void*` or just `void*` ???
 s64   allocated_size(Allocator* a, const void* ptr);
 s64   total_allocated(Allocator* a);
 
 template <typename T>
 inline T* alloc_struct(Allocator* a) { return static_cast<T*>(alloc(a, sizeof(T), alignof(T))); }
 
-// TODO(bill): Should I keep both or only one of them?
 template <typename T>
 inline T* alloc_array(Allocator* a, usize count) { return static_cast<T*>(alloc(a, count * sizeof(T), alignof(T))); }
-
-template <typename T, usize count>
-inline T* alloc_array(Allocator* a) { return static_cast<T*>(alloc(a, count * sizeof(T), alignof(T))); }
 
 ////////////////////////////////
 ///                          ///
@@ -1414,7 +1440,7 @@ bool get_pos(File* file, s64* pos);
 /// Allocators               ///
 ///                          ///
 ////////////////////////////////
-
+#if !defined(GB_USE_C_STYLE_ALLOCATOR)
 template <usize BUFFER_SIZE>
 Temp_Allocator<BUFFER_SIZE>::Temp_Allocator(Allocator* backing_)
 : backing(backing_)
@@ -1461,7 +1487,7 @@ Temp_Allocator<BUFFER_SIZE>::alloc(usize size, usize align)
 	current_pointer += size;
 	return (result);
 }
-
+#endif
 ////////////////////////////////
 ///                          ///
 /// Array                    ///
@@ -1495,7 +1521,7 @@ Array<T>::Array(const Array<T>& other)
 {
 	const auto n = other.count;
 	array::set_capacity(this, n);
-	memory::copy(data, other.data, n * sizeof(T));
+	memory::copy(other.data, n * sizeof(T), data);
 	count = n;
 }
 
@@ -1517,9 +1543,6 @@ Array<T>::~Array()
 {
 	if (allocator && capacity > 0)
 		dealloc(allocator, data);
-	count    = 0;
-	capacity = 0;
-	data     = nullptr;
 }
 
 
@@ -1531,7 +1554,7 @@ Array<T>::operator=(const Array<T>& other)
 		allocator = other.allocator;
 	const auto n = other.count;
 	array::resize(this, n);
-	memory::copy(data, other.data, n * sizeof(T));
+	memory::copy(other.data, n * sizeof(T), data);
 	return *this;
 }
 
@@ -1637,7 +1660,7 @@ append(Array<T>* a, const T* items, usize count)
 	if (a->capacity <= a->count + static_cast<s64>(count))
 		array::grow(a, a->count + count);
 
-	memory::copy(a->data + a->count, items, count * sizeof(T));
+	memory::copy(items, count * sizeof(T), &a->data[a->count]);
 	a->count += count;
 }
 
@@ -1688,7 +1711,7 @@ set_capacity(Array<T>* a, usize capacity)
 	if (capacity > 0)
 	{
 		data = alloc_array<T>(a->allocator, capacity);
-		memory::copy(data, a->data, a->count * sizeof(T));
+		memory::copy(a->data, a->count * sizeof(T), data);
 	}
 	dealloc(a->allocator, a->data);
 	a->data = data;
@@ -1745,7 +1768,6 @@ Hash_Table<T>::Hash_Table(Hash_Table<T>&& other)
 {
 }
 
-
 template <typename T>
 inline Hash_Table<T>&
 Hash_Table<T>::operator=(const Hash_Table<T>& other)
@@ -1771,8 +1793,7 @@ template <typename T>
 inline Hash_Table<T>
 make(Allocator* a)
 {
-	Hash_Table<T> h{a};
-	return h;
+	return Hash_Table<T>{a};
 }
 
 namespace impl
@@ -1800,7 +1821,7 @@ template <typename T>
 usize
 add_entry(Hash_Table<T>* h, u64 key)
 {
-	typename Hash_Table<T>::Entry e;
+	typename Hash_Table<T>::Entry e = {};
 	e.key  = key;
 	e.next = -1;
 	usize e_index = h->entries.count;
@@ -1837,7 +1858,7 @@ template <typename T>
 Find_Result
 find_result_from_key(const Hash_Table<T>& h, u64 key)
 {
-	Find_Result fr;
+	Find_Result fr = {};
 	fr.hash_index  = -1;
 	fr.data_prev   = -1;
 	fr.entry_index = -1;
@@ -1863,7 +1884,7 @@ template <typename T>
 Find_Result
 find_result_from_entry(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
 {
-	Find_Result fr;
+	Find_Result fr = {};
 	fr.hash_index  = -1;
 	fr.data_prev   = -1;
 	fr.entry_index = -1;
@@ -1940,30 +1961,29 @@ rehash(Hash_Table<T>* h, usize new_capacity)
 {
 	auto nh = hash_table::make<T>(h->hashes.allocator);
 	array::resize(&nh.hashes, new_capacity);
-	const usize old_count = h->entries.count;
-	array::resize(&nh.entries, old_count);
+	array::reserve(&nh.entries, h->entries.count);
 
 	for (usize i = 0; i < new_capacity; i++)
 		nh.hashes[i] = -1;
 
-	for (usize i = 0; i < old_count; i++)
+	for (u32 i = 0; i < h->entries.count; i++)
 	{
-		auto& e = h->entries[i];
-		multi_hash_table::insert(&nh, e.key, e.value);
+		const auto* e = &h->entries[i];
+		multi_hash_table::insert(&nh, e->key, e->value);
 	}
 
 	Hash_Table<T> empty_ht{h->hashes.allocator};
 	h->~Hash_Table<T>();
 
-	memory::copy(h,   &nh,       sizeof(Hash_Table<T>));
-	memory::copy(&nh, &empty_ht, sizeof(Hash_Table<T>));
+	memory::copy_array(&nh,       1, h);
+	memory::copy_array(&empty_ht, 1, &nh);
 }
 
 template <typename T>
 void
 grow(Hash_Table<T>* h)
 {
-	const usize new_capacity = 2 * h->entries.count + 2;
+	const usize new_capacity = 2 * h->entries.count + 8;
 	impl::rehash(h, new_capacity);
 }
 
@@ -2176,9 +2196,9 @@ zero_struct(T* ptr)
 
 template <typename T>
 inline T*
-copy_array(T* dest_array, const T* src_array, usize count)
+copy_array(const T* src_array, usize count, T* dest_array)
 {
-	return static_cast<T>(memory::copy(dest_array, src_array, count * sizeof(T)));
+	return static_cast<T*>(memory::copy(src_array, count * sizeof(T), dest_array));
 }
 } // namespace memory
 
@@ -2708,10 +2728,163 @@ current_id()
 
 } // namespace thread
 
+// NOTE(bill): This is just an idea I have been having
+#if 0 || defined(GB_USE_C_STYLE_ALLOCATOR)
+
+namespace heap_allocator
+{
+internal_linkage void*
+alloc(Allocator* a, usize size, usize align)
+{
+	Data* data = static_cast<Data*>(a->data);
+	mutex::lock(&data->mutex);
+	defer (mutex::unlock(&data->mutex));
+
+	usize total = size + align - (size % align);
+	void* ptr = malloc(total);
+
+	data->total_allocated_count += total;
+	data->allocation_count++;
+
+	return ptr;
+}
+
+internal_linkage void
+dealloc(Allocator* a, const void* ptr)
+{
+	if (!ptr)
+		return;
+
+	Data* data = static_cast<Data*>(a->data);
+	mutex::lock(&data->mutex);
+	defer (mutex::unlock(&data->mutex));
+
+	data->total_allocated_count -= allocated_size(a, ptr);
+	data->allocation_count--;
+
+	::free(const_cast<void*>(ptr));
+}
+
+internal_linkage s64
+allocated_size(Allocator* a, const void* ptr)
+{
+	Mutex* mutex = &static_cast<Data*>(a->data)->mutex;
+	mutex::lock(mutex);
+	defer (mutex::unlock(mutex));
+
+#if defined(GB_SYSTEM_WINDOWS)
+	return static_cast<usize>(_msize(const_cast<void*>(ptr)));
+#elif defined(GB_SYSTEM_OSX)
+	return static_cast<usize>(malloc_size(ptr));
+#else
+	return static_cast<usize>(malloc_usable_size(const_cast<void*>(ptr)));
+#endif
+}
+
+internal_linkage s64
+total_allocated(Allocator* a)
+{
+	return static_cast<Data*>(a->data)->total_allocated_count;
+}
+
+
+Allocator
+make()
+{
+	Allocator a = {};
+	a.data = malloc(sizeof(Data));
+	memory::zero(a.data, sizeof(Data));
+	a.alloc           = heap_allocator::alloc;
+	a.dealloc         = heap_allocator::dealloc;
+	a.allocated_size  = heap_allocator::allocated_size;
+	a.total_allocated = heap_allocator::total_allocated;
+
+	return a;
+}
+
+void
+destroy(Allocator* a)
+{
+	::free(a->data);
+	*a = {};
+}
+} // namespace heap_allocator
 
 
 
+namespace arena_allocator
+{
+internal_linkage void*
+alloc(Allocator* a, usize size, usize align)
+{
 
+}
+
+internal_linkage void
+dealloc(Allocator* a, const void* ptr)
+{
+	if (!ptr)
+		return;
+}
+
+internal_linkage s64
+allocated_size(Allocator* a, const void* ptr)
+{
+
+}
+
+internal_linkage s64
+total_allocated(Allocator* a)
+{
+
+}
+
+Allocator
+make(Allocator* backing, usize size)
+{
+	Allocator a = {};
+
+	physical_start =
+
+	return a;
+}
+
+Allocator
+make(void* start, usize size)
+{
+
+}
+
+void
+destroy(Allocator* a)
+{
+
+}
+
+void
+clear(Allocator* a)
+{
+
+}
+} // namespace arena_allocator
+
+namespace temporary_arena_memory
+{
+Data
+make(Allocator* arena)
+{
+
+}
+
+void
+free(Data* tmp)
+{
+
+}
+} // namespace temporary_arena_memory
+
+
+#else
 
 //#define GB_HEAP_ALLOCATOR_HEADER_PAD_VALUE (usize)(-1)
 Heap_Allocator::~Heap_Allocator()
@@ -2799,7 +2972,7 @@ Arena_Allocator::~Arena_Allocator()
 		backing->dealloc(physical_start);
 
 	GB_ASSERT(total_allocated_count == 0,
-			  "Memory leak of %ld bytes, maybe you forgot to call clear_arena()?", total_allocated_count);
+			  "Memory leak of %ld bytes, maybe you forgot to call arena_allocator::clear()?", total_allocated_count);
 }
 
 void*
@@ -2860,6 +3033,8 @@ free(Temporary_Arena_Memory* tmp)
 }
 } // namespace temporary_arena_memory
 
+#endif
+
 
 ////////////////////////////////
 ///                          ///
@@ -2919,13 +3094,13 @@ zero(void* ptr, usize bytes)
 }
 
 GB_FORCE_INLINE void*
-copy(void* dest, const void* src, usize bytes)
+copy(const void* src, usize bytes, void* dest)
 {
 	return memcpy(dest, src, bytes);
 }
 
 GB_FORCE_INLINE void*
-move(void* dest, const void* src, usize bytes)
+move(const void* src, usize bytes, void* dest)
 {
 	return memmove(dest, src, bytes);
 }
@@ -2936,6 +3111,40 @@ equals(const void* a, const void* b, usize bytes)
 	return (memcmp(a, b, bytes) == 0);
 }
 } // namespace memory
+
+
+// NOTE(bill): This is just an idea I have been having
+#if 0 || defined(GB_USE_C_STYLE_ALLOCATOR)
+inline void*
+alloc(Allocator* a, usize size, usize align)
+{
+	GB_ASSERT(a != nullptr);
+	return a->alloc(a, size, align);
+}
+
+inline void
+dealloc(Allocator* a, const void* ptr)
+{
+	GB_ASSERT(a != nullptr);
+	if (ptr)
+		a->dealloc(a, ptr);
+}
+
+inline s64
+allocated_size(Allocator* a, const void* ptr)
+{
+	GB_ASSERT(a != nullptr);
+	return a->allocated_size(a, ptr);
+}
+
+inline s64
+total_allocated(Allocator* a)
+{
+	GB_ASSERT(a != nullptr);
+	return a->total_allocated(a);
+}
+
+#else
 
 inline void*
 alloc(Allocator* a, usize size, usize align)
@@ -2965,6 +3174,8 @@ total_allocated(Allocator* a)
 	GB_ASSERT(a != nullptr);
 	return a->total_allocated();
 }
+
+#endif
 
 
 ////////////////////////////////
@@ -2998,7 +3209,7 @@ make(Allocator* a, const void* init_str, Size len)
 	header->len = len;
 	header->cap = len;
 	if (len && init_str)
-		memory::copy(str, init_str, len);
+		memory::copy(init_str, len, str);
 	str[len] = '\0';
 
 	return str;
@@ -3084,7 +3295,7 @@ append(String* str, const void* other, Size other_len)
 	if (str == nullptr)
 		return;
 
-	memory::copy((*str) + curr_len, other, other_len);
+	memory::copy(other, other_len, (*str) + curr_len);
 	(*str)[curr_len + other_len] = '\0';
 	string::header(*str)->len = curr_len + other_len;
 }
@@ -3108,7 +3319,7 @@ string_realloc(Allocator* a, void* ptr, usize old_size, usize new_size)
 	if (!new_ptr)
 		return nullptr;
 
-	memory::copy(new_ptr, ptr, old_size);
+	memory::copy(ptr, old_size, new_ptr);
 
 	dealloc(a, ptr);
 
@@ -3202,7 +3413,7 @@ trim(String* str, const char* cut_set)
 	Size len = static_cast<Size>((start_pos > end_pos) ? 0 : ((end_pos - start_pos)+1));
 
 	if (*str != start_pos)
-		memory::move(*str, start_pos, len);
+		memory::move(start_pos, len, *str);
 	(*str)[len] = '\0';
 
 	string::header(*str)->len = len;
@@ -4091,6 +4302,7 @@ __GB_NAMESPACE_END
 
 /*
 Version History:
+	0.24b - Even More Hash_Table Bug Fixes
 	0.24a - Hash_Table Bug Fixes
 	0.24  - More documentation and bug fixes
 	0.23  - Move Semantics for Array and Hash_Table

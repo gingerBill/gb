@@ -1,9 +1,10 @@
-// gb_ini.h - v0.91 - public domain ini file loader library - no warranty implied; use at your own risk
+// gb_ini.h - v0.91a - public domain ini file loader library - no warranty implied; use at your own risk
 // A Simple Ini File Loader Library for C and C++
 //
 // Version History:
-//     0.91 - Add extern "C" if compiling as C++
-//     0.90 - Initial Version
+//     0.91a - Error handling fix
+//     0.91  - Add extern "C" if compiling as C++
+//     0.90  - Initial Version
 //
 // LICENSE
 //

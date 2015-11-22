@@ -3793,7 +3793,7 @@ perlin_grad(s32 hash, f32 x, f32 y, f32 z)
 		0,1,2,3,4,5,6,7,8,9,10,11,
 	};
 
-	f32* grad = basis[indices[hash & 63]];
+	const f32* grad = basis[indices[hash & 63]];
 	return grad[0]*x + grad[1]*y + grad[2]*z;
 }
 
