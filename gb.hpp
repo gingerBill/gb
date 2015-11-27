@@ -1,4 +1,4 @@
-// gb.hpp - v0.24b - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.25 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
@@ -217,11 +217,6 @@ CONTENTS:
 	#include <pthread.h>
 	#include <sys/time.h>
 #endif
-
-#ifndef GB_ARRAY_BOUND_CHECKING
-#define GB_ARRAY_BOUND_CHECKING 1
-#endif
-
 
 #ifndef GB_DISABLE_COPY
 #define GB_DISABLE_COPY(Type)   \
@@ -838,7 +833,7 @@ namespace thread
 Thread make();
 void destroy(Thread* t);
 void start(Thread* t, Thread_Function* func, void* data = nullptr, usize stack_size = 0);
-void stop(Thread* t);
+void join(Thread* t);
 bool is_running(const Thread& t);
 u32  current_id();
 } // namespace thread
@@ -948,9 +943,17 @@ struct Allocator
 /// Allocations are padded with to align them to the desired alignment
 struct Heap_Allocator : Allocator
 {
-	Mutex mutex                 = mutex::make();
+	struct Header
+	{
+		usize size;
+	};
+
 	s64   total_allocated_count = 0;
 	s64   allocation_count      = 0;
+
+#if defined(GB_SYSTEM_WINDOWS)
+	HANDLE heap_handle = HeapCreate(0, 0, 0);
+#endif
 
 	Heap_Allocator() = default;
 	virtual ~Heap_Allocator();
@@ -1042,6 +1045,7 @@ void* copy(const void* src, usize bytes, void* dest);
 void* move(const void* src, usize bytes, void* dest);
 bool equals(const void* a, const void* b, usize bytes);
 
+// TODO(bill): Should this be just zero(T*) ???
 template <typename T>
 T* zero_struct(T* ptr);
 
@@ -1049,6 +1053,12 @@ template <typename T>
 T* copy_array(const T* src_array, usize count, T* dest_array);
 
 // TODO(bill): Should I implement something like std::copy, std::fill, std::fill_n ???
+
+template <typename T>
+void swap(T* a, T* b);
+
+template <typename T, usize N>
+void swap(T (& a)[N], T (& b)[N]);
 } // namespace memory
 
 void* alloc(Allocator* a, usize size, usize align = GB_DEFAULT_ALIGNMENT);
@@ -1147,6 +1157,10 @@ void format_uint(u64 value, char* buffer, usize len);
 /// Array                    ///
 ///                          ///
 ////////////////////////////////
+
+#ifndef GB_ARRAY_BOUND_CHECKING
+#define GB_ARRAY_BOUND_CHECKING 1
+#endif
 
 /// Dynamic resizable array for POD types only
 template <typename T>
@@ -1280,7 +1294,6 @@ template <typename T> void remove_entry(Hash_Table<T>* h, typename const Hash_Ta
 /// Removes all entries with from the hash table with the specified key
 template <typename T> void remove_all(Hash_Table<T>* h, u64 key);
 } // namespace multi_hash_table
-
 
 ////////////////////////////////
 ///                          ///
@@ -1519,9 +1532,9 @@ Array<T>::Array(const Array<T>& other)
 , capacity(0)
 , data(nullptr)
 {
-	const auto n = other.count;
-	array::set_capacity(this, n);
-	memory::copy(other.data, n * sizeof(T), data);
+	const auto count = other.count;
+	array::set_capacity(this, count);
+	memory::copy_array(other.data, count, data);
 	count = n;
 }
 
@@ -1552,9 +1565,9 @@ Array<T>::operator=(const Array<T>& other)
 {
 	if (allocator == nullptr)
 		allocator = other.allocator;
-	const auto n = other.count;
-	array::resize(this, n);
-	memory::copy(other.data, n * sizeof(T), data);
+	const auto count = other.count;
+	array::resize(this, count);
+	memory::copy_count(other.data, count, data);
 	return *this;
 }
 
@@ -1660,7 +1673,7 @@ append(Array<T>* a, const T* items, usize count)
 	if (a->capacity <= a->count + static_cast<s64>(count))
 		array::grow(a, a->count + count);
 
-	memory::copy(items, count * sizeof(T), &a->data[a->count]);
+	memory::copy_array(items, count, &a->data[a->count]);
 	a->count += count;
 }
 
@@ -1711,7 +1724,7 @@ set_capacity(Array<T>* a, usize capacity)
 	if (capacity > 0)
 	{
 		data = alloc_array<T>(a->allocator, capacity);
-		memory::copy(a->data, a->count * sizeof(T), data);
+		memory::copy_array(a->data, a->count, data);
 	}
 	dealloc(a->allocator, a->data);
 	a->data = data;
@@ -2200,6 +2213,23 @@ copy_array(const T* src_array, usize count, T* dest_array)
 {
 	return static_cast<T*>(memory::copy(src_array, count * sizeof(T), dest_array));
 }
+
+template <typename T>
+inline void
+swap(T* a, T* b)
+{
+	T c = __GB_NAMESPACE_START::move(*a);
+	*a  = __GB_NAMESPACE_START::move(*b);
+	*b  = __GB_NAMESPACE_START::move(c);
+}
+
+template <typename T, usize N>
+inline void
+swap(T (& a)[N], T (& b)[N])
+{
+	for (usize i = 0; i < N; i++)
+		math::swap(&a[i], &b[i]);
+}
 } // namespace memory
 
 
@@ -2594,11 +2624,11 @@ make()
 #else
 	t.posix_handle = 0;
 #endif
-	t.function = nullptr;
-	t.data = nullptr;
+	t.function   = nullptr;
+	t.data       = nullptr;
 	t.stack_size = 0;
 	t.is_running = false;
-	t.semaphore = semaphore::make();
+	t.semaphore  = semaphore::make();
 
 	return t;
 }
@@ -2607,7 +2637,7 @@ void
 destroy(Thread* t)
 {
 	if (t->is_running)
-		thread::stop(t);
+		thread::join(t);
 
 	semaphore::destroy(&t->semaphore);
 }
@@ -2677,7 +2707,7 @@ start(Thread* t, Thread_Function* func, void* data, usize stack_size)
 }
 
 void
-stop(Thread* t)
+join(Thread* t)
 {
 	if (!t->is_running)
 		return;
@@ -2705,13 +2735,11 @@ current_id()
 {
 	u32 thread_id;
 
-
 #if defined(GB_SYSTEM_WINDOWS)
 	u8* thread_local_storage = reinterpret_cast<u8*>(__readgsqword(0x30));
 	thread_id = *reinterpret_cast<u32*>(thread_local_storage + 0x48);
 
 #elif defined(GB_SYSTEM_OSX) && defined(GB_ARCH_64_BIT)
-	u32 thread_id;
 	asm("mov %%gs:0x00,%0" : "=r"(thread_id));
 #elif defined(GB_ARCH_32_BIT)
 	asm("mov %%gs:0x08,%0" : "=r"(thread_id));
@@ -2720,7 +2748,6 @@ current_id()
 #else
 	#error Unsupported architecture for thread::current_id()
 #endif
-
 
 	return thread_id;
 }
@@ -2886,24 +2913,32 @@ free(Data* tmp)
 
 #else
 
-//#define GB_HEAP_ALLOCATOR_HEADER_PAD_VALUE (usize)(-1)
 Heap_Allocator::~Heap_Allocator()
 {
-#if 0
-	GB_ASSERT(allocation_count == 0 && total_allocated() == 0,
-			  "Heap Allocator: allocation count = %lld; total allocated = %lld",
-			  allocation_count, total_allocated());
+#if defined (GB_SYSTEM_WINDOWS)
+	HeapDestroy(heap_handle);
+#else
+
 #endif
 }
 
 void*
 Heap_Allocator::alloc(usize size, usize align)
 {
-	mutex::lock(&mutex);
-	defer (mutex::unlock(&mutex));
-
 	usize total = size + align - (size % align);
+
+#if defined (GB_SYSTEM_WINDOWS)
+	total += sizeof(Header);
+
+	void* data = HeapAlloc(heap_handle, 0, total);
+	Header* h = static_cast<Header*>(data);
+	h->size = total;
+	data = (h + 1);
+
+#else
+	// TODO(bill): Find a better malloc alternative for this platform
 	void* data = malloc(total);
+#endif
 
 	total_allocated_count += total;
 	allocation_count++;
@@ -2917,27 +2952,34 @@ Heap_Allocator::dealloc(const void* ptr)
 	if (!ptr)
 		return;
 
-	mutex::lock(&mutex);
-	defer (mutex::unlock(&mutex));
-
 	total_allocated_count -= this->allocated_size(ptr);
 	allocation_count--;
 
+#if defined (GB_SYSTEM_WINDOWS)
+	ptr = static_cast<const Header*>(ptr) + 1;
+	HeapFree(heap_handle, 0, const_cast<void*>(ptr));
+
+#else
 	::free(const_cast<void*>(ptr));
+
+#endif
 }
 
 inline s64
 Heap_Allocator::allocated_size(const void* ptr)
 {
-	mutex::lock(&mutex);
-	defer (mutex::unlock(&mutex));
-
 #if defined(GB_SYSTEM_WINDOWS)
-	return static_cast<usize>(_msize(const_cast<void*>(ptr)));
+	const Header* h = static_cast<const Header*>(ptr) - 1;
+	return static_cast<usize>(h->size);
+
 #elif defined(GB_SYSTEM_OSX)
 	return static_cast<usize>(malloc_size(ptr));
-#else
+
+#elif defined(GB_SYSTEM_LINUX)
 	return static_cast<usize>(malloc_usable_size(const_cast<void*>(ptr)));
+
+#else
+	#error Implement Heap_Allocator::allocated_size
 #endif
 }
 
@@ -2971,8 +3013,10 @@ Arena_Allocator::~Arena_Allocator()
 	if (backing)
 		backing->dealloc(physical_start);
 
-	GB_ASSERT(total_allocated_count == 0,
-			  "Memory leak of %ld bytes, maybe you forgot to call arena_allocator::clear()?", total_allocated_count);
+	GB_ASSERT(temp_count == 0,
+			  "%ld Temporary_Arena_Memory have not be cleared", temp_count);
+
+	total_allocated_count = 0;
 }
 
 void*
@@ -3034,7 +3078,6 @@ free(Temporary_Arena_Memory* tmp)
 } // namespace temporary_arena_memory
 
 #endif
-
 
 ////////////////////////////////
 ///                          ///
@@ -3197,17 +3240,19 @@ make(Allocator* a, const void* init_str, Size len)
 {
 	usize header_size = sizeof(string::Header);
 	void* ptr = alloc(a, header_size + len + 1);
+	if (!ptr)
+		return nullptr;
+
 	if (!init_str)
 		memory::zero(ptr, header_size + len + 1);
 
-	if (ptr == nullptr)
-		return nullptr;
-
 	String str = static_cast<char*>(ptr) + header_size;
+
 	string::Header* header = string::header(str);
 	header->allocator = a;
 	header->len = len;
 	header->cap = len;
+
 	if (len && init_str)
 		memory::copy(init_str, len, str);
 	str[len] = '\0';
@@ -3220,10 +3265,11 @@ free(String str)
 {
 	if (str == nullptr)
 		return;
+	
 	string::Header* h = string::header(str);
-	Allocator* a = h->allocator;
-	if (a)
-		dealloc(a, h);
+	
+	if (h->allocator)
+		dealloc(h->allocator, h);
 }
 
 inline String
@@ -3337,7 +3383,7 @@ make_space_for(String* str, Size add_len)
 	if (available >= add_len) // Return if there is enough space left
 		return;
 
-	void* ptr = reinterpret_cast<string::Header*>(*str) - 1;
+	void* ptr = reinterpret_cast<string::Header*>(str) - 1;
 	usize old_size = sizeof(string::Header) + string::length(*str) + 1;
 	usize new_size = sizeof(string::Header) + new_len + 1;
 
@@ -4302,6 +4348,7 @@ __GB_NAMESPACE_END
 
 /*
 Version History:
+	0.25  - Faster Heap_Allocator for Windows using HeapAlloc
 	0.24b - Even More Hash_Table Bug Fixes
 	0.24a - Hash_Table Bug Fixes
 	0.24  - More documentation and bug fixes

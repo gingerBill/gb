@@ -1,9 +1,10 @@
-// gb_math.hpp - v0.02b - public domain C++11 math library - no warranty implied; use at your own risk
+// gb_math.hpp - v0.03 - public domain C++11 math library - no warranty implied; use at your own risk
 // A C++11 math library geared towards game development
 // This is meant to be used the gb.hpp library but it doesn't have to be
 
 /*
 Version History:
+	0.03  - Remove templated min/max/clamp
 	0.02b - Typo fixes
 	0.02a - Better `static` keywords
 	0.02  - More Angle Units and templated min/max/clamp/lerp
@@ -95,6 +96,21 @@ CONTENTS:
 	#error This operating system is not supported by gb.hpp
 #endif
 
+
+#if defined(_MSC_VER)
+	// Microsoft Visual Studio
+	#define GB_COMPILER_MSVC 1
+#elif defined(__clang__)
+	// Clang
+	#define GB_COMPILER_CLANG 1
+#elif defined(__GNUC__) || defined(__GNUG__) && !(defined(__clang__) || defined(__INTEL_COMPILER))
+	// GNU GCC/G++ Compiler
+	#define GB_COMPILER_GNU_GCC 1
+#elif defined(__INTEL_COMPILER)
+	// Intel C++ Compiler
+	#define GB_COMPILER_INTEL 1
+#endif
+
 ////////////////////////////////
 ///                          ///
 /// Environment Bit Size     ///
@@ -124,6 +140,7 @@ CONTENTS:
 		#endif
 	#endif
 #endif
+
 
 // TODO(bill): Get this to work
 // #if !defined(GB_LITTLE_EDIAN) && !defined(GB_BIG_EDIAN)
@@ -911,25 +928,23 @@ f32 kronecker_delta(f32 i, f32 j);
 #undef min
 #undef max
 
-template <typename T>
-const T& min(const T& a, const T& b);
+f32 min(f32 x, f32 y);
+s32 min(s32 x, s32 y);
+s64 min(s64 x, s64 y);
 
-template <typename T>
-const T& max(const T& a, const T& b);
+f32 max(f32 x, f32 y);
+s32 max(s32 x, s32 y);
+s64 max(s64 x, s64 y);
 
-template <typename T>
-T clamp(const T& x, const T& min, const T& max);
+f32 clamp(f32 x, f32 min, f32 max);
+s32 clamp(s32 x, s32 min, s32 max);
+s64 clamp(s64 x, s64 min, s64 max);
 
+// TODO(bill): Should this be a template or just normal function overloading?
 template <typename T>
 T lerp(const T& x, const T& y, f32 t);
 
 bool equals(f32 a, f32 b, f32 precision = F32_PRECISION);
-
-template <typename T>
-void swap(T* a, T* b);
-
-template <typename T, usize N>
-void swap(T (& a)[N], T (& b)[N]);
 
 // Vector2 functions
 f32 dot(const Vector2& a, const Vector2& b);
@@ -1138,9 +1153,6 @@ f32 perlin_3d(f32 x, f32 y, f32 z, s32 x_wrap = 0, s32 y_wrap = 0, s32 z_wrap = 
 
 namespace math
 {
-template <typename T> inline const T& min(const T& a, const T& b) { return a < b ? a : b; }
-template <typename T> inline const T& max(const T& a, const T& b) { return a > b ? a : b; }
-
 template <typename T>
 inline T
 clamp(const T& x, const T& min, const T& max)
@@ -2361,27 +2373,69 @@ kronecker_delta(f32 i, f32 j)
 	return static_cast<f32>(i == j);
 }
 
+inline f32
+min(f32 x, f32 y)
+{
+	// TODO(bill): Check if this is even good
+	return x < y ? x : y;
+}
+
+inline s32
+min(s32 x, s32 y)
+{
+	return y + ((x-y) & (x-y)>>31);
+}
+
+inline s64
+min(s64 x, s64 y)
+{
+	return y + ((x-y) & (x-y)>>63);
+}
+
+inline f32
+max(f32 x, f32 y)
+{
+	// TODO(bill): Check if this is even good
+	return x > y ? x : y;
+}
+
+inline s32
+max(s32 x, s32 y)
+{
+	return x - ((x-y) & (x-y)>>31);
+}
+
+inline s64
+max(s64 x, s64 y)
+{
+	return x - ((x-y) & (x-y)>>63);
+}
+
+inline f32
+clamp(f32 x, f32 min, f32 max)
+{
+	const f32 t = x < min ? min : x;
+	return t > max ? max : t;
+}
+
+inline s32
+clamp(s32 x, s32 min, s32 max)
+{
+	const s32 t = x < min ? min : x;
+	return t > max ? max : t;
+}
+
+inline s64
+clamp(s64 x, s64 min, s64 max)
+{
+	const s64 t = x < min ? min : x;
+	return t > max ? max : t;
+}
+
 inline bool
 equals(f32 a, f32 b, f32 precision)
 {
 	return ((b <= (a + precision)) && (b >= (a - precision)));
-}
-
-template <typename T>
-inline void
-swap(T* a, T* b)
-{
-	T c = __GB_NAMESPACE_PREFIX::move(*a);
-	*a  = __GB_NAMESPACE_PREFIX::move(*b);
-	*b  = __GB_NAMESPACE_PREFIX::move(c);
-}
-
-template <typename T, usize N>
-inline void
-swap(T (& a)[N], T (& b)[N])
-{
-	for (usize i = 0; i < N; i++)
-		math::swap(&a[i], &b[i]);
 }
 
 // Vector2 functions
