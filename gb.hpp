@@ -1,4 +1,4 @@
-// gb.hpp - v0.25 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.25a - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
@@ -1532,10 +1532,10 @@ Array<T>::Array(const Array<T>& other)
 , capacity(0)
 , data(nullptr)
 {
-	const auto count = other.count;
-	array::set_capacity(this, count);
-	memory::copy_array(other.data, count, data);
-	count = n;
+	const auto new_count = other.count;
+	array::set_capacity(this, new_count);
+	memory::copy_array(other.data, new_count, data);
+	this->count = new_count;
 }
 
 template <typename T>
@@ -1565,9 +1565,9 @@ Array<T>::operator=(const Array<T>& other)
 {
 	if (allocator == nullptr)
 		allocator = other.allocator;
-	const auto count = other.count;
-	array::resize(this, count);
-	memory::copy_count(other.data, count, data);
+	const auto new_count = other.count;
+	array::resize(this, new_count);
+	memory::copy_array(other.data, new_count, data);
 	return *this;
 }
 
@@ -3265,9 +3265,9 @@ free(String str)
 {
 	if (str == nullptr)
 		return;
-	
+
 	string::Header* h = string::header(str);
-	
+
 	if (h->allocator)
 		dealloc(h->allocator, h);
 }
@@ -4348,6 +4348,7 @@ __GB_NAMESPACE_END
 
 /*
 Version History:
+	0.25a - Array bug fix
 	0.25  - Faster Heap_Allocator for Windows using HeapAlloc
 	0.24b - Even More Hash_Table Bug Fixes
 	0.24a - Hash_Table Bug Fixes
