@@ -1,4 +1,4 @@
-// gb.hpp - v0.26a - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.27 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
@@ -847,7 +847,6 @@ bool is_running(const Thread& t);
 u32  current_id();
 } // namespace thread
 
-
 /// Default alignment for memory allocations
 #ifndef GB_DEFAULT_ALIGNMENT
 #define GB_DEFAULT_ALIGNMENT 8
@@ -858,8 +857,8 @@ struct Allocator
 {
 	/// Allocates the specified amount of memory aligned to the specified alignment
 	void* (*alloc)(Allocator* a, usize size, usize align);
-	/// Deallocates/frees an allocation made with alloc()
-	void (*dealloc)(Allocator* a, void* ptr);
+	/// Frees an allocation made with alloc()
+	void (*free)(Allocator* a, void* ptr);
 	/// Returns the amount of usuable memory allocated at `ptr`.
 	///
 	/// If the allocator does not support tracking of the allocation size,
@@ -960,7 +959,7 @@ void swap(T (& a)[N], T (& b)[N]);
 } // namespace memory
 
 void* alloc(Allocator* a, usize size, usize align = GB_DEFAULT_ALIGNMENT);
-void  dealloc(Allocator* a, void* ptr);
+void  free(Allocator* a, void* ptr);
 s64   allocated_size(Allocator* a, const void* ptr);
 s64   total_allocated(Allocator* a);
 
@@ -1210,11 +1209,10 @@ u32 adler32(const void* key, u32 num_bytes);
 u32 crc32(const void* key, u32 num_bytes);
 u64 crc64(const void* key, usize num_bytes);
 
-// TODO(bill): Complete hashing functions
-// u32 fnv32(const void* key, usize num_bytes);
-// u64 fnv64(const void* key, usize num_bytes);
-// u32 fnv32a(const void* key, usize num_bytes);
-// u64 fnv64a(const void* key, usize num_bytes);
+u32 fnv32(const void* key, usize num_bytes);
+u64 fnv64(const void* key, usize num_bytes);
+u32 fnv32a(const void* key, usize num_bytes);
+u64 fnv64a(const void* key, usize num_bytes);
 
 u32 murmur32(const void* key, u32 num_bytes, u32 seed = 0x9747b28c);
 u64 murmur64(const void* key, usize num_bytes, u64 seed = 0x9747b28c);
@@ -1411,7 +1409,7 @@ inline
 Array<T>::~Array()
 {
 	if (allocator && capacity > 0)
-		dealloc(allocator, data);
+		free(allocator, data);
 }
 
 
@@ -1435,7 +1433,7 @@ Array<T>::operator=(Array<T>&& other)
 	if (this != &other)
 	{
 		if (allocator && capacity > 0)
-			dealloc(allocator, data);
+			free(allocator, data);
 
 		allocator = other.allocator;
 		count     = other.count;
@@ -1497,7 +1495,7 @@ inline void
 free(Array<T>* a)
 {
 	if (a->allocator)
-		dealloc(a->allocator, a->data);
+		free(a->allocator, a->data);
 	a->count    = 0;
 	a->capacity = 0;
 	a->data     = nullptr;
@@ -1581,7 +1579,7 @@ set_capacity(Array<T>* a, usize capacity)
 		data = alloc_array<T>(a->allocator, capacity);
 		memory::copy_array(a->data, a->count, data);
 	}
-	dealloc(a->allocator, a->data);
+	free(a->allocator, a->data);
 	a->data = data;
 	a->capacity = capacity;
 }
@@ -2658,7 +2656,7 @@ alloc(Allocator* a, usize size, usize align)
 }
 
 internal_linkage void
-dealloc(Allocator* a, void* ptr)
+free(Allocator* a, void* ptr)
 {
 	if (!ptr)
 		return;
@@ -2702,7 +2700,7 @@ allocated_size(Allocator* a, const void* ptr)
 	return static_cast<usize>(malloc_size(ptr));
 
 #elif defined(GB_SYSTEM_LINUX)
-	return static_cast<usize>(malloc_usable_size(const_cast<void*>(ptr)));
+	return static_cast<usize>(malloc_usable_size(ptr));
 
 #else
 	#error Implement heap_allocator::allocated_size
@@ -2739,7 +2737,7 @@ make(bool use_mutex)
 #endif
 
 	heap.alloc           = functions::alloc;
-	heap.dealloc         = functions::dealloc;
+	heap.free         = functions::free;
 	heap.allocated_size  = functions::allocated_size;
 	heap.total_allocated = functions::total_allocated;
 
@@ -2781,7 +2779,7 @@ alloc(Allocator* a, usize size, usize align)
 }
 
 inline void
-dealloc(Allocator* a, void*) {}
+free(Allocator* a, void*) {}
 
 inline s64 allocated_size(Allocator*, const void*) { return -1; }
 
@@ -2806,7 +2804,7 @@ make(Allocator* backing, usize size)
 	arena.physical_start = alloc(arena.backing, size);
 
 	arena.alloc           = functions::alloc;
-	arena.dealloc         = functions::dealloc;
+	arena.free         = functions::free;
 	arena.allocated_size  = functions::allocated_size;
 	arena.total_allocated = functions::total_allocated;
 
@@ -2825,7 +2823,7 @@ make(void* start, usize size)
 	arena.total_allocated_count = 0;
 
 	arena.alloc           = functions::alloc;
-	arena.dealloc         = functions::dealloc;
+	arena.free         = functions::free;
 	arena.allocated_size  = functions::allocated_size;
 	arena.total_allocated = functions::total_allocated;
 
@@ -2836,7 +2834,7 @@ void
 destroy(Arena_Allocator* arena)
 {
 	if (arena->backing)
-		dealloc(arena->backing, arena->physical_start);
+		free(arena->backing, arena->physical_start);
 
 	GB_ASSERT(arena->temp_count == 0,
 			  "%ld Temporary_Arena_Memory have not be cleared", arena->temp_count);
@@ -2963,11 +2961,11 @@ alloc(Allocator* a, usize size, usize align)
 }
 
 inline void
-dealloc(Allocator* a, void* ptr)
+free(Allocator* a, void* ptr)
 {
 	GB_ASSERT(a != nullptr);
 	if (ptr)
-		a->dealloc(a, ptr);
+		a->free(a, ptr);
 }
 
 inline s64
@@ -3032,7 +3030,7 @@ free(String str)
 	string::Header* h = string::header(str);
 
 	if (h->allocator)
-		dealloc(h->allocator, h);
+		free(h->allocator, h);
 }
 
 inline String
@@ -3130,7 +3128,7 @@ string_realloc(Allocator* a, void* ptr, usize old_size, usize new_size)
 
 	memory::copy(ptr, old_size, new_ptr);
 
-	dealloc(a, ptr);
+	free(a, ptr);
 
 	return new_ptr;
 }
@@ -3609,25 +3607,61 @@ crc64(const void* key, usize num_bytes)
 	return ~result;
 }
 
-// u32 fnv32(const void* key, usize num_bytes)
-// {
+inline u32
+fnv32(const void* key, usize num_bytes)
+{
+	u32 h = 0x811c9dc5;
+	const u8* buffer = static_cast<const u8*>(key);
 
-// }
+	for (usize i = 0; i < num_bytes; i++)
+	{
+		h = (h * 0x01000193) ^ buffer[i];
+	}
 
-// u64 fnv64(const void* key, usize num_bytes)
-// {
+	return h;
+}
 
-// }
+inline u64
+fnv64(const void* key, usize num_bytes)
+{
+	u64 h = 0xcbf29ce484222325ull;
+	const u8* buffer = static_cast<const u8*>(key);
 
-// u32 fnv32a(const void* key, usize num_bytes)
-// {
+	for (usize i = 0; i < num_bytes; i++)
+	{
+		h = (h * 0x100000001B3ll) ^ buffer[i];
+	}
 
-// }
+	return h;
+}
 
-// u64 fnv64a(const void* key, usize num_bytes)
-// {
+inline u32
+fnv32a(const void* key, usize num_bytes)
+{
+	u32 h = 0x811c9dc5;
+	const u8* buffer = static_cast<const u8*>(key);
 
-// }
+	for (usize i = 0; i < num_bytes; i++)
+	{
+		h = (h ^ buffer[i]) * 0x01000193;
+	}
+
+	return h;
+}
+
+inline u64
+fnv64a(const void* key, usize num_bytes)
+{
+	u64 h = 0xcbf29ce484222325ull;
+	const u8* buffer = static_cast<const u8*>(key);
+
+	for (usize i = 0; i < num_bytes; i++)
+	{
+		h = (h ^ buffer[i]) * 0x100000001B3ll;
+	}
+
+	return h;
+}
 
 u32
 murmur32(const void* key, u32 num_bytes, u32 seed)
@@ -3681,116 +3715,116 @@ murmur32(const void* key, u32 num_bytes, u32 seed)
 }
 
 #if defined(GB_ARCH_64_BIT)
-u64
-murmur64(const void* key, usize num_bytes, u64 seed)
-{
-	local_persist const u64 m = 0xc6a4a7935bd1e995ULL;
-	local_persist const s32 r = 47;
-
-	u64 h = seed ^ (num_bytes * m);
-
-	const u64* data = static_cast<const u64*>(key);
-	const u64* end = data + (num_bytes / 8);
-
-	while (data != end)
+	u64
+	murmur64(const void* key, usize num_bytes, u64 seed)
 	{
-		u64 k = *data++;
+		local_persist const u64 m = 0xc6a4a7935bd1e995ULL;
+		local_persist const s32 r = 47;
 
-		k *= m;
-		k ^= k >> r;
-		k *= m;
+		u64 h = seed ^ (num_bytes * m);
 
-		h ^= k;
+		const u64* data = static_cast<const u64*>(key);
+		const u64* end = data + (num_bytes / 8);
+
+		while (data != end)
+		{
+			u64 k = *data++;
+
+			k *= m;
+			k ^= k >> r;
+			k *= m;
+
+			h ^= k;
+			h *= m;
+		}
+
+		const u8* data2 = reinterpret_cast<const u8*>(data);
+
+		switch (num_bytes & 7)
+		{
+		case 7: h ^= static_cast<u64>(data2[6]) << 48;
+		case 6: h ^= static_cast<u64>(data2[5]) << 40;
+		case 5: h ^= static_cast<u64>(data2[4]) << 32;
+		case 4: h ^= static_cast<u64>(data2[3]) << 24;
+		case 3: h ^= static_cast<u64>(data2[2]) << 16;
+		case 2: h ^= static_cast<u64>(data2[1]) << 8;
+		case 1: h ^= static_cast<u64>(data2[0]);
+			h *= m;
+		};
+
+		h ^= h >> r;
 		h *= m;
+		h ^= h >> r;
+
+		return h;
 	}
-
-	const u8* data2 = reinterpret_cast<const u8*>(data);
-
-	switch (num_bytes & 7)
-	{
-	case 7: h ^= static_cast<u64>(data2[6]) << 48;
-	case 6: h ^= static_cast<u64>(data2[5]) << 40;
-	case 5: h ^= static_cast<u64>(data2[4]) << 32;
-	case 4: h ^= static_cast<u64>(data2[3]) << 24;
-	case 3: h ^= static_cast<u64>(data2[2]) << 16;
-	case 2: h ^= static_cast<u64>(data2[1]) << 8;
-	case 1: h ^= static_cast<u64>(data2[0]);
-		h *= m;
-	};
-
-	h ^= h >> r;
-	h *= m;
-	h ^= h >> r;
-
-	return h;
-}
 #elif GB_ARCH_32_BIT
-u64
-murmur64(const void* key, usize num_bytes, u64 seed)
-{
-	local_persist const u32 m = 0x5bd1e995;
-	local_persist const s32 r = 24;
-
-	u32 h1 = static_cast<u32>(seed) ^ static_cast<u32>(num_bytes);
-	u32 h2 = static_cast<u32>(seed >> 32);
-
-	const u32* data = static_cast<const u32*>(key);
-
-	while (num_bytes >= 8)
+	u64
+	murmur64(const void* key, usize num_bytes, u64 seed)
 	{
-		u32 k1 = *data++;
-		k1 *= m;
-		k1 ^= k1 >> r;
-		k1 *= m;
+		local_persist const u32 m = 0x5bd1e995;
+		local_persist const s32 r = 24;
+
+		u32 h1 = static_cast<u32>(seed) ^ static_cast<u32>(num_bytes);
+		u32 h2 = static_cast<u32>(seed >> 32);
+
+		const u32* data = static_cast<const u32*>(key);
+
+		while (num_bytes >= 8)
+		{
+			u32 k1 = *data++;
+			k1 *= m;
+			k1 ^= k1 >> r;
+			k1 *= m;
+			h1 *= m;
+			h1 ^= k1;
+			num_bytes -= 4;
+
+			u32 k2 = *data++;
+			k2 *= m;
+			k2 ^= k2 >> r;
+			k2 *= m;
+			h2 *= m;
+			h2 ^= k2;
+			num_bytes -= 4;
+		}
+
+		if (num_bytes >= 4)
+		{
+			u32 k1 = *data++;
+			k1 *= m;
+			k1 ^= k1 >> r;
+			k1 *= m;
+			h1 *= m;
+			h1 ^= k1;
+			num_bytes -= 4;
+		}
+
+		switch (num_bytes)
+		{
+		case 3: h2 ^= reinterpret_cast<const u8*>(data)[2] << 16;
+		case 2: h2 ^= reinterpret_cast<const u8*>(data)[1] <<  8;
+		case 1: h2 ^= reinterpret_cast<const u8*>(data)[0] <<  0;
+			h2 *= m;
+		};
+
+		h1 ^= h2 >> 18;
 		h1 *= m;
-		h1 ^= k1;
-		num_bytes -= 4;
-
-		u32 k2 = *data++;
-		k2 *= m;
-		k2 ^= k2 >> r;
-		k2 *= m;
+		h2 ^= h1 >> 22;
 		h2 *= m;
-		h2 ^= k2;
-		num_bytes -= 4;
-	}
-
-	if (num_bytes >= 4)
-	{
-		u32 k1 = *data++;
-		k1 *= m;
-		k1 ^= k1 >> r;
-		k1 *= m;
+		h1 ^= h2 >> 17;
 		h1 *= m;
-		h1 ^= k1;
-		num_bytes -= 4;
-	}
-
-	switch (num_bytes)
-	{
-	case 3: h2 ^= reinterpret_cast<const u8*>(data)[2] << 16;
-	case 2: h2 ^= reinterpret_cast<const u8*>(data)[1] <<  8;
-	case 1: h2 ^= reinterpret_cast<const u8*>(data)[0] <<  0;
+		h2 ^= h1 >> 19;
 		h2 *= m;
-	};
 
-	h1 ^= h2 >> 18;
-	h1 *= m;
-	h2 ^= h1 >> 22;
-	h2 *= m;
-	h1 ^= h2 >> 17;
-	h1 *= m;
-	h2 ^= h1 >> 19;
-	h2 *= m;
+		u64 h = h1;
 
-	u64 h = h1;
+		h = (h << 32) | h2;
 
-	h = (h << 32) | h2;
-
-	return h;
-}
+		return h;
+	}
 #else
-#error murmur64 function not supported on this architecture
+	#error murmur64 function not supported on this architecture
 #endif
 } // namespace hash
 
@@ -3805,97 +3839,97 @@ const Time TIME_ZERO = time::seconds(0);
 namespace time
 {
 #if defined(GB_SYSTEM_WINDOWS)
+	internal_linkage LARGE_INTEGER
+	win32_get_frequency()
+	{
+		LARGE_INTEGER f;
+		QueryPerformanceFrequency(&f);
+		return f;
+	}
 
-internal_linkage LARGE_INTEGER
-win32_get_frequency()
-{
-	LARGE_INTEGER f;
-	QueryPerformanceFrequency(&f);
-	return f;
-}
+	Time
+	now()
+	{
+		// NOTE(bill): std::chrono does not have a good enough precision in MSVC12
+		// and below. This may have been fixed in MSVC14 but unsure as of yet.
 
-Time
-now()
-{
-	// NOTE(bill): std::chrono does not have a good enough precision in MSVC12
-	// and below. This may have been fixed in MSVC14 but unsure as of yet.
+		// Force the following code to run on first core
+		// NOTE(bill): See
+		// http://msdn.microsoft.com/en-us/library/windows/desktop/ms644904(v=vs.85).aspx
+		HANDLE currentThread   = GetCurrentThread();
+		DWORD_PTR previousMask = SetThreadAffinityMask(currentThread, 1);
 
-	// Force the following code to run on first core
-	// NOTE(bill): See
-	// http://msdn.microsoft.com/en-us/library/windows/desktop/ms644904(v=vs.85).aspx
-	HANDLE currentThread   = GetCurrentThread();
-	DWORD_PTR previousMask = SetThreadAffinityMask(currentThread, 1);
+		// Get the frequency of the performance counter
+		// It is constant across the program's lifetime
+		local_persist LARGE_INTEGER s_frequency = win32_get_frequency();
 
-	// Get the frequency of the performance counter
-	// It is constant across the program's lifetime
-	local_persist LARGE_INTEGER s_frequency = win32_get_frequency();
+		// Get the current time
+		LARGE_INTEGER t;
+		QueryPerformanceCounter(&t);
 
-	// Get the current time
-	LARGE_INTEGER t;
-	QueryPerformanceCounter(&t);
+		// Restore the thread affinity
+		SetThreadAffinityMask(currentThread, previousMask);
 
-	// Restore the thread affinity
-	SetThreadAffinityMask(currentThread, previousMask);
+		return time::microseconds(1000000ll * t.QuadPart / s_frequency.QuadPart);
+	}
 
-	return time::microseconds(1000000ll * t.QuadPart / s_frequency.QuadPart);
-}
+	void
+	sleep(Time t)
+	{
+		if (t.microseconds <= 0)
+			return;
 
-void
-sleep(Time t)
-{
-	if (t.microseconds <= 0)
-		return;
+		// Get the supported timer resolutions on this system
+		TIMECAPS tc;
+		timeGetDevCaps(&tc, sizeof(TIMECAPS));
+		// Set the timer resolution to the minimum for the Sleep call
+		timeBeginPeriod(tc.wPeriodMin);
 
-	// Get the supported timer resolutions on this system
-	TIMECAPS tc;
-	timeGetDevCaps(&tc, sizeof(TIMECAPS));
-	// Set the timer resolution to the minimum for the Sleep call
-	timeBeginPeriod(tc.wPeriodMin);
+		// Wait...
+		::Sleep(time::as_milliseconds(t));
 
-	// Wait...
-	::Sleep(time::as_milliseconds(t));
-
-	// Reset the timer resolution back to the system default
-	timeBeginPeriod(tc.wPeriodMin);
-}
+		// Reset the timer resolution back to the system default
+		timeBeginPeriod(tc.wPeriodMin);
+	}
 
 #else
-Time
-now()
-{
-#if defined(GB_SYSTEM_OSX)
-	s64 t = static_cast<s64>(mach_absolute_time());
-	return microseconds(t);
-#else
-	struct timeval t;
-	gettimeofday(&t, nullptr);
+	Time
+	now()
+	{
+	#if defined(GB_SYSTEM_OSX)
+		s64 t = static_cast<s64>(mach_absolute_time());
+		return microseconds(t);
+	#else
+		struct timeval t;
+		gettimeofday(&t, nullptr);
 
-	return microseconds((t.tv_sec * 1000000ll) + (t.tv_usec * 1ll));
-#endif
-}
+		return microseconds((t.tv_sec * 1000000ll) + (t.tv_usec * 1ll));
+	#endif
+	}
 
-void
-sleep(Time t)
-{
-	if (t.microseconds <= 0)
-		return;
+	void
+	sleep(Time t)
+	{
+		if (t.microseconds <= 0)
+			return;
 
-	struct timespec spec = {};
-	spec.tv_sec = static_cast<s64>(as_seconds(t));
-	spec.tv_nsec = 1000ll * (as_microseconds(t) % 1000000ll);
+		struct timespec spec = {};
+		spec.tv_sec = static_cast<s64>(as_seconds(t));
+		spec.tv_nsec = 1000ll * (as_microseconds(t) % 1000000ll);
 
-	nanosleep(&spec, nullptr);
-}
+		nanosleep(&spec, nullptr);
+	}
 
 #endif
 
 Time seconds(f32 s)              { return {static_cast<s64>(s * 1000000ll)}; }
 Time milliseconds(s32 ms)        { return {static_cast<s64>(ms * 1000l)}; }
 Time microseconds(s64 us)        { return {us}; }
-f32 as_seconds(Time t)      { return static_cast<f32>(t.microseconds / 1000000.0f); }
-s32 as_milliseconds(Time t) { return static_cast<s32>(t.microseconds / 1000l); }
-s64 as_microseconds(Time t) { return t.microseconds; }
+f32  as_seconds(Time t)      { return static_cast<f32>(t.microseconds / 1000000.0f); }
+s32  as_milliseconds(Time t) { return static_cast<s32>(t.microseconds / 1000l); }
+s64  as_microseconds(Time t) { return t.microseconds; }
 } // namespace time
+
 bool operator==(Time left, Time right) { return left.microseconds == right.microseconds; }
 bool operator!=(Time left, Time right) { return !operator==(left, right); }
 
@@ -3928,7 +3962,6 @@ f32 operator/(Time left, Time right) { return time::as_seconds(left) / time::as_
 
 Time& operator/=(Time& left, f32 right) { return (left = left / right); }
 Time& operator/=(Time& left, s64 right) { return (left = left / right); }
-
 
 Time operator%(Time left, Time right) { return time::microseconds(time::as_microseconds(left) % time::as_microseconds(right)); }
 Time& operator%=(Time& left, Time right) { return (left = left % right); }
@@ -4131,6 +4164,7 @@ __GB_NAMESPACE_END
 
 /*
 Version History:
+	0.27  - Dealloc to Free & More Hashing Functions
 	0.26a - Heap_Allocator Fix
 	0.26  - Better Allocation system
 	0.25a - Array bug fix
