@@ -1,4 +1,4 @@
-// gb.hpp - v0.25a - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.26 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
@@ -30,7 +30,6 @@ CONTENTS:
 		- Allocator
 		- Heap Allocator
 		- Arena Allocator
-		- Temporary Arena Memory
 		- Functions
 	- String
 	- Array
@@ -222,6 +221,12 @@ CONTENTS:
 #define GB_DISABLE_COPY(Type)   \
 	Type(const Type&) = delete; \
 	Type& operator=(const Type&) = delete
+#endif
+
+#ifndef GB_DISABLE_MOVE
+#define GB_DISABLE_MOVE(Type) \
+	Type(Type&&) = delete;    \
+	Type& operator=(Type&&) = delete
 #endif
 
 #if !defined(GB_ASSERT)
@@ -747,6 +752,11 @@ __GB_NAMESPACE_START
 template <typename T, usize N>
 inline usize array_count(T(& )[N]) { return N; }
 
+inline s64 kilobytes(s64 x) { return          (x) * 1024ll; }
+inline s64 megabytes(s64 x) { return kilobytes(x) * 1024ll; }
+inline s64 gigabytes(s64 x) { return megabytes(x) * 1024ll; }
+inline s64 terabytes(s64 x) { return gigabytes(x) * 1024ll; }
+
 /// Mutex
 struct Mutex
 {
@@ -841,106 +851,27 @@ u32  current_id();
 
 /// Default alignment for memory allocations
 #ifndef GB_DEFAULT_ALIGNMENT
-	#if defined(GB_ARCH_32_BIT)
-		#define GB_DEFAULT_ALIGNMENT 4
-	#elif defined(GB_ARCH_64_BIT)
-		#define GB_DEFAULT_ALIGNMENT 8
-	#else
-		#define GB_DEFAULT_ALIGNMENT 4
-	#endif
-#endif GB_DEFAULT_ALIGNMENT
+#define GB_DEFAULT_ALIGNMENT 8
+#endif
 
-
-// NOTE(bill): This is just an idea I have been having
-#if 0 || defined(GB_USE_C_STYLE_ALLOCATOR)
-
+/// Base class for memory allocators - Pretty much a vtable
 struct Allocator
 {
-	// TODO(bill): Should I even have these typedefs?
-	using Alloc           = void*(struct Allocator* a, usize size, usize align);
-	using Dealloc         = void (struct Allocator* a, const void* ptr);
-	using Allocated_Size  = s64  (struct Allocator* a, const void* ptr);
-	using Total_Allocated = s64  (struct Allocator* a);
-
-	void* data;
-
-	Alloc*           alloc;
-	Dealloc*         dealloc;
-	Allocated_Size*  allocated_size;
-	Total_Allocated* total_allocated;
-};
-
-namespace heap_allocator
-{
-struct Data
-{
-	Mutex mutex               = mutex::make();
-	s64 total_allocated_count = 0;
-	s64 allocation_count      = 0;
-};
-
-Allocator make();
-void destroy(Allocator* heap_allocator);
-} // namespace heap_allocator
-
-
-namespace arena_allocator
-{
-struct Data
-{
-	Allocator* backing;
-	void*      physical_start;
-	s64        total_size;
-	s64        total_allocated_count;
-	s64        temp_count;
-};
-
-Allocator make(Allocator* backing, usize size);
-Allocator make(void* start, usize size);
-void destroy(Allocator* arena);
-void clear(Allocator* arena);
-} // namespace arena_allocator
-
-namespace temporary_arena_memory
-{
-struct Data
-{
-	Allocator* arena;
-	s64        original_count;
-};
-Data make(Allocator* arena);
-void free(Data* tmp);
-} // namespace temporary_arena_memory
-
-
-#else
-
-/// Base class for memory allocators
-struct Allocator
-{
-	Allocator() {}
-	virtual ~Allocator() {}
-
-	GB_DISABLE_COPY(Allocator);
-
 	/// Allocates the specified amount of memory aligned to the specified alignment
-	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT) = 0;
+	void* (*alloc)(Allocator* a, usize size, usize align);
 	/// Deallocates/frees an allocation made with alloc()
-	virtual void dealloc(const void* ptr) = 0;
+	void (*dealloc)(Allocator* a, const void* ptr);
 	/// Returns the amount of usuable memory allocated at `ptr`.
 	///
 	/// If the allocator does not support tracking of the allocation size,
 	/// the function will return -1
-	virtual s64 allocated_size(const void* ptr) = 0;
+	s64 (*allocated_size)(Allocator* a, const void* ptr);
 	/// Returns the total amount of memory allocated by this allocator
 	///
 	/// If the allocator does not track memory, the function will return -1
-	virtual s64 total_allocated() = 0;
+	s64 (*total_allocated)(Allocator* a);
 };
 
-
-/// An allocator that uses the `malloc()`.
-/// Allocations are padded with to align them to the desired alignment
 struct Heap_Allocator : Allocator
 {
 	struct Header
@@ -948,49 +879,21 @@ struct Heap_Allocator : Allocator
 		usize size;
 	};
 
-	s64   total_allocated_count = 0;
-	s64   allocation_count      = 0;
+	s64   total_allocated_count;
+	s64   allocation_count;
 
 #if defined(GB_SYSTEM_WINDOWS)
-	HANDLE heap_handle = HeapCreate(0, 0, 0);
+	HANDLE heap_handle;
 #endif
-
-	Heap_Allocator() = default;
-	virtual ~Heap_Allocator();
-
-	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT);
-	virtual void  dealloc(const void* ptr);
-	virtual s64   allocated_size(const void* ptr);
-	virtual s64   total_allocated();
 };
 
-template <usize BUFFER_SIZE>
-struct Temp_Allocator : Allocator
+namespace heap_allocator
 {
-	u8         buffer[BUFFER_SIZE];
-	Allocator* backing;
-	u8*        physical_start;
-	u8*        current_pointer;
-	u8*        physical_end;
-	usize      chunk_size; // Chunks to allocate from backing allocator
+Heap_Allocator make();
+void destroy(Heap_Allocator* heap);
+} // namespaceheap_allocator
 
-	explicit Temp_Allocator(Allocator* backing);
-	virtual ~Temp_Allocator();
-
-	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT);
-	virtual void  dealloc(const void*) {}
-	virtual s64   allocated_size(const void*) { return -1; }
-	virtual s64   total_allocated() { return -1; }
-};
-
-// Predefined Temp_Allocator sizes to prevent unneeded template instantiation
-using Temp_Allocator_64   = Temp_Allocator<64>;
-using Temp_Allocator_128  = Temp_Allocator<128>;
-using Temp_Allocator_256  = Temp_Allocator<256>;
-using Temp_Allocator_512  = Temp_Allocator<512>;
-using Temp_Allocator_1024 = Temp_Allocator<1024>;
-using Temp_Allocator_2048 = Temp_Allocator<2048>;
-using Temp_Allocator_4096 = Temp_Allocator<4096>;
+// TODO(bill): Implement more Allocator types
 
 struct Arena_Allocator : Allocator
 {
@@ -999,16 +902,15 @@ struct Arena_Allocator : Allocator
 	s64        total_size;
 	s64        total_allocated_count;
 	s64        temp_count;
-
-	explicit Arena_Allocator(Allocator* backing, usize size);
-	explicit Arena_Allocator(void* start, usize size);
-	virtual ~Arena_Allocator();
-
-	virtual void* alloc(usize size, usize align = GB_DEFAULT_ALIGNMENT);
-	virtual void  dealloc(const void* ptr);
-	virtual s64   allocated_size(const void* ptr);
-	virtual s64   total_allocated();
 };
+
+namespace arena_allocator
+{
+Arena_Allocator make(Allocator* backing, usize size);
+Arena_Allocator make(void* start, usize size);
+void destroy(Arena_Allocator* arena);
+void clear(Arena_Allocator* arena);
+} // namespace arena_allocator
 
 struct Temporary_Arena_Memory
 {
@@ -1016,19 +918,11 @@ struct Temporary_Arena_Memory
 	s64              original_count;
 };
 
-namespace arena_allocator
-{
-void clear(Arena_Allocator* arena);
-} // namespace arena_allocator
-
 namespace temporary_arena_memory
 {
 Temporary_Arena_Memory make(Arena_Allocator* arena);
 void free(Temporary_Arena_Memory* tmp);
 } // namespace temporary_arena_memory
-
-#endif
-
 
 namespace memory
 {
@@ -1097,7 +991,7 @@ struct Header
 inline Header* header(String str) { return (Header*)str - 1; }
 
 String make(Allocator* a, const char* str = "");
-String make(Allocator* a, const void* str, Size len);
+String make(Allocator* a, const void* str, Size length_in_bytes);
 void   free(String str);
 
 String duplicate(Allocator* a, const String str);
@@ -1111,7 +1005,7 @@ void clear(String str);
 void append(String* str, char c);
 void append(String* str, const String other);
 void append_cstring(String* str, const char* other);
-void append(String* str, const void* other, Size len);
+void append(String* str, const void* other, Size length_in_bytes);
 
 void make_space_for(String* str, Size add_len);
 usize allocation_size(const String str);
@@ -1166,6 +1060,8 @@ void format_uint(u64 value, char* buffer, usize len);
 template <typename T>
 struct Array
 {
+	using Type = T;
+
 	Allocator* allocator;
 	s64        count;
 	s64        capacity;
@@ -1229,6 +1125,8 @@ template <typename T> inline const T* end(const Array<T>& a)   { return a.data +
 template <typename T>
 struct Hash_Table
 {
+	using Type = T;
+
 	struct Entry
 	{
 		u64 key;
@@ -1453,54 +1351,8 @@ bool get_pos(File* file, s64* pos);
 /// Allocators               ///
 ///                          ///
 ////////////////////////////////
-#if !defined(GB_USE_C_STYLE_ALLOCATOR)
-template <usize BUFFER_SIZE>
-Temp_Allocator<BUFFER_SIZE>::Temp_Allocator(Allocator* backing_)
-: backing(backing_)
-, chunk_size(4 * 1024) // 4K - page size
-{
-	current_pointer = physical_start = buffer;
-	physical_end = physical_start + BUFFER_SIZE;
-	*reinterpret_cast<void**>(physical_start) = nullptr;
-	current_pointer = static_cast<u8*>(memory::pointer_add(current_pointer, sizeof(void*)));
-}
 
-template <usize BUFFER_SIZE>
-Temp_Allocator<BUFFER_SIZE>::~Temp_Allocator()
-{
-	void* ptr = *reinterpret_cast<void**>(buffer);
-	while (ptr)
-	{
-		void* next = *static_cast<void**>(ptr);
-		backing->dealloc(ptr);
-		ptr = next;
-	}
-}
 
-template <usize BUFFER_SIZE>
-void*
-Temp_Allocator<BUFFER_SIZE>::alloc(usize size, usize align)
-{
-	current_pointer = static_cast<u8*>(memory::align_forward(current_pointer, align));
-	if (static_cast<intptr>(size) > (physical_end - current_pointer))
-	{
-		usize to_allocate = sizeof(void*) + size + align;
-		if (to_allocate < chunk_size)
-			to_allocate = chunk_size;
-		chunk_size *= 2;
-		void* ptr = backing->alloc(to_allocate);
-		*reinterpret_cast<void**>(physical_start) = ptr;
-		current_pointer = physical_start = static_cast<u8*>(ptr);
-		*reinterpret_cast<void**>(physical_start) = 0;
-		current_pointer = static_cast<u8*>(memory::pointer_add(current_pointer, sizeof(void*)));
-		current_pointer = static_cast<u8*>(memory::align_forward(current_pointer, align));
-	}
-
-	void* result = current_pointer;
-	current_pointer += size;
-	return (result);
-}
-#endif
 ////////////////////////////////
 ///                          ///
 /// Array                    ///
@@ -2913,25 +2765,23 @@ free(Data* tmp)
 
 #else
 
-Heap_Allocator::~Heap_Allocator()
-{
-#if defined (GB_SYSTEM_WINDOWS)
-	HeapDestroy(heap_handle);
-#else
 
-#endif
-}
-
-void*
-Heap_Allocator::alloc(usize size, usize align)
+namespace heap_allocator
 {
+namespace functions
+{
+internal_linkage void*
+alloc(Allocator* a, usize size, usize align)
+{
+	Heap_Allocator* heap = reinterpret_cast<Heap_Allocator*>(a);
+
 	usize total = size + align - (size % align);
 
 #if defined (GB_SYSTEM_WINDOWS)
-	total += sizeof(Header);
+	total += sizeof(Heap_Allocator::Header);
 
-	void* data = HeapAlloc(heap_handle, 0, total);
-	Header* h = static_cast<Header*>(data);
+	void* data = HeapAlloc(heap->heap_handle, 0, total);
+	Heap_Allocator::Header* h = static_cast<Heap_Allocator::Header*>(data);
 	h->size = total;
 	data = (h + 1);
 
@@ -2940,24 +2790,26 @@ Heap_Allocator::alloc(usize size, usize align)
 	void* data = malloc(total);
 #endif
 
-	total_allocated_count += total;
-	allocation_count++;
+	heap->total_allocated_count += total;
+	heap->allocation_count++;
 
 	return data;
 }
 
-void
-Heap_Allocator::dealloc(const void* ptr)
+internal_linkage void
+dealloc(Allocator* a, const void* ptr)
 {
 	if (!ptr)
 		return;
 
-	total_allocated_count -= this->allocated_size(ptr);
-	allocation_count--;
+	Heap_Allocator* heap = reinterpret_cast<Heap_Allocator*>(a);
+
+	heap->total_allocated_count -= allocated_size(heap, ptr);
+	heap->allocation_count--;
 
 #if defined (GB_SYSTEM_WINDOWS)
-	ptr = static_cast<const Header*>(ptr) + 1;
-	HeapFree(heap_handle, 0, const_cast<void*>(ptr));
+	ptr = static_cast<const Heap_Allocator::Header*>(ptr) + 1;
+	HeapFree(heap->heap_handle, 0, const_cast<void*>(ptr));
 
 #else
 	::free(const_cast<void*>(ptr));
@@ -2966,10 +2818,10 @@ Heap_Allocator::dealloc(const void* ptr)
 }
 
 inline s64
-Heap_Allocator::allocated_size(const void* ptr)
+allocated_size(Allocator* a, const void* ptr)
 {
 #if defined(GB_SYSTEM_WINDOWS)
-	const Header* h = static_cast<const Header*>(ptr) - 1;
+	const auto* h = static_cast<const Heap_Allocator::Header*>(ptr) - 1;
 	return static_cast<usize>(h->size);
 
 #elif defined(GB_SYSTEM_OSX)
@@ -2979,69 +2831,128 @@ Heap_Allocator::allocated_size(const void* ptr)
 	return static_cast<usize>(malloc_usable_size(const_cast<void*>(ptr)));
 
 #else
-	#error Implement Heap_Allocator::allocated_size
+	#error Implement heap_allocator::allocated_size
 #endif
 }
 
 inline s64
-Heap_Allocator::total_allocated()
+total_allocated(Allocator* a)
 {
-	return total_allocated_count;
+	return reinterpret_cast<Heap_Allocator*>(a)->total_allocated_count;
 }
+} // namespace functions
 
-Arena_Allocator::Arena_Allocator(Allocator* backing_, usize size)
-: backing(backing_)
-, physical_start(nullptr)
-, total_size(size)
-, temp_count(0)
-, total_allocated_count(0)
+Heap_Allocator make()
 {
-	physical_start = backing->alloc(size);
+	Heap_Allocator heap = {};
+
+#if defined(GB_SYSTEM_WINDOWS)
+	heap.heap_handle = HeapCreate(0, 0, 0);
+#endif
+
+	heap.alloc           = functions::alloc;
+	heap.dealloc         = functions::dealloc;
+	heap.allocated_size  = functions::allocated_size;
+	heap.total_allocated = functions::total_allocated;
+
+	return heap;
 }
-
-Arena_Allocator::Arena_Allocator(void* start, usize size)
-: backing(nullptr)
-, physical_start(start)
-, total_size(size)
-, temp_count(0)
-, total_allocated_count(0)
+void
+destroy(Heap_Allocator* heap)
 {
+#if defined (GB_SYSTEM_WINDOWS)
+	HeapDestroy(heap->heap_handle);
+#endif
 }
+} // namespace heap_allocator
 
-Arena_Allocator::~Arena_Allocator()
+
+
+namespace arena_allocator
 {
-	if (backing)
-		backing->dealloc(physical_start);
-
-	GB_ASSERT(temp_count == 0,
-			  "%ld Temporary_Arena_Memory have not be cleared", temp_count);
-
-	total_allocated_count = 0;
-}
-
-void*
-Arena_Allocator::alloc(usize size, usize align)
+namespace functions
 {
+internal_linkage void*
+alloc(Allocator* a, usize size, usize align)
+{
+	Arena_Allocator* arena = reinterpret_cast<Arena_Allocator*>(a);
+
 	s64 actual_size = size + align;
 
-	if (total_allocated_count + actual_size > total_size)
+	if (arena->total_allocated_count + actual_size > arena->total_size)
 		return nullptr;
 
-	void* ptr = memory::align_forward(memory::pointer_add(physical_start, total_allocated_count), align);
+	void* ptr = memory::align_forward(memory::pointer_add(arena->physical_start, arena->total_allocated_count), align);
 
-	total_allocated_count += actual_size;
+	arena->total_allocated_count += actual_size;
 
 	return ptr;
 }
 
-inline void Arena_Allocator::dealloc(const void*) {}
+inline void
+dealloc(Allocator* a, const void*) {}
 
-inline s64 Arena_Allocator::allocated_size(const void*) { return -1; }
+inline s64 allocated_size(Allocator*, const void*) { return -1; }
 
-inline s64 Arena_Allocator::total_allocated() { return total_allocated_count; }
-
-namespace arena_allocator
+inline s64
+total_allocated(Allocator* a)
 {
+	return reinterpret_cast<Arena_Allocator*>(a)->total_allocated_count;
+}
+} // namespace functions
+
+Arena_Allocator
+make(Allocator* backing, usize size)
+{
+	Arena_Allocator arena = {};
+
+	arena.backing = backing;
+	arena.physical_start = nullptr;
+	arena.total_size = size;
+	arena.temp_count = 0;
+	arena.total_allocated_count = 0;
+
+	arena.physical_start = alloc(arena.backing, size);
+
+	arena.alloc           = functions::alloc;
+	arena.dealloc         = functions::dealloc;
+	arena.allocated_size  = functions::allocated_size;
+	arena.total_allocated = functions::total_allocated;
+
+	return arena;
+}
+
+Arena_Allocator
+make(void* start, usize size)
+{
+	Arena_Allocator arena = {};
+
+	arena.backing = nullptr;
+	arena.physical_start = start;
+	arena.total_size = size;
+	arena.temp_count = 0;
+	arena.total_allocated_count = 0;
+
+	arena.alloc           = functions::alloc;
+	arena.dealloc         = functions::dealloc;
+	arena.allocated_size  = functions::allocated_size;
+	arena.total_allocated = functions::total_allocated;
+
+	return arena;
+}
+
+void
+destroy(Arena_Allocator* arena)
+{
+	if (arena->backing)
+		dealloc(arena->backing, arena->physical_start);
+
+	GB_ASSERT(arena->temp_count == 0,
+			  "%ld Temporary_Arena_Memory have not be cleared", arena->temp_count);
+
+	arena->total_allocated_count = 0;
+}
+
 inline void
 clear(Arena_Allocator* arena)
 {
@@ -3070,7 +2981,7 @@ free(Temporary_Arena_Memory* tmp)
 {
 	if (tmp->arena == nullptr)
 		return;
-	GB_ASSERT(tmp->arena->total_allocated() >= tmp->original_count);
+	GB_ASSERT(total_allocated(tmp->arena) >= tmp->original_count);
 	tmp->arena->total_allocated_count = tmp->original_count;
 	GB_ASSERT(tmp->arena->temp_count > 0);
 	tmp->arena->temp_count--;
@@ -3193,7 +3104,7 @@ inline void*
 alloc(Allocator* a, usize size, usize align)
 {
 	GB_ASSERT(a != nullptr);
-	return a->alloc(size, align);
+	return a->alloc(a, size, align);
 }
 
 inline void
@@ -3201,21 +3112,21 @@ dealloc(Allocator* a, const void* ptr)
 {
 	GB_ASSERT(a != nullptr);
 	if (ptr)
-		a->dealloc(ptr);
+		a->dealloc(a, ptr);
 }
 
 inline s64
 allocated_size(Allocator* a, const void* ptr)
 {
 	GB_ASSERT(a != nullptr);
-	return a->allocated_size(ptr);
+	return a->allocated_size(a, ptr);
 }
 
 inline s64
 total_allocated(Allocator* a)
 {
 	GB_ASSERT(a != nullptr);
-	return a->total_allocated();
+	return a->total_allocated(a);
 }
 
 #endif
@@ -3383,7 +3294,7 @@ make_space_for(String* str, Size add_len)
 	if (available >= add_len) // Return if there is enough space left
 		return;
 
-	void* ptr = reinterpret_cast<string::Header*>(str) - 1;
+	void* ptr = string::header(*str);
 	usize old_size = sizeof(string::Header) + string::length(*str) + 1;
 	usize new_size = sizeof(string::Header) + new_len + 1;
 
@@ -3391,9 +3302,13 @@ make_space_for(String* str, Size add_len)
 	void* new_ptr = impl::string_realloc(a, ptr, old_size, new_size);
 	if (new_ptr == nullptr)
 		return;
-	*str = static_cast<char*>(new_ptr) + sizeof(string::Header);
 
-	string::header(*str)->cap = new_len;
+	string::Header* header = static_cast<string::Header*>(new_ptr);
+	header->allocator = a;
+	header->len = len;
+	header->cap = new_len;
+
+	*str = reinterpret_cast<String>(header + 1);
 }
 
 usize
@@ -4348,6 +4263,7 @@ __GB_NAMESPACE_END
 
 /*
 Version History:
+	0.26  - Better Allocation system
 	0.25a - Array bug fix
 	0.25  - Faster Heap_Allocator for Windows using HeapAlloc
 	0.24b - Even More Hash_Table Bug Fixes
