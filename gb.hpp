@@ -1,4 +1,4 @@
-// gb.hpp - v0.26 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.26a - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
@@ -782,7 +782,6 @@ struct Atomic64 { u64 nonatomic; };
 
 namespace atomic
 {
-// TODO(bill): Should these functions have suffixes or is the overloading fine?
 u32  load(const volatile Atomic32* object);
 void store(volatile Atomic32* object, u32 value);
 u32  compare_exchange_strong(volatile Atomic32* object, u32 expected, u32 desired);
@@ -860,7 +859,7 @@ struct Allocator
 	/// Allocates the specified amount of memory aligned to the specified alignment
 	void* (*alloc)(Allocator* a, usize size, usize align);
 	/// Deallocates/frees an allocation made with alloc()
-	void (*dealloc)(Allocator* a, const void* ptr);
+	void (*dealloc)(Allocator* a, void* ptr);
 	/// Returns the amount of usuable memory allocated at `ptr`.
 	///
 	/// If the allocator does not support tracking of the allocation size,
@@ -879,19 +878,21 @@ struct Heap_Allocator : Allocator
 		usize size;
 	};
 
-	s64   total_allocated_count;
-	s64   allocation_count;
+	Mutex  mutex;
+	bool32 use_mutex;
+	s64    total_allocated_count;
+	s64    allocation_count;
 
 #if defined(GB_SYSTEM_WINDOWS)
-	HANDLE heap_handle;
+	HANDLE win32_heap_handle;
 #endif
 };
 
 namespace heap_allocator
 {
-Heap_Allocator make();
+Heap_Allocator make(bool use_mutex = true);
 void destroy(Heap_Allocator* heap);
-} // namespaceheap_allocator
+} // namespace heap_allocator
 
 // TODO(bill): Implement more Allocator types
 
@@ -932,7 +933,7 @@ void* pointer_sub(void* ptr, usize bytes);
 const void* pointer_add(const void* ptr, usize bytes);
 const void* pointer_sub(const void* ptr, usize bytes);
 
-void* set(void* ptr, u8 value, usize bytes);
+void* set(void* ptr, usize bytes, u8 value);
 
 void* zero(void* ptr, usize bytes);
 void* copy(const void* src, usize bytes, void* dest);
@@ -942,6 +943,9 @@ bool equals(const void* a, const void* b, usize bytes);
 // TODO(bill): Should this be just zero(T*) ???
 template <typename T>
 T* zero_struct(T* ptr);
+
+template <typename T>
+T* zero_array(T* ptr, usize count);
 
 template <typename T>
 T* copy_array(const T* src_array, usize count, T* dest_array);
@@ -956,7 +960,7 @@ void swap(T (& a)[N], T (& b)[N]);
 } // namespace memory
 
 void* alloc(Allocator* a, usize size, usize align = GB_DEFAULT_ALIGNMENT);
-void  dealloc(Allocator* a, const void* ptr); // TODO(bill): Should `ptr` be `const void*` or just `void*` ???
+void  dealloc(Allocator* a, void* ptr);
 s64   allocated_size(Allocator* a, const void* ptr);
 s64   total_allocated(Allocator* a);
 
@@ -1508,7 +1512,6 @@ append(Array<T>* a, const T& item)
 	a->data[a->count++] = item;
 }
 
-
 template <typename T>
 inline void
 append(Array<T>* a, T&& item)
@@ -2059,6 +2062,14 @@ zero_struct(T* ptr)
 	return static_cast<T*>(memory::zero(ptr, sizeof(T)));
 }
 
+
+template <typename T>
+inline T*
+zero_array(T* ptr, usize count)
+{
+	return static_cast<T*>(memory::zero(ptr, count * sizeof(T)));
+}
+
 template <typename T>
 inline T*
 copy_array(const T* src_array, usize count, T* dest_array)
@@ -2607,164 +2618,6 @@ current_id()
 
 } // namespace thread
 
-// NOTE(bill): This is just an idea I have been having
-#if 0 || defined(GB_USE_C_STYLE_ALLOCATOR)
-
-namespace heap_allocator
-{
-internal_linkage void*
-alloc(Allocator* a, usize size, usize align)
-{
-	Data* data = static_cast<Data*>(a->data);
-	mutex::lock(&data->mutex);
-	defer (mutex::unlock(&data->mutex));
-
-	usize total = size + align - (size % align);
-	void* ptr = malloc(total);
-
-	data->total_allocated_count += total;
-	data->allocation_count++;
-
-	return ptr;
-}
-
-internal_linkage void
-dealloc(Allocator* a, const void* ptr)
-{
-	if (!ptr)
-		return;
-
-	Data* data = static_cast<Data*>(a->data);
-	mutex::lock(&data->mutex);
-	defer (mutex::unlock(&data->mutex));
-
-	data->total_allocated_count -= allocated_size(a, ptr);
-	data->allocation_count--;
-
-	::free(const_cast<void*>(ptr));
-}
-
-internal_linkage s64
-allocated_size(Allocator* a, const void* ptr)
-{
-	Mutex* mutex = &static_cast<Data*>(a->data)->mutex;
-	mutex::lock(mutex);
-	defer (mutex::unlock(mutex));
-
-#if defined(GB_SYSTEM_WINDOWS)
-	return static_cast<usize>(_msize(const_cast<void*>(ptr)));
-#elif defined(GB_SYSTEM_OSX)
-	return static_cast<usize>(malloc_size(ptr));
-#else
-	return static_cast<usize>(malloc_usable_size(const_cast<void*>(ptr)));
-#endif
-}
-
-internal_linkage s64
-total_allocated(Allocator* a)
-{
-	return static_cast<Data*>(a->data)->total_allocated_count;
-}
-
-
-Allocator
-make()
-{
-	Allocator a = {};
-	a.data = malloc(sizeof(Data));
-	memory::zero(a.data, sizeof(Data));
-	a.alloc           = heap_allocator::alloc;
-	a.dealloc         = heap_allocator::dealloc;
-	a.allocated_size  = heap_allocator::allocated_size;
-	a.total_allocated = heap_allocator::total_allocated;
-
-	return a;
-}
-
-void
-destroy(Allocator* a)
-{
-	::free(a->data);
-	*a = {};
-}
-} // namespace heap_allocator
-
-
-
-namespace arena_allocator
-{
-internal_linkage void*
-alloc(Allocator* a, usize size, usize align)
-{
-
-}
-
-internal_linkage void
-dealloc(Allocator* a, const void* ptr)
-{
-	if (!ptr)
-		return;
-}
-
-internal_linkage s64
-allocated_size(Allocator* a, const void* ptr)
-{
-
-}
-
-internal_linkage s64
-total_allocated(Allocator* a)
-{
-
-}
-
-Allocator
-make(Allocator* backing, usize size)
-{
-	Allocator a = {};
-
-	physical_start =
-
-	return a;
-}
-
-Allocator
-make(void* start, usize size)
-{
-
-}
-
-void
-destroy(Allocator* a)
-{
-
-}
-
-void
-clear(Allocator* a)
-{
-
-}
-} // namespace arena_allocator
-
-namespace temporary_arena_memory
-{
-Data
-make(Allocator* arena)
-{
-
-}
-
-void
-free(Data* tmp)
-{
-
-}
-} // namespace temporary_arena_memory
-
-
-#else
-
 
 namespace heap_allocator
 {
@@ -2775,12 +2628,16 @@ alloc(Allocator* a, usize size, usize align)
 {
 	Heap_Allocator* heap = reinterpret_cast<Heap_Allocator*>(a);
 
+	if (heap->use_mutex)
+		mutex::lock(&heap->mutex);
+
 	usize total = size + align - (size % align);
 
 #if defined (GB_SYSTEM_WINDOWS)
 	total += sizeof(Heap_Allocator::Header);
 
-	void* data = HeapAlloc(heap->heap_handle, 0, total);
+	void* data = HeapAlloc(heap->win32_heap_handle, 0, total);
+
 	Heap_Allocator::Header* h = static_cast<Heap_Allocator::Header*>(data);
 	h->size = total;
 	data = (h + 1);
@@ -2793,36 +2650,53 @@ alloc(Allocator* a, usize size, usize align)
 	heap->total_allocated_count += total;
 	heap->allocation_count++;
 
+	if (heap->use_mutex)
+		mutex::unlock(&heap->mutex);
+
+
 	return data;
 }
 
 internal_linkage void
-dealloc(Allocator* a, const void* ptr)
+dealloc(Allocator* a, void* ptr)
 {
 	if (!ptr)
 		return;
 
 	Heap_Allocator* heap = reinterpret_cast<Heap_Allocator*>(a);
 
+	if (heap->use_mutex)
+		mutex::lock(&heap->mutex);
+
 	heap->total_allocated_count -= allocated_size(heap, ptr);
 	heap->allocation_count--;
 
 #if defined (GB_SYSTEM_WINDOWS)
-	ptr = static_cast<const Heap_Allocator::Header*>(ptr) + 1;
-	HeapFree(heap->heap_handle, 0, const_cast<void*>(ptr));
-
+	auto* header = static_cast<Heap_Allocator::Header*>(ptr) - 1;
+	HeapFree(heap->win32_heap_handle, 0, header);
 #else
-	::free(const_cast<void*>(ptr));
-
+	::free(ptr);
 #endif
+
+	if (heap->use_mutex)
+		mutex::unlock(&heap->mutex);
 }
 
 inline s64
 allocated_size(Allocator* a, const void* ptr)
 {
 #if defined(GB_SYSTEM_WINDOWS)
+	auto* heap = reinterpret_cast<Heap_Allocator*>(a);
+
+	if (heap->use_mutex)
+		mutex::lock(&heap->mutex);
 	const auto* h = static_cast<const Heap_Allocator::Header*>(ptr) - 1;
-	return static_cast<usize>(h->size);
+	auto result = h->size;
+
+	if (heap->use_mutex)
+		mutex::unlock(&heap->mutex);
+
+	return static_cast<usize>(result);
 
 #elif defined(GB_SYSTEM_OSX)
 	return static_cast<usize>(malloc_size(ptr));
@@ -2838,16 +2712,30 @@ allocated_size(Allocator* a, const void* ptr)
 inline s64
 total_allocated(Allocator* a)
 {
-	return reinterpret_cast<Heap_Allocator*>(a)->total_allocated_count;
+	auto* heap = reinterpret_cast<Heap_Allocator*>(a);
+
+	if (heap->use_mutex)
+		mutex::lock(&heap->mutex);
+	s64 result = heap->total_allocated_count;
+
+	if (heap->use_mutex)
+		mutex::unlock(&heap->mutex);
+
+	return result;
 }
 } // namespace functions
 
-Heap_Allocator make()
+Heap_Allocator
+make(bool use_mutex)
 {
 	Heap_Allocator heap = {};
 
+	heap.use_mutex = use_mutex;
+	if (use_mutex)
+		heap.mutex = mutex::make();
+
 #if defined(GB_SYSTEM_WINDOWS)
-	heap.heap_handle = HeapCreate(0, 0, 0);
+	heap.win32_heap_handle = HeapCreate(0, 0, 0);
 #endif
 
 	heap.alloc           = functions::alloc;
@@ -2860,8 +2748,11 @@ Heap_Allocator make()
 void
 destroy(Heap_Allocator* heap)
 {
+	if (heap->use_mutex)
+		mutex::destroy(&heap->mutex);
+
 #if defined (GB_SYSTEM_WINDOWS)
-	HeapDestroy(heap->heap_handle);
+	HeapDestroy(heap->win32_heap_handle);
 #endif
 }
 } // namespace heap_allocator
@@ -2890,7 +2781,7 @@ alloc(Allocator* a, usize size, usize align)
 }
 
 inline void
-dealloc(Allocator* a, const void*) {}
+dealloc(Allocator* a, void*) {}
 
 inline s64 allocated_size(Allocator*, const void*) { return -1; }
 
@@ -2988,8 +2879,6 @@ free(Temporary_Arena_Memory* tmp)
 }
 } // namespace temporary_arena_memory
 
-#endif
-
 ////////////////////////////////
 ///                          ///
 /// Memory                   ///
@@ -3036,7 +2925,7 @@ pointer_sub(const void* ptr, usize bytes)
 }
 
 GB_FORCE_INLINE void*
-set(void* ptr, u8 value, usize bytes)
+set(void* ptr, usize bytes, u8 value)
 {
 	return memset(ptr, value, bytes);
 }
@@ -3044,7 +2933,7 @@ set(void* ptr, u8 value, usize bytes)
 GB_FORCE_INLINE void*
 zero(void* ptr, usize bytes)
 {
-	return memory::set(ptr, 0, bytes);
+	return memory::set(ptr, bytes, 0);
 }
 
 GB_FORCE_INLINE void*
@@ -3066,9 +2955,6 @@ equals(const void* a, const void* b, usize bytes)
 }
 } // namespace memory
 
-
-// NOTE(bill): This is just an idea I have been having
-#if 0 || defined(GB_USE_C_STYLE_ALLOCATOR)
 inline void*
 alloc(Allocator* a, usize size, usize align)
 {
@@ -3077,7 +2963,7 @@ alloc(Allocator* a, usize size, usize align)
 }
 
 inline void
-dealloc(Allocator* a, const void* ptr)
+dealloc(Allocator* a, void* ptr)
 {
 	GB_ASSERT(a != nullptr);
 	if (ptr)
@@ -3097,40 +2983,6 @@ total_allocated(Allocator* a)
 	GB_ASSERT(a != nullptr);
 	return a->total_allocated(a);
 }
-
-#else
-
-inline void*
-alloc(Allocator* a, usize size, usize align)
-{
-	GB_ASSERT(a != nullptr);
-	return a->alloc(a, size, align);
-}
-
-inline void
-dealloc(Allocator* a, const void* ptr)
-{
-	GB_ASSERT(a != nullptr);
-	if (ptr)
-		a->dealloc(a, ptr);
-}
-
-inline s64
-allocated_size(Allocator* a, const void* ptr)
-{
-	GB_ASSERT(a != nullptr);
-	return a->allocated_size(a, ptr);
-}
-
-inline s64
-total_allocated(Allocator* a)
-{
-	GB_ASSERT(a != nullptr);
-	return a->total_allocated(a);
-}
-
-#endif
-
 
 ////////////////////////////////
 ///                          ///
@@ -3171,7 +3023,7 @@ make(Allocator* a, const void* init_str, Size len)
 	return str;
 }
 
-void
+inline void
 free(String str)
 {
 	if (str == nullptr)
@@ -3387,8 +3239,6 @@ trim_space(String* str)
 } // namespace string
 
 
-
-
 namespace strconv
 {
 // NOTE(bill): Inspired by the golang strconv library but not exactly due to numerous reasons
@@ -3464,22 +3314,31 @@ parse_f64(const char* str, f64* value)
 bool
 parse_int(const char* str, int base, s8* value)
 {
-	// TODO(bill):
-	return false;
+	s64 v;
+	bool test = parse_int(str, base, &v);
+	if (test)
+		*value = v;
+	return test;
 }
 
 bool
 parse_int(const char* str, int base, s16* value)
 {
-	// TODO(bill):
-	return false;
+	s64 v;
+	bool test = parse_int(str, base, &v);
+	if (test)
+		*value = v;
+	return test;
 }
 
 bool
 parse_int(const char* str, int base, s32* value)
 {
-	// TODO(bill):
-	return false;
+	s64 v;
+	bool test = parse_int(str, base, &v);
+	if (test)
+		*value = v;
+	return test;
 }
 
 bool
@@ -3492,22 +3351,31 @@ parse_int(const char* str, int base, s64* value)
 bool
 parse_uint(const char* str, int base, u8* value)
 {
-	// TODO(bill):
-	return false;
+	u64 v;
+	bool test = parse_uint(str, base, &v);
+	if (test)
+		*value = v;
+	return test;
 }
 
 bool
 parse_uint(const char* str, int base, u16* value)
 {
-	// TODO(bill):
-	return false;
+	u64 v;
+	bool test = parse_uint(str, base, &v);
+	if (test)
+		*value = v;
+	return test;
 }
 
 bool
 parse_uint(const char* str, int base, u32* value)
 {
-	// TODO(bill):
-	return false;
+	u64 v;
+	bool test = parse_uint(str, base, &v);
+	if (test)
+		*value = v;
+	return test;
 }
 
 bool
@@ -4263,6 +4131,7 @@ __GB_NAMESPACE_END
 
 /*
 Version History:
+	0.26a - Heap_Allocator Fix
 	0.26  - Better Allocation system
 	0.25a - Array bug fix
 	0.25  - Faster Heap_Allocator for Windows using HeapAlloc
