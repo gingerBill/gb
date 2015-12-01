@@ -4,6 +4,7 @@
 
 /*
 Version History:
+	0.03a - Remove templated clamp
 	0.03  - Remove templated min/max/clamp
 	0.02b - Typo fixes
 	0.02a - Better `static` keywords
@@ -1153,17 +1154,6 @@ f32 perlin_3d(f32 x, f32 y, f32 z, s32 x_wrap = 0, s32 y_wrap = 0, s32 z_wrap = 
 
 namespace math
 {
-template <typename T>
-inline T
-clamp(const T& x, const T& min, const T& max)
-{
-	if (x < min)
-		return min;
-	if (x > max)
-		return max;
-	return x;
-}
-
 template <typename T> inline T lerp(const T& x, const T& y, f32 t) { return x + (y - x) * t; }
 } // namespace math
 
