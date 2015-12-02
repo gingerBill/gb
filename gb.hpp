@@ -1,4 +1,4 @@
-// gb.hpp - v0.27 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.29 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
@@ -36,6 +36,50 @@ CONTENTS:
 	- Hash Table
 	- Hash Functions
 */
+
+/*
+Version History:
+	0.29  - GB_ASSERT prints call stack
+	0.28  - Pool Allocator
+	0.27  - Dealloc to Free & More Hashing Functions
+	0.26a - Heap_Allocator Fix
+	0.26  - Better Allocation system
+	0.25a - Array bug fix
+	0.25  - Faster Heap_Allocator for Windows using HeapAlloc
+	0.24b - Even More Hash_Table Bug Fixes
+	0.24a - Hash_Table Bug Fixes
+	0.24  - More documentation and bug fixes
+	0.23  - Move Semantics for Array and Hash_Table
+	0.22  - Code rearrangment into namespaces
+	0.21d - Fix array::free
+	0.21c - Fix Another Typo causing unresolved external symbol
+	0.21b - Typo fixes
+	0.21a - Better `static` keywords
+	0.21  - Separate Math Library
+	0.20a - #ifndef for many macros
+	0.20  - Angle
+	0.19  - Cache friendly Transform and String fixes
+	0.18  - Hash_Table bug fixes
+	0.17  - Death to OOP
+	0.16  - All References are const convention
+	0.15  - Namespaced Types
+	0.14  - Casts and Quaternion Look At
+	0.13a - Fix Todos
+	0.13  - Basic Type Traits
+	0.12  - Random
+	0.11  - Complex
+	0.10  - Atomics
+	0.09  - Bug Fixes
+	0.08  - Matrix(2,3)
+	0.07  - Bug Fixes
+	0.06  - Os spec ideas
+	0.05  - Transform Type and Quaternion Functions
+	0.04  - String
+	0.03  - Hash Functions
+	0.02  - Hash Table
+	0.01  - Initial Version
+*/
+
 
 #ifndef GB_INCLUDE_GB_HPP
 #define GB_INCLUDE_GB_HPP
@@ -146,7 +190,7 @@ CONTENTS:
 	#endif
 #endif
 
-// TODO(bill): Check if this KEPLER_ENVIRONMENT works on clang
+// TODO(bill): Check if this works on clang
 #if defined(__GNUC__)
 	#if defined(__x86_64__) || defined(__ppc64__)
 		#ifndef GB_ARCH_64_BIT
@@ -239,40 +283,18 @@ CONTENTS:
 	Type& operator=(Type&&) = delete
 #endif
 
+
+
 #if !defined(GB_ASSERT)
 	#if !defined(NDEBUG)
 		#define GB_ASSERT(x, ...) ((void)(::gb__assert_handler((x), #x, __FILE__, __LINE__, ##__VA_ARGS__)))
 
 		// Helper function used as a better alternative to assert which allows for
 		// optional printf style error messages
-		extern "C" inline void
+		extern "C" void
 		gb__assert_handler(bool condition, const char* condition_str,
 						   const char* filename, size_t line,
-						   const char* error_text = nullptr, ...)
-		{
-			if (condition)
-				return;
-
-			fprintf(stderr, "ASSERT! %s(%lu): %s", filename, line, condition_str);
-			if (error_text)
-			{
-				fprintf(stderr, " - ");
-
-				va_list args;
-				va_start(args, error_text);
-				vfprintf(stderr, error_text, args);
-				va_end(args);
-			}
-			fprintf(stderr, "\n");
-
-		#if defined(GB_COMPILER_MSVC)
-			__debugbreak();
-		#elif defined(GB_COMPILER_GNU_GCC)
-			__builtin_trap();
-		#else
-			#error Implement aborting function
-		#endif
-		}
+						   const char* error_text = nullptr, ...);
 
 	#else
 		#define GB_ASSERT(x, ...) ((void)sizeof(x))
@@ -2231,8 +2253,133 @@ __GB_NAMESPACE_END
 // Implemenation              //
 //                            //
 ////////////////////////////////
+
 #if defined(GB_IMPLEMENTATION)
 __GB_NAMESPACE_START
+
+
+
+#if defined(GB_SYSTEM_WINDOWS)
+
+	#include <dbghelp.h>
+	#pragma comment(lib, "dbghelp.lib")
+
+	internal_linkage void
+	gb__print_call_stack(FILE* out_stream)
+	{
+		SymInitialize(GetCurrentProcess(), nullptr, true);
+		SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
+
+		DWORD mtype = {};
+		CONTEXT ctx = {};
+		ctx.ContextFlags = CONTEXT_CONTROL;
+
+		RtlCaptureContext(&ctx);
+
+		STACKFRAME64 stack = {};
+
+	#if defined(_M_IX86)
+		mtype = IMAGE_FILE_MACHINE_I386;
+		stack.AddrPC.Offset    = ctx.Eip;
+		stack.AddrPC.Mode      = AddrModeFlat;
+		stack.AddrFrame.Offset = ctx.Ebp;
+		stack.AddrFrame.Mode   = AddrModeFlat;
+		stack.AddrStack.Offset = ctx.Esp;
+		stack.AddrStack.Mode   = AddrModeFlat;
+	#elif defined(_M_X64)
+		mtype = IMAGE_FILE_MACHINE_AMD64;
+		stack.AddrPC.Offset    = ctx.Rip;
+		stack.AddrPC.Mode      = AddrModeFlat;
+		stack.AddrFrame.Offset = ctx.Rsp;
+		stack.AddrFrame.Mode   = AddrModeFlat;
+		stack.AddrStack.Offset = ctx.Rsp;
+		stack.AddrStack.Mode   = AddrModeFlat;
+	#endif
+
+		DWORD ldsp = 0;
+		IMAGEHLP_LINE64 line = {};
+		line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+
+		char buf[sizeof(SYMBOL_INFO) + (MAX_SYM_NAME * sizeof(TCHAR))];
+
+		SYMBOL_INFO* sym = reinterpret_cast<SYMBOL_INFO*>(buf);
+		sym->SizeOfStruct = sizeof(SYMBOL_INFO);
+		sym->MaxNameLen   = MAX_SYM_NAME;
+
+		UINT layer_count = 0;
+		while (StackWalk64(mtype,
+		                   GetCurrentProcess(), GetCurrentThread(),
+		                   &stack, &ctx, nullptr,
+		                   SymFunctionTableAccess64, SymGetModuleBase64, nullptr))
+		{
+			if (stack.AddrPC.Offset == 0)
+				break;
+
+			BOOL result = SymGetLineFromAddr64(GetCurrentProcess(), stack.AddrPC.Offset, &ldsp, &line);
+			result = result && SymFromAddr(GetCurrentProcess(), stack.AddrPC.Offset, 0, sym);
+
+			if (result)
+			{
+				fprintf(out_stream,
+				        "\t[%u] `%s` (%s:%d)\n",
+				        layer_count, sym->Name, line.FileName, line.LineNumber);
+			}
+			else
+			{
+				fprintf(out_stream,
+				        "\t[%u] 0x%p\n",
+				        layer_count, stack.AddrPC.Offset);
+			}
+
+			layer_count++;
+		}
+
+		SymCleanup(GetCurrentProcess());
+	}
+#else
+	#error gb__print_call_stack() not implemeneted
+	// TODO(bill): Implemenet gb__print_call_stack()
+#endif
+
+// Helper function used as a better alternative to assert which allows for
+// optional printf style error messages
+inline void
+gb__assert_handler(bool condition, const char* condition_str,
+				   const char* filename, size_t line,
+				   const char* error_text, ...)
+{
+	if (condition)
+		return;
+
+	FILE* out_stream = stderr;
+
+	fprintf(out_stream, "ASSERT! %s(%lu): %s", filename, line, condition_str);
+	if (error_text)
+	{
+		fprintf(out_stream, " - ");
+
+		va_list args;
+		va_start(args, error_text);
+		vfprintf(out_stream, error_text, args);
+		va_end(args);
+	}
+	fprintf(out_stream, "\n");
+
+	fprintf(out_stream, "Stacktrack:\n");
+	gb__print_call_stack(out_stream);
+
+
+	// TODO(bill): Are these decent breaking functions???
+#if defined(GB_COMPILER_MSVC)
+	__debugbreak();
+#elif defined(GB_COMPILER_GNU_GCC)
+	__builtin_trap();
+#else
+	#error Implement aborting function
+#endif
+}
+
+
 ////////////////////////////////
 //                            //
 // Memory                     //
@@ -4143,45 +4290,3 @@ rdtsc()
 __GB_NAMESPACE_END
 
 #endif // GB_IMPLEMENTATION
-
-/*
-Version History:
-	0.28  - Pool Allocator
-	0.27  - Dealloc to Free & More Hashing Functions
-	0.26a - Heap_Allocator Fix
-	0.26  - Better Allocation system
-	0.25a - Array bug fix
-	0.25  - Faster Heap_Allocator for Windows using HeapAlloc
-	0.24b - Even More Hash_Table Bug Fixes
-	0.24a - Hash_Table Bug Fixes
-	0.24  - More documentation and bug fixes
-	0.23  - Move Semantics for Array and Hash_Table
-	0.22  - Code rearrangment into namespaces
-	0.21d - Fix array::free
-	0.21c - Fix Another Typo causing unresolved external symbol
-	0.21b - Typo fixes
-	0.21a - Better `static` keywords
-	0.21  - Separate Math Library
-	0.20a - #ifndef for many macros
-	0.20  - Angle
-	0.19  - Cache friendly Transform and String fixes
-	0.18  - Hash_Table bug fixes
-	0.17  - Death to OOP
-	0.16  - All References are const convention
-	0.15  - Namespaced Types
-	0.14  - Casts and Quaternion Look At
-	0.13a - Fix Todos
-	0.13  - Basic Type Traits
-	0.12  - Random
-	0.11  - Complex
-	0.10  - Atomics
-	0.09  - Bug Fixes
-	0.08  - Matrix(2,3)
-	0.07  - Bug Fixes
-	0.06  - Os spec ideas
-	0.05  - Transform Type and Quaternion Functions
-	0.04  - String
-	0.03  - Hash Functions
-	0.02  - Hash Table
-	0.01  - Initial Version
-*/
