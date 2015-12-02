@@ -1,4 +1,4 @@
-// gb.hpp - v0.29 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.30 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
@@ -39,6 +39,7 @@ CONTENTS:
 
 /*
 Version History:
+	0.30  - sort::quick
 	0.29  - GB_ASSERT prints call stack
 	0.28  - Pool Allocator
 	0.27  - Dealloc to Free & More Hashing Functions
@@ -100,6 +101,7 @@ Version History:
 	Example for static defines
 
 	global_variable const f32 TAU = 6.283185f;
+	global_variable void* g_memory;
 
 	internal_linkage void
 	some_function(...)
@@ -256,9 +258,8 @@ Version History:
 	#define WIN32_EXTRA_LEAN    1
 	#define WIN32_LEAN_AND_MEAN 1
 
-	#include <windows.h>
+	#include <windows.h> // TODO(bill): Should we include only the needed headers?
 	#include <mmsystem.h> // Time functions
-	#include <wincrypt.h>
 
 	#undef NOMINMAX
 	#undef VC_EXTRALEAN
@@ -271,23 +272,12 @@ Version History:
 	#include <sys/time.h>
 #endif
 
-#ifndef GB_DISABLE_COPY
-#define GB_DISABLE_COPY(Type)   \
-	Type(const Type&) = delete; \
-	Type& operator=(const Type&) = delete
-#endif
-
-#ifndef GB_DISABLE_MOVE
-#define GB_DISABLE_MOVE(Type) \
-	Type(Type&&) = delete;    \
-	Type& operator=(Type&&) = delete
-#endif
 
 
 
 #if !defined(GB_ASSERT)
 	#if !defined(NDEBUG)
-		#define GB_ASSERT(x, ...) ((void)(::gb__assert_handler((x), #x, __FILE__, __LINE__, ##__VA_ARGS__)))
+		#define GB_ASSERT(x, ...) ((void)(gb__assert_handler((x), #x, __FILE__, __LINE__, ##__VA_ARGS__)))
 
 		// Helper function used as a better alternative to assert which allows for
 		// optional printf style error messages
@@ -356,6 +346,19 @@ Version History:
 
 
 
+#ifndef GB_DISABLE_COPY
+#define GB_DISABLE_COPY(Type)   \
+	Type(const Type&) = delete; \
+	Type& operator=(const Type&) = delete
+#endif
+
+#ifndef GB_DISABLE_MOVE
+#define GB_DISABLE_MOVE(Type) \
+	Type(Type&&) = delete;    \
+	Type& operator=(Type&&) = delete
+#endif
+
+
 
 
 #if !defined(GB_BASIC_WITHOUT_NAMESPACE)
@@ -380,6 +383,7 @@ __GB_NAMESPACE_START
 		using u64 = unsigned __int64;
 		using s64 =   signed __int64;
 	#else
+		// NOTE(bill): Of the platforms that I build for, these will be correct
 		using u8  = unsigned char;
 		using s8  =   signed char;
 		using u16 = unsigned short;
@@ -587,7 +591,10 @@ template <typename T>          struct Remove_Extent_Def       { using Type = T; 
 template <typename T>          struct Remove_Extent_Def<T[]>  { using Type = T; };
 template <typename T, usize N> struct Remove_Extent_Def<T[N]> { using Type = T; };
 
-// TODO NOTE(bill): Do I "need" all of these template traits?
+// TODO(bill): Do I "need" all of these template traits?
+
+
+
 
 ////////////////////////////////
 //                            //
@@ -883,8 +890,8 @@ void wait(Semaphore* semaphore);
 
 
 
-// TODO(bill): Is this thread function definitions good enough?
-using Thread_Function = void(void*);
+// TODO(bill): Is this thread procedure definition good enough?
+using Thread_Procedure = void(void*);
 
 struct Thread
 {
@@ -894,7 +901,7 @@ struct Thread
 	pthread_t posix_handle;
 #endif
 
-	Thread_Function* function;
+	Thread_Procedure* function;
 	void*            data;
 
 	Semaphore semaphore;
@@ -906,7 +913,7 @@ namespace thread
 {
 Thread make();
 void destroy(Thread* t);
-void start(Thread* t, Thread_Function* func, void* data = nullptr, usize stack_size = 0);
+void start(Thread* t, Thread_Procedure* func, void* data = nullptr, usize stack_size = 0);
 void join(Thread* t);
 bool is_running(const Thread& t);
 u32  current_id();
@@ -941,7 +948,8 @@ struct Allocator
 
 
 
-
+// TODO(bill): Do the allocators need the `_Allocator` suffix???
+// And thus the related namespaced functions `_allocator`???
 struct Heap_Allocator : Allocator
 {
 	struct Header
@@ -964,8 +972,6 @@ namespace heap_allocator
 Heap_Allocator make(bool use_mutex = true);
 void destroy(Heap_Allocator* heap);
 } // namespace heap_allocator
-
-// TODO(bill): Implement more Allocator types
 
 
 
@@ -1063,6 +1069,10 @@ template <typename T, usize N>
 void swap(T (& a)[N], T (& b)[N]);
 } // namespace memory
 
+
+
+
+// Allocator Functions
 void* alloc(Allocator* a, usize size, usize align = GB_DEFAULT_ALIGNMENT);
 void  free(Allocator* a, void* ptr);
 s64   allocated_size(Allocator* a, const void* ptr);
@@ -1100,7 +1110,7 @@ struct Header
 	Size cap;
 };
 
-inline Header* header(String str) { return (Header*)str - 1; }
+inline Header* header(String str) { return reinterpret_cast<Header*>(str) - 1; }
 
 String make(Allocator* a, const char* str = "");
 String make(Allocator* a, const void* str, Size num_bytes);
@@ -1130,40 +1140,7 @@ void trim_space(String* str);
 } // namespace string
 
 
-
-
-
 // TODO(bill): string libraries
-
-namespace strconv
-{
-// Inspired by the golang strconv library but not exactly due to numerous reasons
-// TODO(bill): Should this use gb::String or just plain old C Strings?
-bool parse_bool(const char* str, bool* value);
-
-bool parse_f32(const char* str, f32* value);
-bool parse_f64(const char* str, f64* value);
-
-bool parse_int(const char* str, int base, s8* value);
-bool parse_int(const char* str, int base, s16* value);
-bool parse_int(const char* str, int base, s32* value);
-bool parse_int(const char* str, int base, s64* value);
-
-bool parse_uint(const char* str, int base, u8* value);
-bool parse_uint(const char* str, int base, u16* value);
-bool parse_uint(const char* str, int base, u32* value);
-bool parse_uint(const char* str, int base, u64* value);
-
-void format_bool(bool value, char* buffer, usize len);
-
-void format_f32(f32 value, char* buffer, usize len);
-void format_f64(f64 value, char* buffer, usize len);
-
-void format_int(s64 value, char* buffer, usize len);
-void format_uint(u64 value, char* buffer, usize len);
-} // namespace strconv
-
-
 
 
 
@@ -1202,6 +1179,16 @@ struct Array
 	const T& operator[](usize index) const;
 	      T& operator[](usize index);
 };
+
+
+// TODO(bill): Should I even have ctor, dtor, copy/move overloads for Array<T>?
+// Should these be explicit functions e.g.
+/*
+auto old_array = array::make(...);
+auto new_array = array::copy(old_array);
+array::free(&old_array);
+array::free(&new_array);
+*/
 
 namespace array
 {
@@ -1346,6 +1333,22 @@ u64 murmur64(const void* key, usize num_bytes, u64 seed = 0x9747b28c);
 
 
 
+////////////////////////////////
+//                            //
+// Sort                       //
+//                            //
+////////////////////////////////
+
+namespace sort
+{
+// Comparison_Function
+// NOTE(bill): Similar to str(n)cmp
+// a <  b --> -1
+// a == b -->  0
+// a >  b --> +1
+template <typename T, typename Comparison_Function>
+void quick(T* array, usize count, Comparison_Function compare);
+} // namespace sort
 
 
 ////////////////////////////////
@@ -1435,7 +1438,7 @@ u64 rdtsc();
 
 ////////////////////////////////
 //                            //
-// Implementations            //
+// Template Implementations   //
 //                            //
 ////////////////////////////////
 
@@ -2163,9 +2166,9 @@ template <typename T>
 inline void
 swap(T* a, T* b)
 {
-	T c = __GB_NAMESPACE_START::move(*a);
-	*a  = __GB_NAMESPACE_START::move(*b);
-	*b  = __GB_NAMESPACE_START::move(c);
+	T c = __GB_NAMESPACE_PREFIX::move(*a);
+	*a  = __GB_NAMESPACE_PREFIX::move(*b);
+	*b  = __GB_NAMESPACE_PREFIX::move(c);
 }
 
 template <typename T, usize N>
@@ -2179,6 +2182,42 @@ swap(T (& a)[N], T (& b)[N])
 
 
 
+////////////////////////////////
+//                            //
+// Sort                       //
+//                            //
+////////////////////////////////
+
+namespace sort
+{
+template <typename T, typename Comparison_Function>
+void
+quick(T* array, usize count, Comparison_Function compare)
+{
+	if (count < 2) return;
+
+	const T& mid = array[count/2];
+
+	s64 i = 0;
+	s64 j = count-1;
+
+	while (true)
+	{
+		while (compare(array[i], mid) < 0) i++;
+		while (compare(mid, array[j]) < 0) j--;
+
+		if (i >= j) break;
+
+		memory::swap(&array[i], &array[j]);
+
+		i++;
+		j--;
+	}
+
+	quick(array,   i,       compare);
+	quick(array+i, count-i, compare);
+}
+} // namespace sort
 
 
 
@@ -2186,68 +2225,68 @@ __GB_NAMESPACE_END
 
 #endif // GB_INCLUDE_GB_HPP
 
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
-///
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 // It's turtles all the way down!
-///
-///
-///
-///
-///
+//
+//
+//
+//
+//
 ////////////////////////////////
 //                            //
 // Implemenation              //
@@ -2262,7 +2301,7 @@ __GB_NAMESPACE_START
 #if defined(GB_SYSTEM_WINDOWS)
 
 	#include <dbghelp.h>
-	#pragma comment(lib, "dbghelp.lib")
+	#pragma comment(lib, "dbghelp.lib") // TODO(bill): Should this be pragma included or not?
 
 	internal_linkage void
 	gb__print_call_stack(FILE* out_stream)
@@ -2294,6 +2333,8 @@ __GB_NAMESPACE_START
 		stack.AddrFrame.Mode   = AddrModeFlat;
 		stack.AddrStack.Offset = ctx.Rsp;
 		stack.AddrStack.Mode   = AddrModeFlat;
+	#else
+		#error Unknown Windows Platform
 	#endif
 
 		DWORD ldsp = 0;
@@ -2739,7 +2780,7 @@ thread_proc(void* arg)
 #endif
 
 void
-start(Thread* t, Thread_Function* func, void* data, usize stack_size)
+start(Thread* t, Thread_Procedure* func, void* data, usize stack_size)
 {
 	GB_ASSERT(!t->is_running);
 	GB_ASSERT(func != nullptr);
@@ -3535,186 +3576,6 @@ trim_space(String* str)
 	trim(str, " \n\r\t\v\f");
 }
 } // namespace string
-
-
-namespace strconv
-{
-// NOTE(bill): Inspired by the golang strconv library but not exactly due to numerous reasons
-
-bool
-parse_bool(const char* str, bool* value)
-{
-	if (str == nullptr)
-		return false;
-
-	if (str[0] == '\0')
-		return false;
-
-	if (str[0] == '1' ||
-	    str[0] == 't' ||
-	    str[0] == 'T')
-	{
-		*value = true;
-		return true;
-	}
-	if (str[0] == '0' ||
-	    str[0] == 'f' ||
-	    str[0] == 'F')
-	{
-		*value = false;
-		return true;
-	}
-	if ((str[0] == 't' &&
-	     str[1] == 'r' &&
-	     str[2] == 'u' &&
-	     str[3] == 'e') ||
-		(str[0] == 'T' &&
-	     str[1] == 'R' &&
-	     str[2] == 'U' &&
-	     str[3] == 'E'))
-	{
-		*value = true;
-		return true;
-	}
-
-	if ((str[0] == 'f' &&
-	     str[1] == 'a' &&
-	     str[2] == 'l' &&
-	     str[3] == 's' &&
-	     str[4] == 'e') ||
-		(str[0] == 'F' &&
-	     str[1] == 'A' &&
-	     str[2] == 'L' &&
-	     str[3] == 'S' &&
-	     str[4] == 'E'))
-	{
-		*value = false;
-		return true;
-	}
-
-	return false;
-}
-
-bool
-parse_f32(const char* str, f32* value)
-{
-	// TODO(bill):
-	return false;
-}
-
-bool
-parse_f64(const char* str, f64* value)
-{
-	// TODO(bill):
-	return false;
-}
-
-bool
-parse_int(const char* str, int base, s8* value)
-{
-	s64 v;
-	bool test = parse_int(str, base, &v);
-	if (test)
-		*value = v;
-	return test;
-}
-
-bool
-parse_int(const char* str, int base, s16* value)
-{
-	s64 v;
-	bool test = parse_int(str, base, &v);
-	if (test)
-		*value = v;
-	return test;
-}
-
-bool
-parse_int(const char* str, int base, s32* value)
-{
-	s64 v;
-	bool test = parse_int(str, base, &v);
-	if (test)
-		*value = v;
-	return test;
-}
-
-bool
-parse_int(const char* str, int base, s64* value)
-{
-	// TODO(bill):
-	return false;
-}
-
-bool
-parse_uint(const char* str, int base, u8* value)
-{
-	u64 v;
-	bool test = parse_uint(str, base, &v);
-	if (test)
-		*value = v;
-	return test;
-}
-
-bool
-parse_uint(const char* str, int base, u16* value)
-{
-	u64 v;
-	bool test = parse_uint(str, base, &v);
-	if (test)
-		*value = v;
-	return test;
-}
-
-bool
-parse_uint(const char* str, int base, u32* value)
-{
-	u64 v;
-	bool test = parse_uint(str, base, &v);
-	if (test)
-		*value = v;
-	return test;
-}
-
-bool
-parse_uint(const char* str, int base, u64* value)
-{
-	// TODO(bill):
-	return false;
-}
-
-void
-format_bool(bool value, char* buffer, usize len)
-{
-	// TODO(bill):
-}
-
-void
-format_f32(f32 value, char* buffer, usize len)
-{
-	// TODO(bill):
-}
-
-void
-format_f64(f64 value, char* buffer, usize len)
-{
-	// TODO(bill):
-}
-
-void
-format_int(s64 value, char* buffer, usize len)
-{
-	// TODO(bill):
-}
-
-void
-format_uint(u64 value, char* buffer, usize len)
-{
-	// TODO(bill):
-}
-} // namespace strconv
-
-
 
 
 
