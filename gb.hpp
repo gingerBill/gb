@@ -52,6 +52,26 @@ CONTENTS:
 #define local_persist    static
 #endif
 
+/*
+	Example for static defines
+
+	global_variable const f32 TAU = 6.283185f;
+
+	internal_linkage void
+	some_function(...)
+	{
+		local_persist u32 count = 0;
+		...
+		count++;
+		...
+	}
+*/
+
+// `global_variable`  : variable is in the global scope
+// `internal_linkage` : function is only visible for this linkage
+// `local_persist`    : variable persists for the particular function scope
+
+
 #if defined(_MSC_VER)
 	#define _ALLOW_KEYWORD_MACROS
 
@@ -62,9 +82,9 @@ CONTENTS:
 
 
 ////////////////////////////////
-///                          ///
-/// System OS                ///
-///                          ///
+//                            //
+// System OS                  //
+//                            //
 ////////////////////////////////
 #if defined(_WIN32) || defined(_WIN64)
 	#ifndef GB_SYSTEM_WINDOWS
@@ -110,9 +130,9 @@ CONTENTS:
 #endif
 
 ////////////////////////////////
-///                          ///
-/// Environment Bit Size     ///
-///                          ///
+//                            //
+// Environment Bit Size       //
+//                            //
 ////////////////////////////////
 #if defined(_WIN32) || defined(_WIN64)
 	#if defined(_WIN64)
@@ -139,38 +159,15 @@ CONTENTS:
 	#endif
 #endif
 
-// TODO(bill): Get this to work
-// #if !defined(GB_LITTLE_EDIAN) && !defined(GB_BIG_EDIAN)
 
-// 	// Source: http://sourceforge.net/p/predef/wiki/Endianness/
-// 	#if defined(__BYTE_ORDER) && __BYTE_ORDER == __BIG_ENDIAN || \
-// 		defined(__BIG_ENDIAN__)                               || \
-// 		defined(__ARMEB__)                                    || \
-// 		defined(__THUMBEB__)                                  || \
-// 		defined(__AARCH64EB__)                                || \
-// 		defined(_MIBSEB) || defined(__MIBSEB) || defined(__MIBSEB__)
-// 	// It's a big-endian target architecture
-// 		#define GB_BIG_EDIAN 1
-
-// 	#elif defined(__BYTE_ORDER) && __BYTE_ORDER == __LITTLE_ENDIAN || \
-// 		defined(__LITTLE_ENDIAN__)                                 || \
-// 		defined(__ARMEL__)                                         || \
-// 		defined(__THUMBEL__)                                       || \
-// 		defined(__AARCH64EL__)                                     || \
-// 		defined(_MIPSEL) || defined(__MIPSEL) || defined(__MIPSEL__)
-// 	// It's a little-endian target architecture
-// 		#define GB_LITTLE_EDIAN 1
-
-// 	#else
-// 		#error I don't know what architecture this is!
-// 	#endif
-// #endif
-
+#ifndef GB_EDIAN_ORDER
+#define GB_EDIAN_ORDER
+	#define GB_IS_BIG_EDIAN    (!*(unsigned char*)&(unsigned short){1})
+	#define GB_IS_LITTLE_EDIAN (!GB_IS_BIG_EDIAN)
+#endif
 
 #define GB_IS_POWER_OF_TWO(x) ((x) != 0) && !((x) & ((x) - 1))
 
-#include <math.h>
-#include <stdio.h>
 
 #if !defined(GB_HAS_NO_CONSTEXPR)
 	#if defined(_GNUC_VER) && _GNUC_VER < 406  // Less than gcc 4.06
@@ -195,6 +192,19 @@ CONTENTS:
 		#define GB_FORCE_INLINE __attribute__ ((__always_inline__))
 	#endif
 #endif
+
+
+
+
+
+////////////////////////////////
+//                            //
+// Includes                   //
+//                            //
+////////////////////////////////
+
+#include <math.h>
+#include <stdio.h>
 
 #if defined(GB_SYSTEM_WINDOWS)
 	#define NOMINMAX            1
@@ -233,8 +243,8 @@ CONTENTS:
 	#if !defined(NDEBUG)
 		#define GB_ASSERT(x, ...) ((void)(::gb__assert_handler((x), #x, __FILE__, __LINE__, ##__VA_ARGS__)))
 
-		/// Helper function used as a better alternative to assert which allows for
-		/// optional printf style error messages
+		// Helper function used as a better alternative to assert which allows for
+		// optional printf style error messages
 		extern "C" inline void
 		gb__assert_handler(bool condition, const char* condition_str,
 						   const char* filename, size_t line,
@@ -270,9 +280,9 @@ CONTENTS:
 #endif
 
 ////////////////////////////////
-///                          ///
-/// snprintf_msvc            ///
-///                          ///
+//                            //
+// snprintf_msvc              //
+//                            //
 ////////////////////////////////
 #if defined(_MSC_VER)
 	extern "C" inline int
@@ -322,14 +332,18 @@ CONTENTS:
 #endif
 
 
+
+
+
+
 #if !defined(GB_BASIC_WITHOUT_NAMESPACE)
 __GB_NAMESPACE_START
 #endif // GB_BASIC_WITHOUT_NAMESPACE
 
 ////////////////////////////////
-///                          ///
-/// Types                    ///
-///                          ///
+//                            //
+// Types                      //
+//                            //
 ////////////////////////////////
 
 #ifndef GB_BASIC_TYPES
@@ -476,11 +490,15 @@ __GB_NAMESPACE_START
 __GB_NAMESPACE_END
 #endif // GB_BASIC_WITHOUT_NAMESPACE
 
+
+
+
+
 __GB_NAMESPACE_START
 ////////////////////////////////
-///                          ///
-/// C++11 Types Traits       ///
-///                          ///
+//                            //
+// C++11 Types Traits         //
+//                            //
 ////////////////////////////////
 
 template <typename T> struct Add_Const_Def { using Type = const T; };
@@ -547,13 +565,15 @@ template <typename T>          struct Remove_Extent_Def       { using Type = T; 
 template <typename T>          struct Remove_Extent_Def<T[]>  { using Type = T; };
 template <typename T, usize N> struct Remove_Extent_Def<T[N]> { using Type = T; };
 
-// TODO NOTE(bill): Do I _need_ all of these template traits?
+// TODO NOTE(bill): Do I "need" all of these template traits?
 
 ////////////////////////////////
-///                          ///
-/// C++11 Move Semantics     ///
-///                          ///
+//                            //
+// C++11 Move Semantics       //
+//                            //
 ////////////////////////////////
+
+// TODO(bill): Are these decent names? Are `forward` and `move` clear enough?
 
 template <typename T>
 inline T&&
@@ -577,10 +597,14 @@ move(T&& t)
 }
 __GB_NAMESPACE_END
 
+
+
+
+
 ////////////////////////////////
-///                          ///
-/// Defer                    ///
-///                          ///
+//                            //
+// Defer                      //
+//                            //
 ////////////////////////////////
 
 #ifndef GB_DEFER
@@ -641,6 +665,10 @@ __GB_NAMESPACE_END
 
 	*/
 #endif
+
+
+
+
 
 #if !defined(GB_CASTS_WITHOUT_NAMESPACE)
 __GB_NAMESPACE_START
@@ -735,29 +763,35 @@ __GB_NAMESPACE_START
 
 // FORENOTE(bill): There used to be a magic_cast that was equivalent to
 // a C-style cast but I removed it as I could not get it work as intented
-// for everything using only C++ style casts
+// for everything using only C++ style casts (it needed to a c-style cast)
 
 #if !defined(GB_CASTS_WITHOUT_NAMESPACE)
 __GB_NAMESPACE_END
 #endif // GB_CASTS_WITHOUT_NAMESPACE
 
+
+
+
+
 __GB_NAMESPACE_START
 
 ////////////////////////////////
-///                          ///
-/// Memory                   ///
-///                          ///
+//                            //
+// Memory                     //
+//                            //
 ////////////////////////////////
 
 template <typename T, usize N>
-inline usize array_count(T(& )[N]) { return N; }
+inline usize array_count(const T(& )[N]) { return N; }
 
 inline s64 kilobytes(s64 x) { return          (x) * 1024ll; }
 inline s64 megabytes(s64 x) { return kilobytes(x) * 1024ll; }
 inline s64 gigabytes(s64 x) { return megabytes(x) * 1024ll; }
 inline s64 terabytes(s64 x) { return gigabytes(x) * 1024ll; }
 
-/// Mutex
+
+
+
 struct Mutex
 {
 #if defined(GB_SYSTEM_WINDOWS)
@@ -776,7 +810,10 @@ bool try_lock(Mutex* mutex);
 void unlock(Mutex* mutex);
 } // namespace mutex
 
-/// Atomic Types
+
+
+
+// Atomic Types
 struct Atomic32 { u32 nonatomic; };
 struct Atomic64 { u64 nonatomic; };
 
@@ -799,6 +836,9 @@ u64  fetch_and(volatile Atomic64* object, u64 operand);
 u64  fetch_or(volatile Atomic64* object, u64 operand);
 } // namespace atomic
 
+
+
+
 struct Semaphore
 {
 #if defined(GB_SYSTEM_WINDOWS)
@@ -817,6 +857,9 @@ void destroy(Semaphore* semaphore);
 void post(Semaphore* semaphore, u32 count = 1);
 void wait(Semaphore* semaphore);
 } // namespace semaphore
+
+
+
 
 // TODO(bill): Is this thread function definitions good enough?
 using Thread_Function = void(void*);
@@ -847,28 +890,35 @@ bool is_running(const Thread& t);
 u32  current_id();
 } // namespace thread
 
-/// Default alignment for memory allocations
+
+
+
+// Default alignment for memory allocations
 #ifndef GB_DEFAULT_ALIGNMENT
 #define GB_DEFAULT_ALIGNMENT 8
 #endif
 
-/// Base class for memory allocators - Pretty much a vtable
+// Base class for memory allocators - Pretty much a vtable
 struct Allocator
 {
-	/// Allocates the specified amount of memory aligned to the specified alignment
+	// Allocates the specified amount of memory aligned to the specified alignment
 	void* (*alloc)(Allocator* a, usize size, usize align);
-	/// Frees an allocation made with alloc()
+	// Frees an allocation made with alloc()
 	void (*free)(Allocator* a, void* ptr);
-	/// Returns the amount of usuable memory allocated at `ptr`.
+	// Returns the amount of usuable memory allocated at `ptr`.
 	///
-	/// If the allocator does not support tracking of the allocation size,
-	/// the function will return -1
+	// If the allocator does not support tracking of the allocation size,
+	// the function will return -1
 	s64 (*allocated_size)(Allocator* a, const void* ptr);
-	/// Returns the total amount of memory allocated by this allocator
+	// Returns the total amount of memory allocated by this allocator
 	///
-	/// If the allocator does not track memory, the function will return -1
+	// If the allocator does not track memory, the function will return -1
 	s64 (*total_allocated)(Allocator* a);
 };
+
+
+
+
 
 struct Heap_Allocator : Allocator
 {
@@ -895,6 +945,10 @@ void destroy(Heap_Allocator* heap);
 
 // TODO(bill): Implement more Allocator types
 
+
+
+
+
 struct Arena_Allocator : Allocator
 {
 	Allocator* backing;
@@ -912,6 +966,10 @@ void destroy(Arena_Allocator* arena);
 void clear(Arena_Allocator* arena);
 } // namespace arena_allocator
 
+
+
+
+
 struct Temporary_Arena_Memory
 {
 	Arena_Allocator* arena;
@@ -923,6 +981,31 @@ namespace temporary_arena_memory
 Temporary_Arena_Memory make(Arena_Allocator* arena);
 void free(Temporary_Arena_Memory* tmp);
 } // namespace temporary_arena_memory
+
+
+
+
+struct Pool_Allocator : Allocator
+{
+	Allocator* backing;
+
+	void* physical_start;
+	void* free_list;
+
+	usize block_size;
+	usize block_align;
+	s64   total_size;
+};
+
+namespace pool_allocator
+{
+Pool_Allocator make(Allocator* backing, usize num_blocks, usize block_size,
+                    usize block_align = GB_DEFAULT_ALIGNMENT);
+void destroy(Pool_Allocator* pool);
+} // namespace pool_allocator
+
+
+
 
 namespace memory
 {
@@ -969,15 +1052,19 @@ inline T* alloc_struct(Allocator* a) { return static_cast<T*>(alloc(a, sizeof(T)
 template <typename T>
 inline T* alloc_array(Allocator* a, usize count) { return static_cast<T*>(alloc(a, count * sizeof(T), alignof(T))); }
 
+
+
+
+
 ////////////////////////////////
-///                          ///
-/// String                   ///
-///                          ///
-/// C compatible string      ///
-///                          ///
+//                            //
+// String                     //
+//                            //
+// C compatible string        //
+//                            //
 ////////////////////////////////
 
-/// A "better" string type that is compatible with C style read-only functions
+// A "better" string type that is compatible with C style read-only functions
 using String = char*;
 
 namespace string
@@ -994,7 +1081,7 @@ struct Header
 inline Header* header(String str) { return (Header*)str - 1; }
 
 String make(Allocator* a, const char* str = "");
-String make(Allocator* a, const void* str, Size length_in_bytes);
+String make(Allocator* a, const void* str, Size num_bytes);
 void   free(String str);
 
 String duplicate(Allocator* a, const String str);
@@ -1008,7 +1095,7 @@ void clear(String str);
 void append(String* str, char c);
 void append(String* str, const String other);
 void append_cstring(String* str, const char* other);
-void append(String* str, const void* other, Size length_in_bytes);
+void append(String* str, const void* other, Size num_bytes);
 
 void make_space_for(String* str, Size add_len);
 usize allocation_size(const String str);
@@ -1019,6 +1106,11 @@ int compare(const String lhs, const String rhs); // NOTE(bill): three-way compar
 void trim(String* str, const char* cut_set);
 void trim_space(String* str);
 } // namespace string
+
+
+
+
+
 // TODO(bill): string libraries
 
 namespace strconv
@@ -1049,17 +1141,21 @@ void format_int(s64 value, char* buffer, usize len);
 void format_uint(u64 value, char* buffer, usize len);
 } // namespace strconv
 
+
+
+
+
 ////////////////////////////////
-///                          ///
-/// Array                    ///
-///                          ///
+//                            //
+// Array                      //
+//                            //
 ////////////////////////////////
 
 #ifndef GB_ARRAY_BOUND_CHECKING
 #define GB_ARRAY_BOUND_CHECKING 1
 #endif
 
-/// Dynamic resizable array for POD types only
+// Dynamic resizable array for POD types only
 template <typename T>
 struct Array
 {
@@ -1087,44 +1183,48 @@ struct Array
 
 namespace array
 {
-/// Helper functions to make and free an array
+// Helper functions to make and free an array
 template <typename T> Array<T> make(Allocator* allocator, usize count = 0);
 template <typename T> void     free(Array<T>* array);
 
-/// Appends `item` to the end of the array
+// Appends `item` to the end of the array
 template <typename T> void append(Array<T>* a, const T& item);
 template <typename T> void append(Array<T>* a, T&& item);
-/// Appends `items[count]` to the end of the array
+// Appends `items[count]` to the end of the array
 template <typename T> void append(Array<T>* a, const T* items, usize count);
 
-/// Pops the last item form the array. The array cannot be empty.
+// Pops the last item form the array. The array cannot be empty.
 template <typename T> void pop(Array<T>* a);
 
-/// Removes all items from the array - does not free memory
+// Removes all items from the array - does not free memory
 template <typename T> void clear(Array<T>* a);
-/// Modify the size of a array - only reallocates when necessary
+// Modify the size of a array - only reallocates when necessary
 template <typename T> void resize(Array<T>* a, usize count);
-/// Makes sure that the array has at least the specified capacity - or the array the grows
+// Makes sure that the array has at least the specified capacity - or the array the grows
 template <typename T> void reserve(Array<T>* a, usize capacity);
-/// Reallocates the array to the specific capacity
+// Reallocates the array to the specific capacity
 template <typename T> void set_capacity(Array<T>* a, usize capacity);
-/// Grows the array to keep append() to be O(1)
+// Grows the array to keep append() to be O(1)
 template <typename T> void grow(Array<T>* a, usize min_capacity = 0);
 } // namespace array
 
-/// Used to iterate over the array with a C++11 for loop
+// Used to iterate over the array with a C++11 for loop
 template <typename T> inline       T* begin(Array<T>& a)       { return a.data; }
 template <typename T> inline const T* begin(const Array<T>& a) { return a.data; }
 template <typename T> inline       T* end(Array<T>& a)         { return a.data + a.count; }
 template <typename T> inline const T* end(const Array<T>& a)   { return a.data + a.count; }
 
+
+
+
+
 ////////////////////////////////
-///                          ///
-/// Hash Table               ///
-///                          ///
+//                            //
+// Hash Table                 //
+//                            //
 ////////////////////////////////
 
-/// Hash table for POD types only with a u64 key
+// Hash table for POD types only with a u64 key
 template <typename T>
 struct Hash_Table
 {
@@ -1153,53 +1253,57 @@ struct Hash_Table
 
 namespace hash_table
 {
-/// Helper function to make a hash table
+// Helper function to make a hash table
 template <typename T> Hash_Table<T> make(Allocator* a);
 
-/// Return `true` if the specified key exist in the hash table
+// Return `true` if the specified key exist in the hash table
 template <typename T> bool has(const Hash_Table<T>& h, u64 key);
-/// Returns the value stored at the key, or a `default_value` if the key is not found in the hash table
+// Returns the value stored at the key, or a `default_value` if the key is not found in the hash table
 template <typename T> const T& get(const Hash_Table<T>& h, u64 key, const T& default_value);
-/// Sets the value for the key in the hash table
+// Sets the value for the key in the hash table
 template <typename T> void set(Hash_Table<T>* h, u64 key, const T& value);
 template <typename T> void set(Hash_Table<T>* h, u64 key, T&& value);
-/// Removes the key from the hash table if it exists
+// Removes the key from the hash table if it exists
 template <typename T> void remove(Hash_Table<T>* h, u64 key);
-/// Resizes the hash table's lookup table to the specified size
+// Resizes the hash table's lookup table to the specified size
 template <typename T> void reserve(Hash_Table<T>* h, usize capacity);
-/// Remove all elements from the hash table
+// Remove all elements from the hash table
 template <typename T> void clear(Hash_Table<T>* h);
 } // namespace hash_table
 
-/// Used to iterate over the array with a C++11 for loop - in random order
+// Used to iterate over the array with a C++11 for loop - in random order
 template <typename T> typename const Hash_Table<T>::Entry* begin(const Hash_Table<T>& h);
 template <typename T> typename const Hash_Table<T>::Entry* end(const Hash_Table<T>& h);
 
 namespace multi_hash_table
 {
-/// Outputs all the items that with the specified key
+// Outputs all the items that with the specified key
 template <typename T> void get(const Hash_Table<T>& h, u64 key, Array<T>& items);
-/// Returns the count of entries with the specified key
+// Returns the count of entries with the specified key
 template <typename T> usize count(const Hash_Table<T>& h, u64 key);
 
-/// Finds the first entry with specified key in the hash table
+// Finds the first entry with specified key in the hash table
 template <typename T> typename const Hash_Table<T>::Entry* find_first(const Hash_Table<T>& h, u64 key);
-/// Finds the next entry with same key as `e`
+// Finds the next entry with same key as `e`
 template <typename T> typename const Hash_Table<T>::Entry* find_next(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e);
 
-/// Inserts the `value` as an additional value for the specified key
+// Inserts the `value` as an additional value for the specified key
 template <typename T> void insert(Hash_Table<T>* h, u64 key, const T& value);
 template <typename T> void insert(Hash_Table<T>* h, u64 key, T&& value);
-/// Removes a specified entry `e` from the hash table
+// Removes a specified entry `e` from the hash table
 template <typename T> void remove_entry(Hash_Table<T>* h, typename const Hash_Table<T>::Entry* e);
-/// Removes all entries with from the hash table with the specified key
+// Removes all entries with from the hash table with the specified key
 template <typename T> void remove_all(Hash_Table<T>* h, u64 key);
 } // namespace multi_hash_table
 
+
+
+
+
 ////////////////////////////////
-///                          ///
-/// Hash                     ///
-///                          ///
+//                            //
+// Hash                       //
+//                            //
 ////////////////////////////////
 
 namespace hash
@@ -1218,10 +1322,14 @@ u32 murmur32(const void* key, u32 num_bytes, u32 seed = 0x9747b28c);
 u64 murmur64(const void* key, usize num_bytes, u64 seed = 0x9747b28c);
 } // namespace hash
 
+
+
+
+
 ////////////////////////////////
-///                          ///
-/// Time                     ///
-///                          ///
+//                            //
+// Time                       //
+//                            //
 ////////////////////////////////
 
 struct Time
@@ -1283,82 +1391,36 @@ Time  operator%(Time left, Time right);
 Time& operator%=(Time& left, Time right);
 
 
+
+
+
 ////////////////////////////////
-///                          ///
-/// OS                       ///
-///                          ///
+//                            //
+// OS                         //
+//                            //
 ////////////////////////////////
 
 // TODO(bill): Should this be system:: vs os:: ?
 namespace os
 {
-u64 time_stamp_counter();
+u64 rdtsc();
 } // namespace os
 
-#if 0
-// TODO(bill): still in development
-struct File
-{
-#if defined(GB_SYSTEM_WINDOWS)
-	HANDLE win32_handle;
-	Mutex mutex;
 
-	char* name; // TODO(bill): uses malloc
 
-	bool32 is_console;
-#else
-	#error Implement file system
-#endif
-};
 
-namespace file
-{
-enum Flag : u32
-{
-	READ  = 0x1,
-	WRITE = 0x2,
-};
-
-uintptr fd(const File* file);
-
-bool new_from_fd(File* file, uintptr fd, const char* name);
-
-bool open(File* file, const char* filename, u32 flag, u32 perm);
-bool close(File* file);
-
-bool create(File* file, const char* filename, u32 flag);
-
-bool read(File* file, void* buffer, u32 bytes_to_read);
-bool write(File* file, const void* memory, u32 bytes_to_write);
-
-bool read_at(File* file, void* buffer, u32 bytes_to_read, s64 offset);
-bool write_at(File* file, const void* memory, u32 bytes_to_write, s64 offset);
-
-s64 size(File* file);
-
-bool set_pos(File* file, s64 pos);
-bool get_pos(File* file, s64* pos);
-} // namespace file
-#endif
 
 
 ////////////////////////////////
-///                          ///
-/// Implementations          ///
-///                          ///
+//                            //
+// Implementations            //
+//                            //
 ////////////////////////////////
 
 ////////////////////////////////
-///                          ///
-/// Allocators               ///
-///                          ///
-////////////////////////////////
-
-
-////////////////////////////////
-///                          ///
-/// Array                    ///
-///                          ///
+//                            //
+// Array                      //
+//                            //
 ////////////////////////////////
 
 template <typename T>
@@ -1597,9 +1659,9 @@ grow(Array<T>* a, usize min_capacity)
 } // namespace array
 
 ////////////////////////////////
-///                          ///
-/// Hash Table               ///
-///                          ///
+//                            //
+// Hash Table                 //
+//                            //
 ////////////////////////////////
 
 template <typename T>
@@ -2158,23 +2220,23 @@ __GB_NAMESPACE_END
 ///
 ///
 ///
-/// It's turtles all the way down!
+// It's turtles all the way down!
 ///
 ///
 ///
 ///
 ///
 ////////////////////////////////
-///                          ///
-/// Implemenation            ///
-///                          ///
+//                            //
+// Implemenation              //
+//                            //
 ////////////////////////////////
 #if defined(GB_IMPLEMENTATION)
 __GB_NAMESPACE_START
 ////////////////////////////////
-///                          ///
-/// Memory                   ///
-///                          ///
+//                            //
+// Memory                     //
+//                            //
 ////////////////////////////////
 
 namespace mutex
@@ -2441,7 +2503,6 @@ post(Semaphore* semaphore, u32 count)
 	GB_ASSERT(err != 0, "ReleaseSemaphore: GetLastError = %d", GetLastError());
 #else
 	mutex::lock(semaphore->mutex);
-	defer (mutex::unlock(semaphore->mutex));
 
 	for (u32 i = 0; i < count; i++)
 	{
@@ -2450,6 +2511,8 @@ post(Semaphore* semaphore, u32 count)
 	}
 
 	semaphore->count += count;
+
+	mutex::unlock(semaphore->mutex);
 #endif
 }
 
@@ -2461,7 +2524,6 @@ wait(Semaphore* semaphore)
 	GB_ASSERT(result == WAIT_OBJECT_0, "WaitForSingleObject: GetLastError = %d", GetLastError());
 #else
 	mutex::lock(semaphore->mutex);
-	defer (mutex::unlock(semaphore->mutex));
 
 	while (count <= 0)
 	{
@@ -2470,6 +2532,8 @@ wait(Semaphore* semaphore)
 	}
 
 	count--;
+
+	mutex::unlock(semaphore->mutex);
 #endif
 }
 } // namespace semaphore
@@ -2570,8 +2634,7 @@ start(Thread* t, Thread_Function* func, void* data, usize stack_size)
 void
 join(Thread* t)
 {
-	if (!t->is_running)
-		return;
+	if (!t->is_running) return;
 
 #if defined(GB_SYSTEM_WINDOWS)
 	WaitForSingleObject(t->win32_handle, INFINITE);
@@ -2626,8 +2689,7 @@ alloc(Allocator* a, usize size, usize align)
 {
 	Heap_Allocator* heap = reinterpret_cast<Heap_Allocator*>(a);
 
-	if (heap->use_mutex)
-		mutex::lock(&heap->mutex);
+	if (heap->use_mutex) mutex::lock(&heap->mutex);
 
 	usize total = size + align - (size % align);
 
@@ -2648,9 +2710,7 @@ alloc(Allocator* a, usize size, usize align)
 	heap->total_allocated_count += total;
 	heap->allocation_count++;
 
-	if (heap->use_mutex)
-		mutex::unlock(&heap->mutex);
-
+	if (heap->use_mutex) mutex::unlock(&heap->mutex);
 
 	return data;
 }
@@ -2663,8 +2723,7 @@ free(Allocator* a, void* ptr)
 
 	Heap_Allocator* heap = reinterpret_cast<Heap_Allocator*>(a);
 
-	if (heap->use_mutex)
-		mutex::lock(&heap->mutex);
+	if (heap->use_mutex) mutex::lock(&heap->mutex);
 
 	heap->total_allocated_count -= allocated_size(heap, ptr);
 	heap->allocation_count--;
@@ -2676,8 +2735,7 @@ free(Allocator* a, void* ptr)
 	::free(ptr);
 #endif
 
-	if (heap->use_mutex)
-		mutex::unlock(&heap->mutex);
+	if (heap->use_mutex) mutex::unlock(&heap->mutex);
 }
 
 inline s64
@@ -2686,13 +2744,12 @@ allocated_size(Allocator* a, const void* ptr)
 #if defined(GB_SYSTEM_WINDOWS)
 	auto* heap = reinterpret_cast<Heap_Allocator*>(a);
 
-	if (heap->use_mutex)
-		mutex::lock(&heap->mutex);
+	if (heap->use_mutex) mutex::lock(&heap->mutex);
+
 	const auto* h = static_cast<const Heap_Allocator::Header*>(ptr) - 1;
 	auto result = h->size;
 
-	if (heap->use_mutex)
-		mutex::unlock(&heap->mutex);
+	if (heap->use_mutex) mutex::unlock(&heap->mutex);
 
 	return static_cast<usize>(result);
 
@@ -2712,12 +2769,11 @@ total_allocated(Allocator* a)
 {
 	auto* heap = reinterpret_cast<Heap_Allocator*>(a);
 
-	if (heap->use_mutex)
-		mutex::lock(&heap->mutex);
+	if (heap->use_mutex) mutex::lock(&heap->mutex);
+
 	s64 result = heap->total_allocated_count;
 
-	if (heap->use_mutex)
-		mutex::unlock(&heap->mutex);
+	if (heap->use_mutex) mutex::unlock(&heap->mutex);
 
 	return result;
 }
@@ -2729,15 +2785,14 @@ make(bool use_mutex)
 	Heap_Allocator heap = {};
 
 	heap.use_mutex = use_mutex;
-	if (use_mutex)
-		heap.mutex = mutex::make();
+	if (use_mutex) heap.mutex = mutex::make();
 
 #if defined(GB_SYSTEM_WINDOWS)
 	heap.win32_heap_handle = HeapCreate(0, 0, 0);
 #endif
 
 	heap.alloc           = functions::alloc;
-	heap.free         = functions::free;
+	heap.free            = functions::free;
 	heap.allocated_size  = functions::allocated_size;
 	heap.total_allocated = functions::total_allocated;
 
@@ -2746,8 +2801,7 @@ make(bool use_mutex)
 void
 destroy(Heap_Allocator* heap)
 {
-	if (heap->use_mutex)
-		mutex::destroy(&heap->mutex);
+	if (heap->use_mutex) mutex::destroy(&heap->mutex);
 
 #if defined (GB_SYSTEM_WINDOWS)
 	HeapDestroy(heap->win32_heap_handle);
@@ -2868,8 +2922,8 @@ make(Arena_Allocator* arena)
 inline void
 free(Temporary_Arena_Memory* tmp)
 {
-	if (tmp->arena == nullptr)
-		return;
+	if (tmp->arena == nullptr) return;
+
 	GB_ASSERT(total_allocated(tmp->arena) >= tmp->original_count);
 	tmp->arena->total_allocated_count = tmp->original_count;
 	GB_ASSERT(tmp->arena->temp_count > 0);
@@ -2877,10 +2931,116 @@ free(Temporary_Arena_Memory* tmp)
 }
 } // namespace temporary_arena_memory
 
+
+
+
+namespace pool_allocator
+{
+namespace functions
+{
+internal_linkage void*
+alloc(Allocator* a, usize size, usize align)
+{
+	Pool_Allocator* pool = reinterpret_cast<Pool_Allocator*>(a);
+
+	GB_ASSERT(size  == pool->block_size,  "Size must match block size");
+	GB_ASSERT(align == pool->block_align, "Align must match block align");
+	GB_ASSERT(pool->free_list, "Pool out of memory");
+
+	uintptr next_free = *reinterpret_cast<uintptr*>(pool->free_list);
+	void* ptr = pool->free_list;
+	pool->free_list = reinterpret_cast<void*>(next_free);
+
+	pool->total_size += pool->block_size;
+
+	return ptr;
+}
+
+internal_linkage void
+free(Allocator* a, void* ptr)
+{
+	if (!ptr) return;
+
+	Pool_Allocator* pool = reinterpret_cast<Pool_Allocator*>(a);
+
+	uintptr* next = static_cast<uintptr*>(ptr);
+	*next = reinterpret_cast<uintptr>(pool->free_list);
+
+	pool->free_list = ptr;
+
+	pool->total_size -= pool->block_size;
+}
+
+internal_linkage s64
+allocated_size(Allocator*, const void*)
+{
+	return -1;
+}
+
+internal_linkage s64
+total_allocated(Allocator* a)
+{
+	Pool_Allocator* pool = reinterpret_cast<Pool_Allocator*>(a);
+	return pool->total_size;
+}
+} // namespace functions
+
+
+Pool_Allocator
+make(Allocator* backing, usize num_blocks, usize block_size, usize block_align)
+{
+	Pool_Allocator pool = {};
+
+	pool.backing     = backing;
+	pool.block_size  = block_size;
+	pool.block_align = block_align;
+
+	usize actual_block_size = block_size + block_align;
+	usize pool_size = num_blocks * actual_block_size;
+
+	u8* data = static_cast<u8*>(alloc(backing, pool_size, block_align));
+
+
+	// Init intrusive freelist
+	u8* curr = data;
+	for (usize block_index = 0; block_index < num_blocks-1; block_index++)
+	{
+		uintptr* next = reinterpret_cast<uintptr*>(curr);
+		*next = reinterpret_cast<uintptr>(curr) + actual_block_size;
+		curr += actual_block_size;
+	}
+
+	uintptr* end = reinterpret_cast<uintptr*>(curr);
+	*end = reinterpret_cast<uintptr>(nullptr);
+
+	pool.physical_start = data;
+	pool.free_list      = data;
+
+	// Set functions pointers
+	pool.alloc           = functions::alloc;
+	pool.free            = functions::free;
+	pool.allocated_size  = functions::allocated_size;
+	pool.total_allocated = functions::total_allocated;
+
+	return pool;
+}
+
+inline void
+destroy(Pool_Allocator* pool)
+{
+	free(pool->backing, pool->physical_start);
+}
+} // namespace pool_allocator
+
+
+
+
+
+
 ////////////////////////////////
-///                          ///
-/// Memory                   ///
-///                          ///
+//                            //
+// Memory                     //
+//                            //
 ////////////////////////////////
 
 namespace memory
@@ -2893,8 +3053,7 @@ align_forward(void* ptr, usize align)
 
 	uintptr p = uintptr(ptr);
 	const usize modulo = p % align;
-	if (modulo)
-		p += (align - modulo);
+	if (modulo) p += (align - modulo);
 	return reinterpret_cast<void*>(p);
 }
 
@@ -2964,8 +3123,7 @@ inline void
 free(Allocator* a, void* ptr)
 {
 	GB_ASSERT(a != nullptr);
-	if (ptr)
-		a->free(a, ptr);
+	if (ptr) a->free(a, ptr);
 }
 
 inline s64
@@ -2983,9 +3141,9 @@ total_allocated(Allocator* a)
 }
 
 ////////////////////////////////
-///                          ///
-/// String                   ///
-///                          ///
+//                            //
+// String                     //
+//                            //
 ////////////////////////////////
 
 namespace string
@@ -3001,11 +3159,9 @@ make(Allocator* a, const void* init_str, Size len)
 {
 	usize header_size = sizeof(string::Header);
 	void* ptr = alloc(a, header_size + len + 1);
-	if (!ptr)
-		return nullptr;
+	if (!ptr) return nullptr;
 
-	if (!init_str)
-		memory::zero(ptr, header_size + len + 1);
+	if (!init_str) memory::zero(ptr, header_size + len + 1);
 
 	String str = static_cast<char*>(ptr) + header_size;
 
@@ -3024,13 +3180,11 @@ make(Allocator* a, const void* init_str, Size len)
 inline void
 free(String str)
 {
-	if (str == nullptr)
-		return;
+	if (str == nullptr) return;
 
 	string::Header* h = string::header(str);
 
-	if (h->allocator)
-		free(h->allocator, h);
+	if (h->allocator) free(h->allocator, h);
 }
 
 inline String
@@ -3073,8 +3227,7 @@ append(String* str, char c)
 	Size curr_len = string::length(*str);
 
 	string::make_space_for(str, 1);
-	if (str == nullptr)
-		return;
+	if (str == nullptr) return;
 
 	(*str)[curr_len]     = c;
 	(*str)[curr_len + 1] = '\0';
@@ -3425,9 +3578,9 @@ format_uint(u64 value, char* buffer, usize len)
 
 
 ////////////////////////////////
-///                          ///
-/// Hash                     ///
-///                          ///
+//                            //
+// Hash                       //
+//                            //
 ////////////////////////////////
 
 namespace hash
@@ -3590,6 +3743,7 @@ crc32(const void* key, u32 num_bytes)
 {
 	u32 result = static_cast<u32>(~0);
 	const u8* c = reinterpret_cast<const u8*>(key);
+
 	for (u32 remaining = num_bytes; remaining--; c++)
 		result = (result >> 8) ^ (GB_CRC32_TABLE[(result ^ *c) & 0xff]);
 
@@ -3829,9 +3983,9 @@ murmur32(const void* key, u32 num_bytes, u32 seed)
 } // namespace hash
 
 ////////////////////////////////
-///                          ///
-/// Time                     ///
-///                          ///
+//                            //
+// Time                       //
+//                            //
 ////////////////////////////////
 
 const Time TIME_ZERO = time::seconds(0);
@@ -3967,196 +4121,24 @@ Time operator%(Time left, Time right) { return time::microseconds(time::as_micro
 Time& operator%=(Time& left, Time right) { return (left = left % right); }
 
 ////////////////////////////////
-///                          ///
-/// OS                       ///
-///                          ///
+//                            //
+// OS                         //
+//                            //
 ////////////////////////////////
 
 namespace os
 {
 GB_FORCE_INLINE u64
-time_stamp_counter()
+rdtsc()
 {
 #if GB_SYSTEM_WINDOWS
-	return __rdtsc();
+	return ::__rdtsc();
 #else
 	// TODO(bill): Check that rdtsc() works
-	return rdtsc();
+	return ::rdtsc();
 #endif
 }
 } // namespace os
-
-
-#if 0
-namespace file
-{
-#if defined(GB_SYSTEM_WINDOWS)
-
-internal_linkage char*
-duplicate_string(const char* string)
-{
-	usize len = strlen(string);
-	char* result = (char*)malloc(len + 1);
-	memory::copy(result, string, len);
-	result[len] = '\0';
-	return result;
-}
-
-
-uintptr
-fd(const File* file)
-{
-	if (file == nullptr)
-		return reinterpret_cast<uintptr>(INVALID_HANDLE_VALUE);
-	return reinterpret_cast<uintptr>(file->win32_handle);
-}
-
-
-bool
-new_from_fd(File* file, uintptr h, const char* name)
-{
-	GB_ASSERT(file == nullptr, "file == nullptr");
-	if (reinterpret_cast<HANDLE>(h) == INVALID_HANDLE_VALUE)
-		return false;
-	file->win32_handle = reinterpret_cast<HANDLE>(h);
-	file->name = duplicate_string(name);
-	// u32 m;
-	// file->is_console = GetConsoleMode(h, &m) != 0;
-	return true;
-}
-
-internal_linkage bool
-win32_open_file(File* file, const char* name, u32 flag, u32 perm)
-{
-	// TODO(bill):
-	return false;
-}
-
-bool
-open(File* file, const char* name, u32 flag, u32 perm)
-{
-	if (name == nullptr || name[0] == '\0') {
-		return false;
-	}
-	bool b = win32_open_file(file, name, flag, perm);
-	if (b)
-	{
-		file->mutex = mutex::make();
-		return true;
-	}
-	// TODO(bill): If directory
-
-	return false;
-}
-
-bool
-close(File* file)
-{
-	if (!file)
-		return false;
-
-	// TODO(bill): Handle directory
-
-	bool b = CloseHandle(file->win32_handle) != 0;
-	if (b)
-	{
-		free(file->name); // TODO(bill): When should this be freed?
-		mutex::destroy(&file->mutex);
-		return true;
-	}
-
-	return false;
-}
-
-// internal_linkage bool
-// win32_pread(File* file, void* buffer, u32 bytes_to_read, s64 offset)
-// {
-// 	mutex::lock(&file->mutex);
-// 	defer (mutex::unlock(&file->mutex));
-
-// 	return true;
-// }
-
-
-// bool
-// open(File* file, const char* filename, u32 flags)
-// {
-
-// 	u32 win32_flags = 0;
-// 	if (flags & file::READ)
-// 		win32_flags |= GENERIC_READ;
-// 	if (flags & file::WRITE)
-// 		win32_flags |= GENERIC_WRITE;
-
-// 	file->win32_handle = CreateFileA(filename, win32_flags, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, 0);
-// 	return (file->win32_handle != INVALID_HANDLE_VALUE);
-// }
-
-// bool
-// create(File* file, const char* filename, u32 flags)
-// {
-// 	// TODO(bill):
-// 	return false;
-// }
-
-// bool
-// close(File* file)
-// {
-// 	return (CloseHandle(file->win32_handle) != 0);
-// }
-
-
-// bool
-// read(File* file, void* buffer, u32 bytes_to_read)
-// {
-// 	DWORD win32_bytes_written;
-// 	BOOL b = ReadFile(file->win32_handle, buffer, bytes_to_read, &win32_bytes_written, nullptr);
-// 	if (!b || (bytes_to_read != win32_bytes_written))
-// 		return false;
-// 	return true;
-// }
-
-// bool
-// write(File* file, const void* memory, u32 bytes_to_write)
-// {
-// 	DWORD win32_bytes_written;
-// 	BOOL b = WriteFile(file->win32_handle, memory, bytes_to_write, &win32_bytes_written, nullptr);
-// 	if (!b || (bytes_to_write != win32_bytes_written))
-// 		return false;
-// 	return true;
-// }
-
-// bool read_at(File* file, void* buffer, u32 bytes_to_read, s64 offset)
-// {
-// 	file::set_pos(file, offset);
-// 	bool b = read(file, buffer, bytes_to_reads);
-// 	return b;
-// }
-
-// bool write_at(File* file, const void* memory, u32 bytes_to_write, s64 offset)
-// {
-// 	file::set_pos(file, offset);
-// 	bool b = write(file, memory, bytes_to_write);
-// 	return b;
-// }
-
-
-// s64
-// size(File* file)
-// {
-// 	LARGE_INTEGER file_size;
-// 	BOOL b = GetFileSizeEx(file->win32_handle, &file_size);
-// 	if (b)
-// 		return static_cast<s64>(file_size.QuadPart);
-// 	return -1;
-// }
-
-
-#else
-	#error Implement file system
-#endif
-} // namespace file
-#endif
 
 __GB_NAMESPACE_END
 
@@ -4164,6 +4146,7 @@ __GB_NAMESPACE_END
 
 /*
 Version History:
+	0.28  - Pool Allocator
 	0.27  - Dealloc to Free & More Hashing Functions
 	0.26a - Heap_Allocator Fix
 	0.26  - Better Allocation system

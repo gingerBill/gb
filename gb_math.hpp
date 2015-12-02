@@ -1,4 +1,4 @@
-// gb_math.hpp - v0.03 - public domain C++11 math library - no warranty implied; use at your own risk
+// gb_math.hpp - v0.03a - public domain C++11 math library - no warranty implied; use at your own risk
 // A C++11 math library geared towards game development
 // This is meant to be used the gb.hpp library but it doesn't have to be
 
