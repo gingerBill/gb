@@ -1,4 +1,4 @@
-// gb.hpp - v0.30 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.31 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
@@ -39,6 +39,7 @@ CONTENTS:
 
 /*
 Version History:
+	0.31  - Remove `_Allocator` suffix for allocator types
 	0.30  - sort::quick
 	0.29  - GB_ASSERT prints call stack
 	0.28  - Pool Allocator
@@ -342,24 +343,6 @@ Version History:
 	#define __GB_NAMESPACE_START namespace __GB_NAMESPACE_PREFIX {
 	#define __GB_NAMESPACE_END   } // namespace __GB_NAMESPACE_PREFIX
 #endif
-
-
-
-
-#ifndef GB_DISABLE_COPY
-#define GB_DISABLE_COPY(Type)   \
-	Type(const Type&) = delete; \
-	Type& operator=(const Type&) = delete
-#endif
-
-#ifndef GB_DISABLE_MOVE
-#define GB_DISABLE_MOVE(Type) \
-	Type(Type&&) = delete;    \
-	Type& operator=(Type&&) = delete
-#endif
-
-
-
 
 #if !defined(GB_BASIC_WITHOUT_NAMESPACE)
 __GB_NAMESPACE_START
@@ -948,9 +931,7 @@ struct Allocator
 
 
 
-// TODO(bill): Do the allocators need the `_Allocator` suffix???
-// And thus the related namespaced functions `_allocator`???
-struct Heap_Allocator : Allocator
+struct Heap : Allocator
 {
 	struct Header
 	{
@@ -967,17 +948,17 @@ struct Heap_Allocator : Allocator
 #endif
 };
 
-namespace heap_allocator
+namespace heap
 {
-Heap_Allocator make(bool use_mutex = true);
-void destroy(Heap_Allocator* heap);
-} // namespace heap_allocator
+Heap make(bool use_mutex = true);
+void destroy(Heap* heap);
+} // namespace heap
 
 
 
 
 
-struct Arena_Allocator : Allocator
+struct Arena : Allocator
 {
 	Allocator* backing;
 	void*      physical_start;
@@ -986,13 +967,13 @@ struct Arena_Allocator : Allocator
 	s64        temp_count;
 };
 
-namespace arena_allocator
+namespace arena
 {
-Arena_Allocator make(Allocator* backing, usize size);
-Arena_Allocator make(void* start, usize size);
-void destroy(Arena_Allocator* arena);
-void clear(Arena_Allocator* arena);
-} // namespace arena_allocator
+Arena make(Allocator* backing, usize size);
+Arena make(void* start, usize size);
+void destroy(Arena* arena);
+void clear(Arena* arena);
+} // namespace arena
 
 
 
@@ -1000,20 +981,20 @@ void clear(Arena_Allocator* arena);
 
 struct Temporary_Arena_Memory
 {
-	Arena_Allocator* arena;
-	s64              original_count;
+	Arena* arena;
+	s64    original_count;
 };
 
 namespace temporary_arena_memory
 {
-Temporary_Arena_Memory make(Arena_Allocator* arena);
+Temporary_Arena_Memory make(Arena* arena);
 void free(Temporary_Arena_Memory* tmp);
 } // namespace temporary_arena_memory
 
 
 
 
-struct Pool_Allocator : Allocator
+struct Pool : Allocator
 {
 	Allocator* backing;
 
@@ -1025,12 +1006,12 @@ struct Pool_Allocator : Allocator
 	s64   total_size;
 };
 
-namespace pool_allocator
+namespace pool
 {
-Pool_Allocator make(Allocator* backing, usize num_blocks, usize block_size,
-                    usize block_align = GB_DEFAULT_ALIGNMENT);
-void destroy(Pool_Allocator* pool);
-} // namespace pool_allocator
+Pool make(Allocator* backing, usize num_blocks, usize block_size,
+          usize block_align = GB_DEFAULT_ALIGNMENT);
+void destroy(Pool* pool);
+} // namespace pool
 
 
 
@@ -1106,8 +1087,8 @@ using Size = u32;
 struct Header
 {
 	Allocator* allocator;
-	Size len;
-	Size cap;
+	Size length;
+	Size capacity;
 };
 
 inline Header* header(String str) { return reinterpret_cast<Header*>(str) - 1; }
@@ -1346,8 +1327,12 @@ namespace sort
 // a <  b --> -1
 // a == b -->  0
 // a >  b --> +1
+
+// Quick Sort (Qsort)
 template <typename T, typename Comparison_Function>
 void quick(T* array, usize count, Comparison_Function compare);
+
+// TODO(bill): Implement other sorting algorithms
 } // namespace sort
 
 
@@ -2343,7 +2328,7 @@ __GB_NAMESPACE_START
 
 		char buf[sizeof(SYMBOL_INFO) + (MAX_SYM_NAME * sizeof(TCHAR))];
 
-		SYMBOL_INFO* sym = reinterpret_cast<SYMBOL_INFO*>(buf);
+		SYMBOL_INFO* sym  = reinterpret_cast<SYMBOL_INFO*>(buf);
 		sym->SizeOfStruct = sizeof(SYMBOL_INFO);
 		sym->MaxNameLen   = MAX_SYM_NAME;
 
@@ -2868,25 +2853,25 @@ current_id()
 } // namespace thread
 
 
-namespace heap_allocator
+namespace heap
 {
 namespace functions
 {
 internal_linkage void*
 alloc(Allocator* a, usize size, usize align)
 {
-	Heap_Allocator* heap = reinterpret_cast<Heap_Allocator*>(a);
+	Heap* heap = reinterpret_cast<Heap*>(a);
 
 	if (heap->use_mutex) mutex::lock(&heap->mutex);
 
 	usize total = size + align - (size % align);
 
 #if defined (GB_SYSTEM_WINDOWS)
-	total += sizeof(Heap_Allocator::Header);
+	total += sizeof(Heap::Header);
 
 	void* data = HeapAlloc(heap->win32_heap_handle, 0, total);
 
-	Heap_Allocator::Header* h = static_cast<Heap_Allocator::Header*>(data);
+	Heap::Header* h = static_cast<Heap::Header*>(data);
 	h->size = total;
 	data = (h + 1);
 
@@ -2909,7 +2894,7 @@ free(Allocator* a, void* ptr)
 	if (!ptr)
 		return;
 
-	Heap_Allocator* heap = reinterpret_cast<Heap_Allocator*>(a);
+	Heap* heap = reinterpret_cast<Heap*>(a);
 
 	if (heap->use_mutex) mutex::lock(&heap->mutex);
 
@@ -2917,7 +2902,7 @@ free(Allocator* a, void* ptr)
 	heap->allocation_count--;
 
 #if defined (GB_SYSTEM_WINDOWS)
-	auto* header = static_cast<Heap_Allocator::Header*>(ptr) - 1;
+	auto* header = static_cast<Heap::Header*>(ptr) - 1;
 	HeapFree(heap->win32_heap_handle, 0, header);
 #else
 	::free(ptr);
@@ -2930,11 +2915,11 @@ inline s64
 allocated_size(Allocator* a, const void* ptr)
 {
 #if defined(GB_SYSTEM_WINDOWS)
-	auto* heap = reinterpret_cast<Heap_Allocator*>(a);
+	auto* heap = reinterpret_cast<Heap*>(a);
 
 	if (heap->use_mutex) mutex::lock(&heap->mutex);
 
-	const auto* h = static_cast<const Heap_Allocator::Header*>(ptr) - 1;
+	const auto* h = static_cast<const Heap::Header*>(ptr) - 1;
 	auto result = h->size;
 
 	if (heap->use_mutex) mutex::unlock(&heap->mutex);
@@ -2948,14 +2933,14 @@ allocated_size(Allocator* a, const void* ptr)
 	return static_cast<usize>(malloc_usable_size(ptr));
 
 #else
-	#error Implement heap_allocator::allocated_size
+	#error Implement Heap::allocated_size
 #endif
 }
 
 inline s64
 total_allocated(Allocator* a)
 {
-	auto* heap = reinterpret_cast<Heap_Allocator*>(a);
+	auto* heap = reinterpret_cast<Heap*>(a);
 
 	if (heap->use_mutex) mutex::lock(&heap->mutex);
 
@@ -2967,10 +2952,10 @@ total_allocated(Allocator* a)
 }
 } // namespace functions
 
-Heap_Allocator
+Heap
 make(bool use_mutex)
 {
-	Heap_Allocator heap = {};
+	Heap heap = {};
 
 	heap.use_mutex = use_mutex;
 	if (use_mutex) heap.mutex = mutex::make();
@@ -2987,7 +2972,7 @@ make(bool use_mutex)
 	return heap;
 }
 void
-destroy(Heap_Allocator* heap)
+destroy(Heap* heap)
 {
 	if (heap->use_mutex) mutex::destroy(&heap->mutex);
 
@@ -2995,23 +2980,26 @@ destroy(Heap_Allocator* heap)
 	HeapDestroy(heap->win32_heap_handle);
 #endif
 }
-} // namespace heap_allocator
+} // namespace heap
 
 
-
-namespace arena_allocator
+namespace arena
 {
 namespace functions
 {
 internal_linkage void*
 alloc(Allocator* a, usize size, usize align)
 {
-	Arena_Allocator* arena = reinterpret_cast<Arena_Allocator*>(a);
+	Arena* arena = reinterpret_cast<Arena*>(a);
 
 	s64 actual_size = size + align;
 
 	if (arena->total_allocated_count + actual_size > arena->total_size)
+	{
+		GB_ASSERT(arena->total_allocated_count + actual_size <= arena->total_size,
+		          "Arena has no more space for allocation");
 		return nullptr;
+	}
 
 	void* ptr = memory::align_forward(memory::pointer_add(arena->physical_start, arena->total_allocated_count), align);
 
@@ -3020,22 +3008,21 @@ alloc(Allocator* a, usize size, usize align)
 	return ptr;
 }
 
-inline void
-free(Allocator* a, void*) {}
+inline void free(Allocator* a, void*) {} // NOTE(bill): Arenas free all at once
 
 inline s64 allocated_size(Allocator*, const void*) { return -1; }
 
 inline s64
 total_allocated(Allocator* a)
 {
-	return reinterpret_cast<Arena_Allocator*>(a)->total_allocated_count;
+	return reinterpret_cast<Arena*>(a)->total_allocated_count;
 }
 } // namespace functions
 
-Arena_Allocator
+Arena
 make(Allocator* backing, usize size)
 {
-	Arena_Allocator arena = {};
+	Arena arena = {};
 
 	arena.backing = backing;
 	arena.physical_start = nullptr;
@@ -3053,10 +3040,10 @@ make(Allocator* backing, usize size)
 	return arena;
 }
 
-Arena_Allocator
+Arena
 make(void* start, usize size)
 {
-	Arena_Allocator arena = {};
+	Arena arena = {};
 
 	arena.backing = nullptr;
 	arena.physical_start = start;
@@ -3073,7 +3060,7 @@ make(void* start, usize size)
 }
 
 void
-destroy(Arena_Allocator* arena)
+destroy(Arena* arena)
 {
 	if (arena->backing)
 		free(arena->backing, arena->physical_start);
@@ -3085,20 +3072,20 @@ destroy(Arena_Allocator* arena)
 }
 
 inline void
-clear(Arena_Allocator* arena)
+clear(Arena* arena)
 {
 	GB_ASSERT(arena->temp_count == 0,
 			  "%ld Temporary_Arena_Memory have not be cleared", arena->temp_count);
 
 	arena->total_allocated_count = 0;
 }
-} // namespace arena_allocator
+} // namespace arena
 
 
 namespace temporary_arena_memory
 {
 inline Temporary_Arena_Memory
-make(Arena_Allocator* arena)
+make(Arena* arena)
 {
 	Temporary_Arena_Memory tmp = {};
 	tmp.arena = arena;
@@ -3122,14 +3109,14 @@ free(Temporary_Arena_Memory* tmp)
 
 
 
-namespace pool_allocator
+namespace pool
 {
 namespace functions
 {
 internal_linkage void*
 alloc(Allocator* a, usize size, usize align)
 {
-	Pool_Allocator* pool = reinterpret_cast<Pool_Allocator*>(a);
+	Pool* pool = reinterpret_cast<Pool*>(a);
 
 	GB_ASSERT(size  == pool->block_size,  "Size must match block size");
 	GB_ASSERT(align == pool->block_align, "Align must match block align");
@@ -3149,7 +3136,7 @@ free(Allocator* a, void* ptr)
 {
 	if (!ptr) return;
 
-	Pool_Allocator* pool = reinterpret_cast<Pool_Allocator*>(a);
+	Pool* pool = reinterpret_cast<Pool*>(a);
 
 	uintptr* next = static_cast<uintptr*>(ptr);
 	*next = reinterpret_cast<uintptr>(pool->free_list);
@@ -3168,16 +3155,16 @@ allocated_size(Allocator*, const void*)
 internal_linkage s64
 total_allocated(Allocator* a)
 {
-	Pool_Allocator* pool = reinterpret_cast<Pool_Allocator*>(a);
+	Pool* pool = reinterpret_cast<Pool*>(a);
 	return pool->total_size;
 }
 } // namespace functions
 
 
-Pool_Allocator
+Pool
 make(Allocator* backing, usize num_blocks, usize block_size, usize block_align)
 {
-	Pool_Allocator pool = {};
+	Pool pool = {};
 
 	pool.backing     = backing;
 	pool.block_size  = block_size;
@@ -3214,11 +3201,11 @@ make(Allocator* backing, usize num_blocks, usize block_size, usize block_align)
 }
 
 inline void
-destroy(Pool_Allocator* pool)
+destroy(Pool* pool)
 {
 	free(pool->backing, pool->physical_start);
 }
-} // namespace pool_allocator
+} // namespace pool
 
 
 
@@ -3355,8 +3342,8 @@ make(Allocator* a, const void* init_str, Size len)
 
 	string::Header* header = string::header(str);
 	header->allocator = a;
-	header->len = len;
-	header->cap = len;
+	header->length    = len;
+	header->capacity  = len;
 
 	if (len && init_str)
 		memory::copy(init_str, len, str);
@@ -3384,28 +3371,28 @@ duplicate(Allocator* a, const String str)
 inline Size
 length(const String str)
 {
-	return string::header(str)->len;
+	return string::header(str)->length;
 }
 
 inline Size
 capacity(const String str)
 {
-	return string::header(str)->cap;
+	return string::header(str)->capacity;
 }
 
 inline Size
 available_space(const String str)
 {
 	string::Header* h = string::header(str);
-	if (h->cap > h->len)
-		return h->cap - h->len;
+	if (h->capacity > h->length)
+		return h->capacity - h->length;
 	return 0;
 }
 
 inline void
 clear(String str)
 {
-	string::header(str)->len = 0;
+	string::header(str)->length = 0;
 	str[0] = '\0';
 }
 
@@ -3419,7 +3406,7 @@ append(String* str, char c)
 
 	(*str)[curr_len]     = c;
 	(*str)[curr_len + 1] = '\0';
-	string::header(*str)->len = curr_len + 1;
+	string::header(*str)->length = curr_len + 1;
 }
 
 inline void
@@ -3445,7 +3432,7 @@ append(String* str, const void* other, Size other_len)
 
 	memory::copy(other, other_len, (*str) + curr_len);
 	(*str)[curr_len + other_len] = '\0';
-	string::header(*str)->len = curr_len + other_len;
+	string::header(*str)->length = curr_len + other_len;
 }
 
 namespace impl
@@ -3496,8 +3483,8 @@ make_space_for(String* str, Size add_len)
 
 	string::Header* header = static_cast<string::Header*>(new_ptr);
 	header->allocator = a;
-	header->len = len;
-	header->cap = new_len;
+	header->length    = len;
+	header->capacity  = new_len;
 
 	*str = reinterpret_cast<String>(header + 1);
 }
@@ -3568,7 +3555,7 @@ trim(String* str, const char* cut_set)
 		memory::move(start_pos, len, *str);
 	(*str)[len] = '\0';
 
-	string::header(*str)->len = len;
+	string::header(*str)->length = len;
 }
 inline void
 trim_space(String* str)
