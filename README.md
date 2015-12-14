@@ -8,6 +8,7 @@ library         | latest version | category | languages | description
 **gb.hpp**      | 0.31           | misc     | C++11     | (Experimental) A C++11 helper library without STL geared towards game development
 **gb_math.hpp** | 0.03a          | math     | C++11     | A C++11 math library geared towards game development
 **gb_ini.h**    | 0.91a          | misc     | C, C++    | A simple ini file loader library for C & C++
+**gb.h**        | 0.01           | misc     | C         | (Experiment - Unusable) A C89/C99 helpher library geared towards game development
 
 ## FAQ
 
