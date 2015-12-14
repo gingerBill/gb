@@ -1,4 +1,4 @@
-// gb.hpp - v0.31 - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.31a - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
@@ -39,6 +39,7 @@ CONTENTS:
 
 /*
 Version History:
+	0.31a - Minor fixes
 	0.31  - Remove `_Allocator` suffix for allocator types
 	0.30  - sort::quick
 	0.29  - GB_ASSERT prints call stack
@@ -2277,6 +2278,8 @@ __GB_NAMESPACE_END
 //                            //
 ////////////////////////////////
 
+#if defined(GB_IMPLEMENTATION)
+
 #if defined(GB_SYSTEM_WINDOWS)
 
 	#include <dbghelp.h>
@@ -2400,7 +2403,7 @@ gb__assert_handler(bool condition, const char* condition_str,
 }
 
 
-#if defined(GB_IMPLEMENTATION)
+
 __GB_NAMESPACE_START
 
 ////////////////////////////////

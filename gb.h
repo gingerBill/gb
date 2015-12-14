@@ -1,4 +1,4 @@
-/* gb.h - v0.02 - public domain C helper library - no warranty implied; use at your own risk */
+/* gb.h - v0.03 - public domain C helper library - no warranty implied; use at your own risk */
 /* (Experimental) A C helper library geared towards game development */
 
 /*
@@ -16,6 +16,7 @@
  /*
 Version History:
 
+	0.03  - Allocators can be passed to gb_alloc/free/etc. without cast using `typedef void *gb_Allocator_Ptr`
 	0.02  - Implement all functions (from gb.hpp)
 	0.01  - Initial Version (just prototypes)
 */
@@ -450,6 +451,9 @@ u32 gb_thread_current_id(void);
 #define GB_DEFAULT_ALIGNMENT 8
 #endif
 
+/*
+ * NOTE(bill): The cost of the function pointer lookup is minor compared to the actually allocation in most cases
+ */
 typedef struct gb_Allocator {
 	/* Allocates the specified amount of memory aligned to the specified alignment */
 	void *(*alloc)(struct gb_Allocator *a, usize size, usize align);
@@ -463,21 +467,54 @@ typedef struct gb_Allocator {
 	 */
 	s64 (*allocated_size)(struct gb_Allocator *a, const void *ptr);
 
-	/* Returns the total amount of memory allocated by this allocator */
-	/* If the allocator does not track memory, the function will return -1 */
+	/* Returns the total amount of memory allocated by this allocator
+	 * If the allocator does not track memory, the function will return -1
+	 */
 	s64 (*total_allocated)(struct gb_Allocator *a);
 } gb_Allocator;
 
-void *gb_alloc_align(gb_Allocator *a, usize size, usize align) { GB_ASSERT(a != NULL); return a->alloc(a, size, align); }
-void *gb_alloc(gb_Allocator *a, usize size) { GB_ASSERT(a != NULL); return gb_alloc_align(a, size, GB_DEFAULT_ALIGNMENT); }
+typedef void *gb_Allocator_Ptr;
+
+void *
+gb_alloc_align(gb_Allocator_Ptr allocator, usize size, usize align)
+{
+	GB_ASSERT(allocator != NULL);
+	gb_Allocator *a = allocator;
+	return a->alloc(a, size, align);
+}
+void *
+gb_alloc(gb_Allocator_Ptr allocator, usize size)
+{
+	GB_ASSERT(allocator != NULL);
+	return gb_alloc_align(allocator, size, GB_DEFAULT_ALIGNMENT);
+}
 
 #define gb_alloc_struct(allocator, Type)       cast(Type *, gb_alloc_align(allocator, sizeof(Type),         alignof(Type)))
 #define gb_alloc_array(allocator, Type, count) cast(Type *, gb_alloc_align(allocator, sizeof(Type)*(count), alignof(Type)))
 
-void gb_free(gb_Allocator *a, void *ptr) { GB_ASSERT(a != NULL); if (ptr) a->free(a, ptr); }
+void
+gb_free(gb_Allocator_Ptr allocator, void *ptr)
+{
+	GB_ASSERT(allocator != NULL);
+	gb_Allocator *a = allocator;
+	if (ptr) a->free(a, ptr);
+}
 
-s64 gb_allocated_size(gb_Allocator *a, const void *ptr) { GB_ASSERT(a != NULL); return a->allocated_size(a, ptr); }
-s64 gb_total_allocated(gb_Allocator *a) { GB_ASSERT(a != NULL); return a->total_allocated(a); }
+s64
+gb_allocated_size(gb_Allocator_Ptr allocator, const void *ptr)
+{
+	GB_ASSERT(allocator != NULL);
+	gb_Allocator *a = allocator;
+	return a->allocated_size(a, ptr);
+}
+
+s64
+gb_total_allocated(gb_Allocator_Ptr allocator)
+{
+	GB_ASSERT(allocator != NULL);
+	gb_Allocator *a = allocator;
+	return a->total_allocated(a);
+}
 
 
 
@@ -615,9 +652,14 @@ typedef struct gb_Array_Header {
 /**********************************/
 
 
+/* Pascal like strings in C */
 typedef char *gb_String;
 
+#ifndef GB_STRING_SIZE
+#define GB_STRING_SIZE
+/* define GB_STRING_SIZE to allow for a custom size e.g. u16, usize, int, etc. */
 typedef u32 gb_String_Size;
+#endif
 
 typedef struct gb_String_Header {
 	gb_Allocator  *allocator;
@@ -723,25 +765,73 @@ f32     gb_time_div_time(gb_Time num, gb_Time dom);
 #endif /* extern "C" */
 #endif
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+// Woo hoo!
+//
+//
+//
+//
+//
+////////////////////////////////
+//                            //
+// Implemenation              //
+//                            //
+////////////////////////////////
 #if defined(GB_IMPLEMENTATION)
 #if defined(__cplusplus)
 extern "C" {
@@ -1235,7 +1325,7 @@ gb__heap_free(gb_Allocator *a, void *ptr)
 
 	if (heap->use_mutex) gb_mutex_lock(&heap->mutex);
 
-	heap->total_allocated_count -= gb_allocated_size(&heap->base, ptr);
+	heap->total_allocated_count -= gb_allocated_size(heap, ptr);
 	heap->allocation_count--;
 
 #if defined (GB_SYSTEM_WINDOWS)
@@ -1440,7 +1530,7 @@ gb_make_temporary_arena_memory(gb_Arena *arena)
 void
 gb_temporary_arena_memory_free(gb_Temporary_Arena_Memory tmp)
 {
-	GB_ASSERT(gb_total_allocated(&tmp.arena->base) >= tmp.original_count);
+	GB_ASSERT(gb_total_allocated(tmp.arena) >= tmp.original_count);
 	tmp.arena->total_allocated_count = tmp.original_count;
 	GB_ASSERT(tmp.arena->temp_count > 0);
 	tmp.arena->temp_count--;

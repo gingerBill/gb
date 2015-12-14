@@ -5,9 +5,9 @@ gb single-file public domain libraries for C &amp; C++
 library         | latest version | category | languages | description
 ----------------|----------------|----------|-----------|-------------
 **gb_string.h** | 0.93           | strings  | C, C++    | A better string library for C & C++
-**gb.hpp**      | 0.31           | misc     | C++11     | (Experimental) A C++11 helper library without STL geared towards game development
+**gb.hpp**      | 0.31a          | misc     | C++11     | (Experimental) A C++11 helper library without STL geared towards game development
 **gb_math.hpp** | 0.03a          | math     | C++11     | A C++11 math library geared towards game development
-**gb.h**        | 0.02           | misc     | C         | (Experimental) A C helpher library geared towards game development (port of gb.hpp)
+**gb.h**        | 0.03           | misc     | C         | (Experimental) A C helpher library geared towards game development (port of gb.hpp)
 **gb_ini.h**    | 0.91a          | misc     | C, C++    | A simple ini file loader library for C & C++
 
 ## FAQ
