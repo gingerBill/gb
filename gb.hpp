@@ -284,9 +284,8 @@ Version History:
 		// optional printf style error messages
 		extern "C" void
 		gb__assert_handler(bool condition, const char* condition_str,
-						   const char* filename, size_t line,
-						   const char* error_text = nullptr, ...);
-
+		                   const char* filename, size_t line,
+		                   const char* error_text = nullptr, ...);
 	#else
 		#define GB_ASSERT(x, ...) ((void)sizeof(x))
 	#endif
@@ -988,7 +987,7 @@ struct Temporary_Arena_Memory
 namespace temporary_arena_memory
 {
 Temporary_Arena_Memory make(Arena* arena);
-void free(Temporary_Arena_Memory* tmp);
+void free(Temporary_Arena_Memory tmp);
 } // namespace temporary_arena_memory
 
 
@@ -2278,11 +2277,6 @@ __GB_NAMESPACE_END
 //                            //
 ////////////////////////////////
 
-#if defined(GB_IMPLEMENTATION)
-__GB_NAMESPACE_START
-
-
-
 #if defined(GB_SYSTEM_WINDOWS)
 
 	#include <dbghelp.h>
@@ -2405,6 +2399,9 @@ gb__assert_handler(bool condition, const char* condition_str,
 #endif
 }
 
+
+#if defined(GB_IMPLEMENTATION)
+__GB_NAMESPACE_START
 
 ////////////////////////////////
 //                            //
@@ -2558,7 +2555,7 @@ store(volatile Atomic64* object, u64 value)
 inline u64
 compare_exchange_strong(volatile Atomic64* object, u64 expected, u64 desired)
 {
-	_InterlockedCompareExchange64(reinterpret_cast<volatile s64*>(object), desired, expected);
+	return _InterlockedCompareExchange64(reinterpret_cast<volatile s64*>(object), desired, expected);
 }
 
 inline u64
@@ -2675,7 +2672,7 @@ post(Semaphore* semaphore, u32 count)
 	BOOL err = ReleaseSemaphore(semaphore->win32_handle, count, nullptr);
 	GB_ASSERT(err != 0, "ReleaseSemaphore: GetLastError = %d", GetLastError());
 #else
-	mutex::lock(semaphore->mutex);
+	mutex::lock(&semaphore->mutex);
 
 	for (u32 i = 0; i < count; i++)
 	{
@@ -2685,7 +2682,7 @@ post(Semaphore* semaphore, u32 count)
 
 	semaphore->count += count;
 
-	mutex::unlock(semaphore->mutex);
+	mutex::unlock(&semaphore->mutex);
 #endif
 }
 
@@ -2696,7 +2693,7 @@ wait(Semaphore* semaphore)
 	DWORD result = WaitForSingleObject(semaphore->win32_handle, INFINITE);
 	GB_ASSERT(result == WAIT_OBJECT_0, "WaitForSingleObject: GetLastError = %d", GetLastError());
 #else
-	mutex::lock(semaphore->mutex);
+	mutex::lock(&semaphore->mutex);
 
 	while (count <= 0)
 	{
@@ -2706,7 +2703,7 @@ wait(Semaphore* semaphore)
 
 	count--;
 
-	mutex::unlock(semaphore->mutex);
+	mutex::unlock(&semaphore->mutex);
 #endif
 }
 } // namespace semaphore
@@ -2920,17 +2917,17 @@ allocated_size(Allocator* a, const void* ptr)
 	if (heap->use_mutex) mutex::lock(&heap->mutex);
 
 	const auto* h = static_cast<const Heap::Header*>(ptr) - 1;
-	auto result = h->size;
+	s64 result = h->size;
 
 	if (heap->use_mutex) mutex::unlock(&heap->mutex);
 
-	return static_cast<usize>(result);
+	return static_cast<s64>(result);
 
 #elif defined(GB_SYSTEM_OSX)
-	return static_cast<usize>(malloc_size(ptr));
+	return static_cast<s64>(malloc_size(ptr));
 
 #elif defined(GB_SYSTEM_LINUX)
-	return static_cast<usize>(malloc_usable_size(ptr));
+	return static_cast<s64>(malloc_usable_size(ptr));
 
 #else
 	#error Implement Heap::allocated_size
@@ -3008,7 +3005,7 @@ alloc(Allocator* a, usize size, usize align)
 	return ptr;
 }
 
-inline void free(Allocator* a, void*) {} // NOTE(bill): Arenas free all at once
+inline void free(Allocator*, void*) {} // NOTE(bill): Arenas free all at once
 
 inline s64 allocated_size(Allocator*, const void*) { return -1; }
 
@@ -3033,7 +3030,7 @@ make(Allocator* backing, usize size)
 	arena.physical_start = alloc(arena.backing, size);
 
 	arena.alloc           = functions::alloc;
-	arena.free         = functions::free;
+	arena.free            = functions::free;
 	arena.allocated_size  = functions::allocated_size;
 	arena.total_allocated = functions::total_allocated;
 
@@ -3052,7 +3049,7 @@ make(void* start, usize size)
 	arena.total_allocated_count = 0;
 
 	arena.alloc           = functions::alloc;
-	arena.free         = functions::free;
+	arena.free            = functions::free;
 	arena.allocated_size  = functions::allocated_size;
 	arena.total_allocated = functions::total_allocated;
 
@@ -3065,10 +3062,7 @@ destroy(Arena* arena)
 	if (arena->backing)
 		free(arena->backing, arena->physical_start);
 
-	GB_ASSERT(arena->temp_count == 0,
-			  "%ld Temporary_Arena_Memory have not be cleared", arena->temp_count);
-
-	arena->total_allocated_count = 0;
+	clear(arena);
 }
 
 inline void
@@ -3095,14 +3089,12 @@ make(Arena* arena)
 }
 
 inline void
-free(Temporary_Arena_Memory* tmp)
+free(Temporary_Arena_Memory tmp)
 {
-	if (tmp->arena == nullptr) return;
-
-	GB_ASSERT(total_allocated(tmp->arena) >= tmp->original_count);
-	tmp->arena->total_allocated_count = tmp->original_count;
-	GB_ASSERT(tmp->arena->temp_count > 0);
-	tmp->arena->temp_count--;
+	GB_ASSERT(total_allocated(tmp.arena) >= tmp.original_count);
+	tmp.arena->total_allocated_count = tmp.original_count;
+	GB_ASSERT(tmp.arena->temp_count > 0);
+	tmp.arena->temp_count--;
 }
 } // namespace temporary_arena_memory
 
@@ -3120,7 +3112,7 @@ alloc(Allocator* a, usize size, usize align)
 
 	GB_ASSERT(size  == pool->block_size,  "Size must match block size");
 	GB_ASSERT(align == pool->block_align, "Align must match block align");
-	GB_ASSERT(pool->free_list, "Pool out of memory");
+	GB_ASSERT(pool->free_list != nullptr, "Pool out of memory");
 
 	uintptr next_free = *reinterpret_cast<uintptr*>(pool->free_list);
 	void* ptr = pool->free_list;
@@ -3778,7 +3770,7 @@ fnv64(const void* key, usize num_bytes)
 
 	for (usize i = 0; i < num_bytes; i++)
 	{
-		h = (h * 0x100000001B3ll) ^ buffer[i];
+		h = (h * 0x100000001b3ll) ^ buffer[i];
 	}
 
 	return h;
@@ -3806,7 +3798,7 @@ fnv64a(const void* key, usize num_bytes)
 
 	for (usize i = 0; i < num_bytes; i++)
 	{
-		h = (h ^ buffer[i]) * 0x100000001B3ll;
+		h = (h ^ buffer[i]) * 0x100000001b3ll;
 	}
 
 	return h;
@@ -3815,12 +3807,12 @@ fnv64a(const void* key, usize num_bytes)
 u32
 murmur32(const void* key, u32 num_bytes, u32 seed)
 {
-	local_persist const u32 c1 = 0xcc9e2d51;
-	local_persist const u32 c2 = 0x1b873593;
-	local_persist const u32 r1 = 15;
-	local_persist const u32 r2 = 13;
-	local_persist const u32 m = 5;
-	local_persist const u32 n = 0xe6546b64;
+	const u32 c1 = 0xcc9e2d51;
+	const u32 c2 = 0x1b873593;
+	const u32 r1 = 15;
+	const u32 r2 = 13;
+	const u32 m = 5;
+	const u32 n = 0xe6546b64;
 
 	u32 hash = seed;
 
@@ -3867,8 +3859,8 @@ murmur32(const void* key, u32 num_bytes, u32 seed)
 	u64
 	murmur64(const void* key, usize num_bytes, u64 seed)
 	{
-		local_persist const u64 m = 0xc6a4a7935bd1e995ULL;
-		local_persist const s32 r = 47;
+		const u64 m = 0xc6a4a7935bd1e995ULL;
+		const s32 r = 47;
 
 		u64 h = seed ^ (num_bytes * m);
 
@@ -3911,8 +3903,8 @@ murmur32(const void* key, u32 num_bytes, u32 seed)
 	u64
 	murmur64(const void* key, usize num_bytes, u64 seed)
 	{
-		local_persist const u32 m = 0x5bd1e995;
-		local_persist const s32 r = 24;
+		const u32 m = 0x5bd1e995;
+		const s32 r = 24;
 
 		u32 h1 = static_cast<u32>(seed) ^ static_cast<u32>(num_bytes);
 		u32 h2 = static_cast<u32>(seed >> 32);
@@ -4072,10 +4064,10 @@ namespace time
 #endif
 
 Time seconds(f32 s)              { return {static_cast<s64>(s * 1000000ll)}; }
-Time milliseconds(s32 ms)        { return {static_cast<s64>(ms * 1000l)}; }
+Time milliseconds(s32 ms)        { return {static_cast<s64>(ms * 1000ll)}; }
 Time microseconds(s64 us)        { return {us}; }
 f32  as_seconds(Time t)      { return static_cast<f32>(t.microseconds / 1000000.0f); }
-s32  as_milliseconds(Time t) { return static_cast<s32>(t.microseconds / 1000l); }
+s32  as_milliseconds(Time t) { return static_cast<s32>(t.microseconds / 1000ll); }
 s64  as_microseconds(Time t) { return t.microseconds; }
 } // namespace time
 
