@@ -1,4 +1,4 @@
-/* gb.h - v0.04 - public domain C helper library - no warranty implied; use at your own risk */
+/* gb.h - v0.04a - public domain C helper library - no warranty implied; use at your own risk */
 /* (Experimental) A C helper library geared towards game development */
 
 /*
@@ -15,7 +15,7 @@
 
  /*
 Version History:
-
+	0.04a - Remove C++ specific macros
 	0.04  - Allow for no <stdio.h>
 	0.03  - Allocators can be passed to gb_alloc/free/etc. without cast using `typedef void *gb_Allocator_Ptr`
 	0.02  - Implement all functions (from gb.hpp)
@@ -147,23 +147,6 @@ extern "C" {
 #endif
 
 #define GB_IS_POWER_OF_TWO(x) ((x) != 0) && !((x) & ((x) - 1))
-
-
-#if !defined(GB_HAS_NO_CONSTEXPR)
-	#if defined(_GNUC_VER) && _GNUC_VER < 406  /* Less than gcc 4.06 */
-		#define GB_HAS_NO_CONSTEXPR 1
-	#elif defined(_MSC_VER) && _MSC_VER < 1900 /* Less than Visual Studio 2015/MSVC++ 14.0 */
-		#define GB_HAS_NO_CONSTEXPR 1
-	#elif !defined(__GXX_EXPERIMENTAL_CXX0X__) && __cplusplus < 201103L
-		#define GB_HAS_NO_CONSTEXPR 1
-	#endif
-#endif
-
-#if defined(GB_HAS_NO_CONSTEXPR)
-	#define GB_CONSTEXPR
-#else
-	#define GB_CONSTEXPR constexpr
-#endif
 
 #ifndef GB_FORCE_INLINE
 	#if defined(_MSC_VER)
