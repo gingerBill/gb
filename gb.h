@@ -1,4 +1,4 @@
-/* gb.h - v0.03 - public domain C helper library - no warranty implied; use at your own risk */
+/* gb.h - v0.04 - public domain C helper library - no warranty implied; use at your own risk */
 /* (Experimental) A C helper library geared towards game development */
 
 /*
@@ -16,6 +16,7 @@
  /*
 Version History:
 
+	0.04  - Allow for no <stdio.h>
 	0.03  - Allocators can be passed to gb_alloc/free/etc. without cast using `typedef void *gb_Allocator_Ptr`
 	0.02  - Implement all functions (from gb.hpp)
 	0.01  - Initial Version (just prototypes)
@@ -172,8 +173,9 @@ extern "C" {
 	#endif
 #endif
 
-#include <math.h>
+#if !defined(GB_NO_STDIO)
 #include <stdio.h>
+#endif
 #include <assert.h>
 
 #if defined(GB_SYSTEM_WINDOWS)
@@ -190,7 +192,6 @@ extern "C" {
 	#undef WIN32_EXTRA_LEAN
 	#undef WIN32_LEAN_AND_MEAN
 
-	#include <intrin.h>
 #else
 	#include <pthread.h>
 	#include <sys/time.h>
@@ -205,20 +206,23 @@ extern "C" {
 #define NULL ((void *)0)
 #endif
 
-#if !defined(NDEBUG)
+#if defined(NDEBUG)
+	#define GB_ASSERT(cond) ((void)(0))
+#else
 	/* TODO(bill): Do a better assert */
 	#define GB_ASSERT(cond) assert(cond)
-#else
-	#define GB_ASSERT(cond) ((void)(cond))
 #endif
 
-#define GB_STATIC_ASSERT(COND, MSG) typedef char gb__static_assertion_##MSG[(!!(COND))*2-1]
+#define GB_STATIC_ASSERT(cond, msg) typedef char gb__static_assertion_##msg[(!!(cond))*2-1]
 /* token pasting madness: */
 #define GB_COMPILE_TIME_ASSERT3(cond, line) GB_STATIC_ASSERT(cond, static_assertion_at_line_##line)
 #define GB_COMPILE_TIME_ASSERT2(cond, line) GB_COMPILE_TIME_ASSERT3(cond, line)
 #define GB_COMPILE_TIME_ASSERT(cond)        GB_COMPILE_TIME_ASSERT2(cond, __LINE__)
-/* snprintf_msvc */
-#if defined(_MSC_VER)
+
+
+
+#if !defined(GB_NO_STDIO) && defined(_MSC_VER)
+	/* snprintf_msvc */
 	int gb__vsnprintf_compatible(char *buffer, size_t size, const char *format, va_list args)
 	{
 		int result = -1;
@@ -240,7 +244,7 @@ extern "C" {
 		#define snprintf  gb__snprintf_compatible
 		#define vsnprintf gb__vsnprintf_compatible
 	#endif /* GB_DO_NOT_USE_MSVC_SPRINTF_FIX */
-#endif
+#endif /* !defined(GB_NO_STDIO) */
 
 #if defined(_MSC_VER)
 	typedef unsigned __int8  u8;
@@ -252,6 +256,8 @@ extern "C" {
 	typedef unsigned __int64 u64;
 	typedef   signed __int64 s64;
 #else
+	#include <stdint.h>
+
 	typedef uint8_t  u8;
 	typedef  int8_t  s8;
 	typedef uint16_t u16;
@@ -331,7 +337,15 @@ typedef ptrdiff_t ptrdiff;
 
 /* NOTE(bill): Easier to grep/find for casts */
 /* Still not as type safe as C++ static_cast, reinterpret_cast, const_cast */
-#define cast(Type, var) ((Type)(var))
+#define cast(Type, src) ((Type)(src))
+
+#if defined(GB_COMPILER_GNU_GCC)
+	#define bit_cast(Type, src) ({ GB_ASSERT(sizeof(Type) <= sizeof(src)); Type dst; memcpy(&dst, &(src), sizeof(Type)); dst; })
+#endif
+
+#define pseudo_cast(Type, src) (*cast(Type *, &(src)))
+
+#define GB_UNUSED(x) cast(void, sizeof(x))
 
 
 /**********************************/
@@ -1438,15 +1452,15 @@ gb__arena_alloc(gb_Allocator *a, usize size, usize align)
 internal_linkage void
 gb__arena_free(gb_Allocator *a, void *ptr) /* NOTE(bill): Arenas free all at once */
 {
-	cast(void, a);
-	cast(void, ptr);
+	GB_UNUSED(a);
+	GB_UNUSED(ptr);
 }
 
 internal_linkage s64
 gb__arena_allocated_size(gb_Allocator *a, const void* ptr)
 {
-	cast(void, a);
-	cast(void, ptr);
+	GB_UNUSED(a);
+	GB_UNUSED(ptr);
 	return -1;
 }
 
@@ -1579,8 +1593,8 @@ gb__pool_free(gb_Allocator *a, void *ptr)
 internal_linkage s64
 gb__pool_allocated_size(gb_Allocator *a, const void *ptr)
 {
-	cast(void, a);
-	cast(void, ptr);
+	GB_UNUSED(a);
+	GB_UNUSED(ptr);
 	return -1;
 }
 
