@@ -16,8 +16,9 @@
  /*
 Version History:
 
+	0.04a - Change conventions to be in keeping with `gb.hpp`
 	0.04  - Allow for no <stdio.h>
-	0.03  - Allocators can be passed to gb_alloc/free/etc. without cast using `typedef void *gb_Allocator_Ptr`
+	0.03  - Allocators can be passed to gb_alloc/free/etc. without cast using `typedef void* gb_Allocator_Ptr`
 	0.02  - Implement all functions (from gb.hpp)
 	0.01  - Initial Version (just prototypes)
 */
@@ -41,7 +42,7 @@ extern "C" {
 
 /* Example for static defines
 
-	global_variable const f32 TAU = 6.283185f;
+	global_variable f32 const TAU = 6.283185f;
 	global_variable void* g_memory;
 
 	internal_linkage void
@@ -142,7 +143,7 @@ extern "C" {
 
 #ifndef GB_EDIAN_ORDER
 #define GB_EDIAN_ORDER
-	#define GB_IS_BIG_EDIAN    (!*(unsigned char *)&(unsigned short){1})
+	#define GB_IS_BIG_EDIAN    (!*(unsigned char*)&(unsigned short){1})
 	#define GB_IS_LITTLE_EDIAN (!GB_IS_BIG_EDIAN)
 #endif
 
@@ -203,7 +204,7 @@ extern "C" {
 #endif
 
 #ifndef NULL
-#define NULL ((void *)0)
+#define NULL ((void*)0)
 #endif
 
 #if defined(NDEBUG)
@@ -223,7 +224,8 @@ extern "C" {
 
 #if !defined(GB_NO_STDIO) && defined(_MSC_VER)
 	/* snprintf_msvc */
-	int gb__vsnprintf_compatible(char *buffer, size_t size, const char *format, va_list args)
+	int
+	gb__vsnprintf_compatible(char* buffer, size_t size, char const* format, va_list args)
 	{
 		int result = -1;
 		if (size > 0) result = _vsnprintf_s(buffer, size, _TRUNCATE, format, args);
@@ -231,7 +233,8 @@ extern "C" {
 		return result;
 	}
 
-	int gb__snprintf_compatible(char *buffer, size_t size, const char *format, ...)
+	int
+	gb__snprintf_compatible(char* buffer, size_t size, char const* format, ...)
 	{
 		va_list args;
 		va_start(args, format);
@@ -343,7 +346,7 @@ typedef ptrdiff_t ptrdiff;
 	#define bit_cast(Type, src) ({ GB_ASSERT(sizeof(Type) <= sizeof(src)); Type dst; memcpy(&dst, &(src), sizeof(Type)); dst; })
 #endif
 
-#define pseudo_cast(Type, src) (*cast(Type *, &(src)))
+#define pseudo_cast(Type, src) (*cast(Type*, &(src)))
 
 #define GB_UNUSED(x) cast(void, sizeof(x))
 
@@ -363,7 +366,8 @@ typedef ptrdiff_t ptrdiff;
 #define GB_TERABYTES(x) (GB_GIGABYTES(x) * 1024ll)
 
 
-typedef struct gb_Mutex {
+typedef struct gb_Mutex
+{
 #if defined(GB_SYSTEM_WINDOWS)
 	HANDLE win32_mutex;
 #else
@@ -372,10 +376,10 @@ typedef struct gb_Mutex {
 } gb_Mutex;
 
 gb_Mutex gb_mutex_make(void);
-void     gb_mutex_destroy(gb_Mutex *mutex);
-void     gb_mutex_lock(gb_Mutex *mutex);
-bool32   gb_mutex_try_lock(gb_Mutex *mutex);
-void     gb_mutex_unlock(gb_Mutex *mutex);
+void     gb_mutex_destroy(gb_Mutex* mutex);
+void     gb_mutex_lock(gb_Mutex* mutex);
+bool32   gb_mutex_try_lock(gb_Mutex* mutex);
+void     gb_mutex_unlock(gb_Mutex* mutex);
 
 
 
@@ -384,27 +388,28 @@ void     gb_mutex_unlock(gb_Mutex *mutex);
 typedef struct gb_Atomic32 { u32 nonatomic; } gb_Atomic32;
 typedef struct gb_Atomic64 { u64 nonatomic; } gb_Atomic64;
 
-u32  gb_atomic32_load(const volatile gb_Atomic32 *a);
-void gb_atomic32_store(volatile gb_Atomic32 *a, u32 value);
-u32  gb_atomic32_compare_exchange_strong(volatile gb_Atomic32 *a, u32 expected, u32 desired);
-u32  gb_atomic32_exchanged(volatile gb_Atomic32 *a, u32 desired);
-u32  gb_atomic32_fetch_add(volatile gb_Atomic32 *a, s32 operand);
-u32  gb_atomic32_fetch_and(volatile gb_Atomic32 *a, u32 operand);
-u32  gb_atomic32_fetch_or(volatile gb_Atomic32 *a, u32 operand);
+u32  gb_atomic32_load(gb_Atomic32 const volatile* a);
+void gb_atomic32_store(gb_Atomic32 volatile* a, u32 value);
+u32  gb_atomic32_compare_exchange_strong(gb_Atomic32 volatile* a, u32 expected, u32 desired);
+u32  gb_atomic32_exchanged(gb_Atomic32 volatile* a, u32 desired);
+u32  gb_atomic32_fetch_add(gb_Atomic32 volatile* a, s32 operand);
+u32  gb_atomic32_fetch_and(gb_Atomic32 volatile* a, u32 operand);
+u32  gb_atomic32_fetch_or(gb_Atomic32 volatile* a, u32 operand);
 
-u64  gb_atomic64_load(const volatile gb_Atomic64 *a);
-void gb_atomic64_store(volatile gb_Atomic64 *a, u64 value);
-u64  gb_atomic64_compare_exchange_strong(volatile gb_Atomic64 *a, u64 expected, u64 desired);
-u64  gb_atomic64_exchanged(volatile gb_Atomic64 *a, u64 desired);
-u64  gb_atomic64_fetch_add(volatile gb_Atomic64 *a, s64 operand);
-u64  gb_atomic64_fetch_and(volatile gb_Atomic64 *a, u64 operand);
-u64  gb_atomic64_fetch_or(volatile gb_Atomic64 *a, u64 operand);
-
-
+u64  gb_atomic64_load(gb_Atomic64 const volatile* a);
+void gb_atomic64_store(gb_Atomic64 volatile* a, u64 value);
+u64  gb_atomic64_compare_exchange_strong(gb_Atomic64 volatile* a, u64 expected, u64 desired);
+u64  gb_atomic64_exchanged(gb_Atomic64 volatile* a, u64 desired);
+u64  gb_atomic64_fetch_add(gb_Atomic64 volatile* a, s64 operand);
+u64  gb_atomic64_fetch_and(gb_Atomic64 volatile* a, u64 operand);
+u64  gb_atomic64_fetch_or(gb_Atomic64 volatile* a, u64 operand);
 
 
 
-typedef struct gb_Semaphore {
+
+
+typedef struct gb_Semaphore
+{
 #if defined(GB_SYSTEM_WINDOWS)
 	HANDLE win32_handle;
 #else
@@ -415,10 +420,10 @@ typedef struct gb_Semaphore {
 } gb_Semaphore;
 
 gb_Semaphore gb_semaphore_make(void);
-void gb_semaphore_destroy(gb_Semaphore *s);
-void gb_semaphore_post(gb_Semaphore *s);
-void gb_semaphore_post_count(gb_Semaphore *s, u32 count);
-void gb_semaphore_wait(gb_Semaphore *s);
+void gb_semaphore_destroy(gb_Semaphore* s);
+void gb_semaphore_post(gb_Semaphore* s);
+void gb_semaphore_post_count(gb_Semaphore* s, u32 count);
+void gb_semaphore_wait(gb_Semaphore* s);
 
 
 
@@ -426,15 +431,16 @@ void gb_semaphore_wait(gb_Semaphore *s);
 
 typedef void(gb_Thread_Procedure)(void*);
 
-typedef struct gb_Thread {
+typedef struct gb_Thread
+{
 #if defined(GB_SYSTEM_WINDOWS)
 	HANDLE win32_handle;
 #else
 	pthread_t posix_handle;
 #endif
 
-	gb_Thread_Procedure *proc;
-	void                *data;
+	gb_Thread_Procedure* proc;
+	void*                data;
 
 	gb_Semaphore semaphore;
 	usize        stack_size;
@@ -442,11 +448,11 @@ typedef struct gb_Thread {
 } gb_Thread;
 
 gb_Thread gb_thread_make(void);
-void      gb_thread_destroy(gb_Thread *t);
-void      gb_thread_start(gb_Thread *t,  gb_Thread_Procedure *proc, void *data);
-void      gb_thread_start_with_stack(gb_Thread *t, gb_Thread_Procedure *proc, void *data, usize stack_size);
-void      gb_thread_join(gb_Thread *t);
-bool32    gb_thread_is_running(const gb_Thread *t); /* NOTE(bill): Can this be just pass by value? */
+void      gb_thread_destroy(gb_Thread* t);
+void      gb_thread_start(gb_Thread* t, gb_Thread_Procedure* proc, void* data);
+void      gb_thread_start_with_stack(gb_Thread* t, gb_Thread_Procedure* proc, void* data, usize stack_size);
+void      gb_thread_join(gb_Thread* t);
+bool32    gb_thread_is_running(gb_Thread t);
 
 u32 gb_thread_current_id(void);
 
@@ -468,57 +474,58 @@ u32 gb_thread_current_id(void);
 /*
  * NOTE(bill): The cost of the function pointer lookup is minor compared to the actually allocation in most cases
  */
-typedef struct gb_Allocator {
+typedef struct gb_Allocator
+{
 	/* Allocates the specified amount of memory aligned to the specified alignment */
-	void *(*alloc)(struct gb_Allocator *a, usize size, usize align);
+	void* (*alloc)(struct gb_Allocator* a, usize size, usize align);
 
 	/* Frees an allocation made with alloc() */
-	void (*free)(struct gb_Allocator *a, void *ptr);
+	void (*free)(struct gb_Allocator* a, void* ptr);
 
 	/* Returns the amount of usuable memory allocated at `ptr`.
 	 * If the allocator does not support tracking of the allocation size,
 	 * the function will return -1
 	 */
-	s64 (*allocated_size)(struct gb_Allocator *a, const void *ptr);
+	s64 (*allocated_size)(struct gb_Allocator* a, void const* ptr);
 
 	/* Returns the total amount of memory allocated by this allocator
 	 * If the allocator does not track memory, the function will return -1
 	 */
-	s64 (*total_allocated)(struct gb_Allocator *a);
+	s64 (*total_allocated)(struct gb_Allocator* a);
 } gb_Allocator;
 
-typedef void *gb_Allocator_Ptr;
+typedef void* gb_Allocator_Ptr;
 
-void *
+void*
 gb_alloc_align(gb_Allocator_Ptr allocator, usize size, usize align)
 {
 	GB_ASSERT(allocator != NULL);
-	gb_Allocator *a = allocator;
+	gb_Allocator* a = allocator;
 	return a->alloc(a, size, align);
 }
-void *
+void*
 gb_alloc(gb_Allocator_Ptr allocator, usize size)
 {
 	GB_ASSERT(allocator != NULL);
 	return gb_alloc_align(allocator, size, GB_DEFAULT_ALIGNMENT);
 }
 
-#define gb_alloc_struct(allocator, Type)       cast(Type *, gb_alloc_align(allocator, sizeof(Type),         alignof(Type)))
-#define gb_alloc_array(allocator, Type, count) cast(Type *, gb_alloc_align(allocator, sizeof(Type)*(count), alignof(Type)))
+#define gb_alloc_struct(allocator, Type)       cast((Type)*, gb_alloc_align(allocator, sizeof(Type),         alignof(Type)))
+#define gb_alloc_array(allocator, Type, count) cast((Type)*, gb_alloc_align(allocator, sizeof(Type)*(count), alignof(Type)))
 
 void
-gb_free(gb_Allocator_Ptr allocator, void *ptr)
+gb_free(gb_Allocator_Ptr allocator, void* ptr)
 {
 	GB_ASSERT(allocator != NULL);
-	gb_Allocator *a = allocator;
+	gb_Allocator* a = allocator;
 	if (ptr) a->free(a, ptr);
 }
 
 s64
-gb_allocated_size(gb_Allocator_Ptr allocator, const void *ptr)
+gb_allocated_size(gb_Allocator_Ptr allocator, void const* ptr)
 {
 	GB_ASSERT(allocator != NULL);
-	gb_Allocator *a = allocator;
+	gb_Allocator* a = allocator;
 	return a->allocated_size(a, ptr);
 }
 
@@ -526,14 +533,15 @@ s64
 gb_total_allocated(gb_Allocator_Ptr allocator)
 {
 	GB_ASSERT(allocator != NULL);
-	gb_Allocator *a = allocator;
+	gb_Allocator* a = allocator;
 	return a->total_allocated(a);
 }
 
 
 
 
-typedef struct gb_Heap {
+typedef struct gb_Heap
+{
 	gb_Allocator base; /* NOTE(bill): Must be first into order to allow for polymorphism */
 
 	gb_Mutex mutex;
@@ -547,51 +555,54 @@ typedef struct gb_Heap {
 } gb_Heap;
 
 gb_Heap gb_heap_make(bool32 use_mutex);
-void    gb_heap_destroy(gb_Heap *heap);
+void    gb_heap_destroy(gb_Heap* heap);
 
 
-typedef struct gb_Arena {
+typedef struct gb_Arena
+{
 	gb_Allocator base; /* NOTE(bill): Must be first into order to allow for polymorphism */
 
-	gb_Allocator *backing;
-	void         *physical_start;
+	gb_Allocator* backing;
+	void*         physical_start;
 	s64           total_size;
 	s64           total_allocated_count;
 	s64           temp_count;
 } gb_Arena;
 
 
-gb_Arena gb_arena_make_from_backing(gb_Allocator *backing, usize size);
-gb_Arena gb_arena_make_from_pointer(void *start, usize size);
-void     gb_arena_destroy(gb_Arena *arena);
-void     gb_arena_clear(gb_Arena *arena);
+gb_Arena gb_arena_make_from_backing(gb_Allocator* backing, usize size);
+gb_Arena gb_arena_make_from_pointer(void* start, usize size);
+void     gb_arena_destroy(gb_Arena* arena);
+void     gb_arena_clear(gb_Arena* arena);
 
 
-typedef struct gb_Temporary_Arena_Memory {
-	gb_Arena *arena;
+typedef struct gb_Temporary_Arena_Memory
+{
+	gb_Arena* arena;
 	s64       original_count;
 } gb_Temporary_Arena_Memory;
 
-gb_Temporary_Arena_Memory gb_make_temporary_arena_memory(gb_Arena *arena);
+gb_Temporary_Arena_Memory gb_make_temporary_arena_memory(gb_Arena* arena);
 void gb_temporary_arena_memory_free(gb_Temporary_Arena_Memory t);
 
 
-typedef struct gb_Pool {
+typedef struct gb_Pool
+{
 	gb_Allocator base; /* NOTE(bill): Must be first into order to allow for polymorphism */
 
-	gb_Allocator *backing;
+	gb_Allocator* backing;
 
-	void *physical_start;
-	void *free_list;
+	void* physical_start;
+	void* free_list;
 
 	usize block_size;
 	usize block_align;
 	s64   total_size;
 } gb_Pool;
 
-gb_Pool gb_pool_make(gb_Allocator *backing, usize num_blocks, usize block_size);
-gb_Pool gb_pool_make_align(gb_Allocator *backing, usize num_blocks, usize block_size, usize block_align);
-void    gb_pool_destroy(gb_Pool *pool);
+gb_Pool gb_pool_make(gb_Allocator* backing, usize num_blocks, usize block_size);
+gb_Pool gb_pool_make_align(gb_Allocator* backing, usize num_blocks, usize block_size, usize block_align);
+void    gb_pool_destroy(gb_Pool* pool);
 
 
 
@@ -602,10 +613,10 @@ void    gb_pool_destroy(gb_Pool *pool);
 /*                                */
 /**********************************/
 
-void *gb_align_forward(void *ptr, usize align);
+void* gb_align_forward(void* ptr, usize align);
 
-void   *gb_zero_size(void *ptr, usize bytes);
-#define gb_zero_struct(element) ((void)gb_zero_size(&(element), sizeof(element)))
+void   *gb_zero_size(void* ptr, usize bytes);
+#define gb_zero_struct(element) (cast(void, gb_zero_size(&(element), sizeof(element))))
 #define gb_zero_array(ptr, Type, count) cast(Type, gb_zero_size((ptr), sizeof(Type)*(count)))
 
 
@@ -622,20 +633,21 @@ void   *gb_zero_size(void *ptr, usize bytes);
  * Array structure:
  *
  *
- * | Allocator * | usize count | usize capacity | char * |
+ * | Allocator * | usize count | usize capacity | char*  |
  *                                              |
  *                                               `-- Returned pointer
  */
 
-typedef struct gb_Array_Header {
-	gb_Allocator *allocator;
+typedef struct gb_Array_Header
+{
+	gb_Allocator* allocator;
 	usize         count;
 	usize         capacity;
 } gb_Array_Header;
 
 /* TODO(bill): Implement a c style array maybe like stb/stretchy_buffer.h but with a custom allocator */
 
-#define gb_array_header(arr)           (cast(gb_Array_Header *, arr) - 1)
+#define gb_array_header(arr)           (cast(gb_Array_Header*, arr) - 1)
 
 #define gb_array_make_count(allocator, Type, count) /* TODO(bill): */
 #define gb_array_make(allocator, Type) (gb_array_make_count(allocator, Type, 0))
@@ -667,7 +679,7 @@ typedef struct gb_Array_Header {
 
 
 /* Pascal like strings in C */
-typedef char *gb_String;
+typedef char* gb_String;
 
 #ifndef GB_STRING_SIZE
 #define GB_STRING_SIZE
@@ -675,38 +687,39 @@ typedef char *gb_String;
 typedef u32 gb_String_Size;
 #endif
 
-typedef struct gb_String_Header {
-	gb_Allocator  *allocator;
+typedef struct gb_String_Header
+{
+	gb_Allocator*  allocator;
 	gb_String_Size length;
 	gb_String_Size capacity;
 } gb_String_Header;
 
-#define GB_STRING_HEADER(str) (cast(gb_String_Header *, str) - 1)
+#define GB_STRING_HEADER(str) (cast(gb_String_Header*, str) - 1)
 
-gb_String gb_string_make(gb_Allocator *a, const char* str);
-gb_String gb_string_make_length(gb_Allocator *a, const void* str, gb_String_Size num_bytes);
+gb_String gb_string_make(gb_Allocator* a, char const* str);
+gb_String gb_string_make_length(gb_Allocator* a, void const* str, gb_String_Size num_bytes);
 void   gb_string_free(gb_String str);
 
-gb_String gb_string_duplicate(gb_Allocator *a, const gb_String str);
+gb_String gb_string_duplicate(gb_Allocator* a, gb_String const str);
 
-gb_String_Size gb_string_length(const gb_String str);
-gb_String_Size gb_string_capacity(const gb_String str);
-gb_String_Size gb_string_available_space(const gb_String str);
+gb_String_Size gb_string_length(gb_String const str);
+gb_String_Size gb_string_capacity(gb_String const str);
+gb_String_Size gb_string_available_space(gb_String const str);
 
 void gb_string_clear(gb_String str);
 
-gb_String gb_string_append_string(gb_String str, const gb_String other);
-gb_String gb_string_append_string_length(gb_String str, const void *other, gb_String_Size num_bytes);
-gb_String gb_string_append_cstring(gb_String str, const char *other);
+gb_String gb_string_append_string(gb_String str, gb_String const other);
+gb_String gb_string_append_string_length(gb_String str, void const* other, gb_String_Size num_bytes);
+gb_String gb_string_append_cstring(gb_String str, char const* other);
 
-gb_String gb_string_set(gb_String str, const char *cstr);
+gb_String gb_string_set(gb_String str, char const* cstr);
 
 gb_String gb_string_make_space_for(gb_String str, gb_String_Size add_len);
-gb_String_Size gb_string_allocation_size(const gb_String str);
+gb_String_Size gb_string_allocation_size(gb_String const str);
 
-bool32 gb_strings_are_equal(const gb_String lhs, const gb_String rhs);
+bool32 gb_strings_are_equal(gb_String const lhs, gb_String const rhs);
 
-gb_String gb_string_trim(gb_String str, const char *cut_set);
+gb_String gb_string_trim(gb_String str, char const* cut_set);
 gb_String gb_string_trim_space(gb_String str); /* Whitespace ` \t\r\n\v\f` */
 
 
@@ -720,18 +733,18 @@ gb_String gb_string_trim_space(gb_String str); /* Whitespace ` \t\r\n\v\f` */
 /**********************************/
 
 
-u32 gb_hash_adler32(const void *ket, u32 num_bytes);
+u32 gb_hash_adler32(void const* ket, u32 num_bytes);
 
-u32 gb_hash_crc32(const void* key, u32 num_bytes);
-u64 gb_hash_crc64(const void* key, usize num_bytes);
+u32 gb_hash_crc32(void const* key, u32 num_bytes);
+u64 gb_hash_crc64(void const* key, usize num_bytes);
 
-u32 gb_hash_fnv32(const void* key, usize num_bytes);
-u64 gb_hash_fnv64(const void* key, usize num_bytes);
-u32 gb_hash_fnv32a(const void* key, usize num_bytes);
-u64 gb_hash_fnv64a(const void* key, usize num_bytes);
+u32 gb_hash_fnv32(void const* key, usize num_bytes);
+u64 gb_hash_fnv64(void const* key, usize num_bytes);
+u32 gb_hash_fnv32a(void const* key, usize num_bytes);
+u64 gb_hash_fnv64a(void const* key, usize num_bytes);
 
-u32 gb_hash_murmur32(const void* key, u32 num_bytes, u32 seed);
-u64 gb_hash_murmur64(const void* key, usize num_bytes, u64 seed);
+u32 gb_hash_murmur32(void const* key, u32 num_bytes, u32 seed);
+u64 gb_hash_murmur64(void const* key, usize num_bytes, u64 seed);
 
 
 
@@ -868,7 +881,7 @@ gb_mutex_make(void)
 }
 
 void
-gb_mutex_destroy(gb_Mutex *m)
+gb_mutex_destroy(gb_Mutex* m)
 {
 #if defined(GB_SYSTEM_WINDOWS)
 	CloseHandle(m->win32_mutex);
@@ -878,7 +891,7 @@ gb_mutex_destroy(gb_Mutex *m)
 }
 
 void
-gb_mutex_lock(gb_Mutex *m)
+gb_mutex_lock(gb_Mutex* m)
 {
 #if defined(GB_SYSTEM_WINDOWS)
 	WaitForSingleObject(m->win32_mutex, INFINITE);
@@ -888,7 +901,7 @@ gb_mutex_lock(gb_Mutex *m)
 }
 
 bool32
-gb_mutex_try_lock(gb_Mutex *m)
+gb_mutex_try_lock(gb_Mutex* m)
 {
 #if defined(GB_SYSTEM_WINDOWS)
 	return WaitForSingleObject(m->win32_mutex, 0) == WAIT_OBJECT_0;
@@ -898,7 +911,7 @@ gb_mutex_try_lock(gb_Mutex *m)
 }
 
 void
-gb_mutex_unlock(gb_Mutex *m)
+gb_mutex_unlock(gb_Mutex* m)
 {
 #if defined(GB_SYSTEM_WINDOWS)
 	ReleaseMutex(m->win32_mutex);
@@ -912,50 +925,50 @@ gb_mutex_unlock(gb_Mutex *m)
 
 #if defined(_MSC_VER)
 u32
-gb_atomic32_load(const volatile gb_Atomic32 *object)
+gb_atomic32_load(gb_Atomic32 const volatile* object)
 {
 	return object->nonatomic;
 }
 
 void
-gb_atomic32_store(volatile gb_Atomic32 *object, u32 value)
+gb_atomic32_store(gb_Atomic32 volatile* object, u32 value)
 {
 	object->nonatomic = value;
 }
 
 u32
-gb_atomic32_compare_exchange_strong(volatile gb_Atomic32 *object, u32 expected, u32 desired)
+gb_atomic32_compare_exchange_strong(gb_Atomic32 volatile* object, u32 expected, u32 desired)
 {
-	return _InterlockedCompareExchange(cast(volatile long *, object), desired, expected);
+	return _InterlockedCompareExchange(cast(long volatile*, object), desired, expected);
 }
 
 u32
-gb_atomic32_exchanged(volatile gb_Atomic32 *object, u32 operand)
+gb_atomic32_exchanged(gb_Atomic32 volatile* object, u32 operand)
 {
-	return _InterlockedExchangeAdd(cast(volatile long *, object), operand);
+	return _InterlockedExchangeAdd(cast(long volatile*, object), operand);
 }
 
 u32
-gb_atomic32_fetch_add(volatile gb_Atomic32 *object, s32 operand)
+gb_atomic32_fetch_add(gb_Atomic32 volatile* object, s32 operand)
 {
-	return _InterlockedExchangeAdd(cast(volatile long *, object), operand);
+	return _InterlockedExchangeAdd(cast(long volatile*, object), operand);
 }
 
 u32
-gb_atomic32_fetch_and(volatile gb_Atomic32 *object, u32 operand)
+gb_atomic32_fetch_and(gb_Atomic32 volatile* object, u32 operand)
 {
-	return _InterlockedAnd(cast(volatile long *, object), operand);
+	return _InterlockedAnd(cast(long volatile*, object), operand);
 }
 
 u32
-gb_atomic32_fetch_or(volatile gb_Atomic32 *object, u32 operand)
+gb_atomic32_fetch_or(gb_Atomic32 volatile* object, u32 operand)
 {
-	return _InterlockedOr(cast(volatile long *, object), operand);
+	return _InterlockedOr(cast(long volatile*, object), operand);
 }
 
 
 u64
-gb_atomic64_load(const volatile gb_Atomic64 *object)
+gb_atomic64_load(gb_Atomic64 const volatile* object)
 {
 #if defined(GB_ARCH_64_BIT)
 	return object->nonatomic;
@@ -975,7 +988,7 @@ gb_atomic64_load(const volatile gb_Atomic64 *object)
 }
 
 void
-gb_atomic64_store(volatile gb_Atomic64 *object, u64 value)
+gb_atomic64_store(gb_Atomic64 volatile* object, u64 value)
 {
 #if defined(GB_ARCH_64_BIT)
 	object->nonatomic = value;
@@ -993,20 +1006,21 @@ gb_atomic64_store(volatile gb_Atomic64 *object, u64 value)
 }
 
 u64
-gb_atomic64_compare_exchange_strong(volatile gb_Atomic64 *object, u64 expected, u64 desired)
+gb_atomic64_compare_exchange_strong(gb_Atomic64 volatile* object, u64 expected, u64 desired)
 {
-	return _InterlockedCompareExchange64(cast(volatile s64 *, object), desired, expected);
+	return _InterlockedCompareExchange64(cast(s64 volatile*, object), desired, expected);
 }
 
 u64
-gb_atomic64_exchanged(volatile gb_Atomic64 *object, u64 desired)
+gb_atomic64_exchanged(gb_Atomic64 volatile* object, u64 desired)
 {
 #if defined(GB_ARCH_64_BIT)
-	return _InterlockedExchange64(cast(volatile s64 *, object), desired);
+	return _InterlockedExchange64(cast(s64 volatile*, object), desired);
 #else
 	u64 expected = object->nonatomic;
-	while (true) {
-		u64 original = _InterlockedCompareExchange64(cast(volatile s64 *, object), desired, expected);
+	while (true)
+	{
+		u64 original = _InterlockedCompareExchange64(cast(s64 volatile*, object), desired, expected);
 		if (original == expected) return original;
 		expected = original;
 	}
@@ -1014,14 +1028,15 @@ gb_atomic64_exchanged(volatile gb_Atomic64 *object, u64 desired)
 }
 
 u64
-gb_atomic64_fetch_add(volatile gb_Atomic64 *object, s64 operand)
+gb_atomic64_fetch_add(gb_Atomic64 volatile* object, s64 operand)
 {
 #if defined(GB_ARCH_64_BIT)
-	return _InterlockedExchangeAdd64(cast(volatile s64 *, object), operand);
+	return _InterlockedExchangeAdd64(cast(s64 volatile*, object), operand);
 #else
 	u64 expected = object->nonatomic;
-	while (true) {
-		u64 original = _InterlockedExchange64(cast(volatile s64 *, object), expected + operand, expected);
+	while (true)
+	{
+		u64 original = _InterlockedExchange64(cast(s64 volatile*, object), expected + operand, expected);
 		if (original == expected) return original;
 		expected = original;
 	}
@@ -1029,14 +1044,15 @@ gb_atomic64_fetch_add(volatile gb_Atomic64 *object, s64 operand)
 }
 
 u64
-gb_atomic64_fetch_and(volatile gb_Atomic64 *object, u64 operand)
+gb_atomic64_fetch_and(gb_Atomic64 volatile* object, u64 operand)
 {
 #if defined(GB_ARCH_64_BIT)
-	return _InterlockedAnd64(cast(volatile s64 *, object), operand);
+	return _InterlockedAnd64(cast(s64 volatile*, object), operand);
 #else
 	u64 expected = object->nonatomic;
-	while (true) {
-		u64 original = _InterlockedCompareExchange64(cast(volatile s64 *, object), expected & operand, expected);
+	while (true)
+	{
+		u64 original = _InterlockedCompareExchange64(cast(s64 volatile*, object), expected & operand, expected);
 		if (original == expected)
 			return original;
 		expected = original;
@@ -1044,14 +1060,15 @@ gb_atomic64_fetch_and(volatile gb_Atomic64 *object, u64 operand)
 #endif
 }
 u64
-gb_atomic64_fetch_or(volatile gb_Atomic64 *object, u64 operand)
+gb_atomic64_fetch_or(gb_Atomic64 volatile* object, u64 operand)
 {
 #if defined(GB_ARCH_64_BIT)
-	return _InterlockedAnd64(cast(volatile s64 *, object), operand);
+	return _InterlockedAnd64(cast(s64 volatile*, object), operand);
 #else
 	u64 expected = object->nonatomic;
-	while (true) {
-		u64 original = _InterlockedCompareExchange64(cast(volatile s64 *, object), expected | operand, expected);
+	while (true)
+	{
+		u64 original = _InterlockedCompareExchange64(cast(s64 volatile*, object), expected | operand, expected);
 		if (original == expected)
 			return original;
 		expected = original;
@@ -1084,7 +1101,7 @@ gb_semaphore_make(void)
 }
 
 void
-gb_semaphore_destroy(gb_Semaphore *s)
+gb_semaphore_destroy(gb_Semaphore* s)
 {
 #if defined(GB_SYSTEM_WINDOWS)
 	BOOL err = CloseHandle(s->win32_handle);
@@ -1097,13 +1114,13 @@ gb_semaphore_destroy(gb_Semaphore *s)
 }
 
 void
-gb_semaphore_post(gb_Semaphore *s)
+gb_semaphore_post(gb_Semaphore* s)
 {
 	gb_semaphore_post_count(s, 1);
 }
 
 void
-gb_semaphore_post_count(gb_Semaphore *s, u32 count)
+gb_semaphore_post_count(gb_Semaphore* s, u32 count)
 {
 #if defined(GB_SYSTEM_WINDOWS)
 	BOOL err = ReleaseSemaphore(s->win32_handle, count, NULL);
@@ -1123,7 +1140,7 @@ gb_semaphore_post_count(gb_Semaphore *s, u32 count)
 }
 
 void
-gb_semaphore_wait(gb_Semaphore *s)
+gb_semaphore_wait(gb_Semaphore* s)
 {
 #if defined(GB_SYSTEM_WINDOWS)
 	DWORD result = WaitForSingleObject(s->win32_handle, INFINITE);
@@ -1163,14 +1180,14 @@ gb_thread_make(void)
 }
 
 void
-gb_thread_destroy(gb_Thread *t)
+gb_thread_destroy(gb_Thread* t)
 {
 	if (t->is_running) gb_thread_join(t);
 	gb_semaphore_destroy(&t->semaphore);
 }
 
 internal_linkage void
-gb__thread_run(gb_Thread *t)
+gb__thread_run(gb_Thread* t)
 {
 	gb_semaphore_post(&t->semaphore);
 	t->proc(t->data);
@@ -1180,7 +1197,7 @@ gb__thread_run(gb_Thread *t)
 internal_linkage DWORD WINAPI
 gb__thread_proc(void* arg)
 {
-	gb__thread_run(cast(gb_Thread *, arg));
+	gb__thread_run(cast(gb_Thread* , arg));
 	return 0;
 }
 
@@ -1188,19 +1205,19 @@ gb__thread_proc(void* arg)
 internal_linkage void*
 gb__thread_proc(void* arg)
 {
-	gb__thread_run(cast(gb_Thread *, arg));
+	gb__thread_run(cast(gb_Thread* , arg));
 	return NULL;
 }
 #endif
 
 void
-gb_thread_start(gb_Thread *t, gb_Thread_Procedure *proc, void *data)
+gb_thread_start(gb_Thread* t, gb_Thread_Procedure* proc, void* data)
 {
 	gb_thread_start_with_stack(t, proc, data, 0);
 }
 
 void
-gb_thread_start_with_stack(gb_Thread *t, gb_Thread_Procedure *proc, void *data, usize stack_size)
+gb_thread_start_with_stack(gb_Thread* t, gb_Thread_Procedure* proc, void* data, usize stack_size)
 {
 	GB_ASSERT(!t->is_running);
 	GB_ASSERT(proc != NULL);
@@ -1239,7 +1256,7 @@ gb_thread_start_with_stack(gb_Thread *t, gb_Thread_Procedure *proc, void *data, 
 }
 
 void
-gb_thread_join(gb_Thread *t)
+gb_thread_join(gb_Thread* t)
 {
 	if (!t->is_running) return;
 
@@ -1256,9 +1273,9 @@ gb_thread_join(gb_Thread *t)
 }
 
 bool32
-gb_thread_is_running(const gb_Thread *t) /* NOTE(bill): Can this be just pass by value? */
+gb_thread_is_running(gb_Thread t)
 {
-	return t->is_running != 0;
+	return t.is_running != 0;
 }
 
 u32
@@ -1267,7 +1284,7 @@ gb_thread_current_id(void)
 	u32 thread_id;
 
 #if defined(GB_SYSTEM_WINDOWS)
-	u8* thread_local_storage = cast(u8 *, __readgsqword(0x30));
+	u8* thread_local_storage = cast(u8*, __readgsqword(0x30));
 	thread_id = *cast(u32 *, thread_local_storage + 0x48);
 
 #elif defined(GB_SYSTEM_OSX) && defined(GB_ARCH_64_BIT)
@@ -1292,15 +1309,16 @@ gb_thread_current_id(void)
 /*                                */
 /**********************************/
 
-typedef struct gb__Heap_Header {
+typedef struct gb__Heap_Header
+{
 	usize size;
 } gb__Heap_Header;
 
 
 internal_linkage void*
-gb__heap_alloc(gb_Allocator *a, usize size, usize align)
+gb__heap_alloc(gb_Allocator* a, usize size, usize align)
 {
-	gb_Heap *heap = cast(gb_Heap *, a);
+	gb_Heap* heap = cast(gb_Heap*, a);
 
 	if (heap->use_mutex) gb_mutex_lock(&heap->mutex);
 
@@ -1311,7 +1329,7 @@ gb__heap_alloc(gb_Allocator *a, usize size, usize align)
 
 	void* data = HeapAlloc(heap->win32_heap_handle, 0, total);
 
-	gb__Heap_Header *h = cast(gb__Heap_Header *, data);
+	gb__Heap_Header* h = cast(gb__Heap_Header*, data);
 	h->size = total;
 	data = (h + 1);
 
@@ -1331,11 +1349,11 @@ gb__heap_alloc(gb_Allocator *a, usize size, usize align)
 
 
 internal_linkage void
-gb__heap_free(gb_Allocator *a, void *ptr)
+gb__heap_free(gb_Allocator* a, void* ptr)
 {
 	if (!ptr) return;
 
-	gb_Heap* heap = cast(gb_Heap *, a);
+	gb_Heap* heap = cast(gb_Heap*, a);
 
 	if (heap->use_mutex) gb_mutex_lock(&heap->mutex);
 
@@ -1343,7 +1361,7 @@ gb__heap_free(gb_Allocator *a, void *ptr)
 	heap->allocation_count--;
 
 #if defined (GB_SYSTEM_WINDOWS)
-	gb__Heap_Header *header = cast(gb__Heap_Header *, ptr) - 1;
+	gb__Heap_Header* header = cast(gb__Heap_Header*, ptr) - 1;
 	HeapFree(heap->win32_heap_handle, 0, header);
 #else
 	free(ptr);
@@ -1353,14 +1371,14 @@ gb__heap_free(gb_Allocator *a, void *ptr)
 }
 
 internal_linkage s64
-gb__heap_allocated_size(gb_Allocator *a, const void *ptr)
+gb__heap_allocated_size(gb_Allocator* a, void const* ptr)
 {
 #if defined(GB_SYSTEM_WINDOWS)
-	gb_Heap *heap = cast(gb_Heap *, a);
+	gb_Heap* heap = cast(gb_Heap*, a);
 
 	if (heap->use_mutex) gb_mutex_lock(&heap->mutex);
 
-	const gb__Heap_Header* h = cast(const gb__Heap_Header *, ptr) - 1;
+	gb__Heap_Header const* h = cast(gb__Heap_Header const*, ptr) - 1;
 	s64 result = h->size;
 
 	if (heap->use_mutex) gb_mutex_unlock(&heap->mutex);
@@ -1379,9 +1397,9 @@ gb__heap_allocated_size(gb_Allocator *a, const void *ptr)
 }
 
 internal_linkage s64
-gb__heap_total_allocated(gb_Allocator *a)
+gb__heap_total_allocated(gb_Allocator* a)
 {
-	gb_Heap *heap = cast(gb_Heap *, a);
+	gb_Heap* heap = cast(gb_Heap*, a);
 
 	if (heap->use_mutex) gb_mutex_lock(&heap->mutex);
 
@@ -1416,7 +1434,7 @@ gb_heap_make(bool32 use_mutex)
 }
 
 void
-gb_heap_destroy(gb_Heap *heap)
+gb_heap_destroy(gb_Heap* heap)
 {
 	if (heap->use_mutex) gb_mutex_destroy(&heap->mutex);
 
@@ -1429,10 +1447,10 @@ gb_heap_destroy(gb_Heap *heap)
 
 
 
-internal_linkage void *
-gb__arena_alloc(gb_Allocator *a, usize size, usize align)
+internal_linkage void*
+gb__arena_alloc(gb_Allocator* a, usize size, usize align)
 {
-	gb_Arena* arena = cast(gb_Arena *, a);
+	gb_Arena* arena = cast(gb_Arena*, a);
 
 	s64 actual_size = size + align;
 
@@ -1442,7 +1460,7 @@ gb__arena_alloc(gb_Allocator *a, usize size, usize align)
 		return NULL;
 	}
 
-	void *ptr = gb_align_forward(cast(u8 *, arena->physical_start) + arena->total_allocated_count, align);
+	void* ptr = gb_align_forward(cast(u8*, arena->physical_start) + arena->total_allocated_count, align);
 
 	arena->total_allocated_count += actual_size;
 
@@ -1450,14 +1468,14 @@ gb__arena_alloc(gb_Allocator *a, usize size, usize align)
 }
 
 internal_linkage void
-gb__arena_free(gb_Allocator *a, void *ptr) /* NOTE(bill): Arenas free all at once */
+gb__arena_free(gb_Allocator* a, void* ptr) /* NOTE(bill): Arenas free all at once */
 {
 	GB_UNUSED(a);
 	GB_UNUSED(ptr);
 }
 
 internal_linkage s64
-gb__arena_allocated_size(gb_Allocator *a, const void* ptr)
+gb__arena_allocated_size(gb_Allocator* a, void const* ptr)
 {
 	GB_UNUSED(a);
 	GB_UNUSED(ptr);
@@ -1465,15 +1483,15 @@ gb__arena_allocated_size(gb_Allocator *a, const void* ptr)
 }
 
 internal_linkage s64
-gb__arena_total_allocated(gb_Allocator *a)
+gb__arena_total_allocated(gb_Allocator* a)
 {
-	return cast(gb_Arena *, a)->total_allocated_count;
+	return cast(gb_Arena*, a)->total_allocated_count;
 }
 
 
 
 gb_Arena
-gb_arena_make_from_backing(gb_Allocator *backing, usize size)
+gb_arena_make_from_backing(gb_Allocator* backing, usize size)
 {
 	gb_Arena arena = {0};
 
@@ -1494,7 +1512,7 @@ gb_arena_make_from_backing(gb_Allocator *backing, usize size)
 }
 
 gb_Arena
-gb_arena_make_from_pointer(void *start, usize size)
+gb_arena_make_from_pointer(void* start, usize size)
 {
 	gb_Arena arena = {0};
 
@@ -1513,7 +1531,7 @@ gb_arena_make_from_pointer(void *start, usize size)
 }
 
 void
-gb_arena_destroy(gb_Arena *arena)
+gb_arena_destroy(gb_Arena* arena)
 {
 	if (arena->backing)
 		gb_free(arena->backing, arena->physical_start);
@@ -1522,7 +1540,7 @@ gb_arena_destroy(gb_Arena *arena)
 }
 
 void
-gb_arena_clear(gb_Arena *arena)
+gb_arena_clear(gb_Arena* arena)
 {
 	GB_ASSERT(arena->temp_count == 0);
 
@@ -1532,7 +1550,7 @@ gb_arena_clear(gb_Arena *arena)
 
 
 gb_Temporary_Arena_Memory
-gb_make_temporary_arena_memory(gb_Arena *arena)
+gb_make_temporary_arena_memory(gb_Arena* arena)
 {
 	gb_Temporary_Arena_Memory tmp = {0};
 	tmp.arena = arena;
@@ -1557,18 +1575,18 @@ gb_temporary_arena_memory_free(gb_Temporary_Arena_Memory tmp)
 
 
 
-internal_linkage void *
-gb__pool_alloc(gb_Allocator *a, usize size, usize align)
+internal_linkage void*
+gb__pool_alloc(gb_Allocator* a, usize size, usize align)
 {
-	gb_Pool *pool = cast(gb_Pool *, a);
+	gb_Pool* pool = cast(gb_Pool*, a);
 
 	GB_ASSERT(size  == pool->block_size);
 	GB_ASSERT(align == pool->block_align);
 	GB_ASSERT(pool->free_list != NULL);
 
-	uintptr next_free = *cast(uintptr *, pool->free_list);
+	uintptr next_free = *cast(uintptr*, pool->free_list);
 	void* ptr = pool->free_list;
-	pool->free_list = cast(void *, next_free);
+	pool->free_list = cast(void*, next_free);
 
 	pool->total_size += pool->block_size;
 
@@ -1576,14 +1594,14 @@ gb__pool_alloc(gb_Allocator *a, usize size, usize align)
 }
 
 internal_linkage void
-gb__pool_free(gb_Allocator *a, void *ptr)
+gb__pool_free(gb_Allocator* a, void* ptr)
 {
 	if (!ptr) return;
 
-	gb_Pool *pool = cast(gb_Pool *, a);
+	gb_Pool* pool = cast(gb_Pool*, a);
 
-	uintptr *next = cast(uintptr *, ptr);
-	*next = cast(uintptr , pool->free_list);
+	uintptr* next = cast(uintptr*, ptr);
+	*next = cast(uintptr, pool->free_list);
 
 	pool->free_list = ptr;
 
@@ -1591,7 +1609,7 @@ gb__pool_free(gb_Allocator *a, void *ptr)
 }
 
 internal_linkage s64
-gb__pool_allocated_size(gb_Allocator *a, const void *ptr)
+gb__pool_allocated_size(gb_Allocator* a, void const* ptr)
 {
 	GB_UNUSED(a);
 	GB_UNUSED(ptr);
@@ -1599,21 +1617,21 @@ gb__pool_allocated_size(gb_Allocator *a, const void *ptr)
 }
 
 internal_linkage s64
-gb__pool_total_allocated(gb_Allocator *a)
+gb__pool_total_allocated(gb_Allocator* a)
 {
-	gb_Pool *pool = cast(gb_Pool *, a);
+	gb_Pool* pool = cast(gb_Pool*, a);
 	return pool->total_size;
 }
 
 
 gb_Pool
-gb_pool_make(gb_Allocator *backing, usize num_blocks, usize block_size)
+gb_pool_make(gb_Allocator* backing, usize num_blocks, usize block_size)
 {
 	return gb_pool_make_align(backing, num_blocks, block_size, GB_DEFAULT_ALIGNMENT);
 }
 
 gb_Pool
-gb_pool_make_align(gb_Allocator *backing, usize num_blocks, usize block_size, usize block_align)
+gb_pool_make_align(gb_Allocator* backing, usize num_blocks, usize block_size, usize block_align)
 {
 	gb_Pool pool = {0};
 
@@ -1624,19 +1642,19 @@ gb_pool_make_align(gb_Allocator *backing, usize num_blocks, usize block_size, us
 	usize actual_block_size = block_size + block_align;
 	usize pool_size = num_blocks * actual_block_size;
 
-	u8 *data = cast(u8 *, gb_alloc_align(backing, pool_size, block_align));
+	u8* data = cast(u8*, gb_alloc_align(backing, pool_size, block_align));
 
 
 	/* Init intrusive freelist */
-	u8 *curr = data;
+	u8* curr = data;
 	for (usize block_index = 0; block_index < num_blocks-1; block_index++)
 	{
-		uintptr *next = cast(uintptr *, curr);
+		uintptr* next = cast(uintptr*, curr);
 		*next = cast(uintptr, curr) + actual_block_size;
 		curr += actual_block_size;
 	}
 
-	uintptr *end = cast(uintptr *, curr);
+	uintptr* end = cast(uintptr*, curr);
 	*end = cast(uintptr, NULL);
 
 	pool.physical_start = data;
@@ -1652,7 +1670,7 @@ gb_pool_make_align(gb_Allocator *backing, usize num_blocks, usize block_size, us
 }
 
 void
-gb_pool_destroy(gb_Pool *pool)
+gb_pool_destroy(gb_Pool* pool)
 {
 	gb_free(pool->backing, pool->physical_start);
 }
@@ -1666,18 +1684,18 @@ gb_pool_destroy(gb_Pool *pool)
 /*                                */
 /**********************************/
 
-void *
-gb_align_forward(void *ptr, usize align)
+void*
+gb_align_forward(void* ptr, usize align)
 {
 	GB_ASSERT(GB_IS_POWER_OF_TWO(align));
 
 	uintptr p = cast(uintptr, ptr);
-	const usize modulo = p % align;
+	usize modulo = p % align;
 	if (modulo) p += (align - modulo);
-	return cast(void *, p);
+	return cast(void*, p);
 }
 
-void *gb_zero_size(void *ptr, usize bytes) { return memset(ptr, 0, bytes); }
+void* gb_zero_size(void* ptr, usize bytes) { return memset(ptr, 0, bytes); }
 
 
 
@@ -1704,23 +1722,23 @@ gb__string_set_capacity(gb_String str, gb_String_Size cap)
 
 
 gb_String
-gb_string_make(gb_Allocator *a, const char* str)
+gb_string_make(gb_Allocator* a, char const* str)
 {
 	gb_String_Size len = cast(gb_String_Size, str ? strlen(str) : 0);
 	return gb_string_make_length(a, str, len);
 }
 
 gb_String
-gb_string_make_length(gb_Allocator *a, const void* init_str, gb_String_Size num_bytes)
+gb_string_make_length(gb_Allocator* a, void const* init_str, gb_String_Size num_bytes)
 {
 	gb_String_Size header_size = sizeof(gb_String_Header);
-	void *ptr = gb_alloc(a, header_size + num_bytes + 1);
+	void* ptr = gb_alloc(a, header_size + num_bytes + 1);
 	if (!init_str) gb_zero_size(ptr, header_size + num_bytes + 1);
 
 	if (ptr == NULL) return NULL;
 
-	gb_String str = (char *)ptr + header_size;
-	gb_String_Header *header = GB_STRING_HEADER(str);
+	gb_String str = (char*)ptr + header_size;
+	gb_String_Header* header = GB_STRING_HEADER(str);
 	header->allocator = a;
 	header->length    = num_bytes;
 	header->capacity  = num_bytes;
@@ -1736,34 +1754,34 @@ gb_string_free(gb_String str)
 {
 	if (str == NULL) return;
 
-	gb_String_Header *header = GB_STRING_HEADER(str);
+	gb_String_Header* header = GB_STRING_HEADER(str);
 	gb_free(header->allocator, header);
 }
 
 
 gb_String
-gb_string_duplicate(gb_Allocator *a, const gb_String str)
+gb_string_duplicate(gb_Allocator* a, gb_String const str)
 {
 	return gb_string_make_length(a, str, gb_string_length(str));
 }
 
 
 gb_String_Size
-gb_string_length(const gb_String str)
+gb_string_length(gb_String const str)
 {
 	return GB_STRING_HEADER(str)->length;
 }
 
 gb_String_Size
-gb_string_capacity(const gb_String str)
+gb_string_capacity(gb_String const str)
 {
 	return GB_STRING_HEADER(str)->capacity;
 }
 
 gb_String_Size
-gb_string_available_space(const gb_String str)
+gb_string_available_space(gb_String const str)
 {
-	gb_String_Header *h = GB_STRING_HEADER(str);
+	gb_String_Header* h = GB_STRING_HEADER(str);
 	if (h->capacity > h->length)
 		return h->capacity - h->length;
 	return 0;
@@ -1779,13 +1797,13 @@ gb_string_clear(gb_String str)
 
 
 gb_String
-gb_string_append_string(gb_String str, const gb_String other)
+gb_string_append_string(gb_String str, gb_String const other)
 {
 	return gb_string_append_string_length(str, other, gb_string_length(other));
 }
 
 gb_String
-gb_string_append_string_length(gb_String str, const void *other, gb_String_Size other_len)
+gb_string_append_string_length(gb_String str, void const* other, gb_String_Size other_len)
 {
 	gb_String_Size curr_len = gb_string_length(str);
 
@@ -1801,14 +1819,14 @@ gb_string_append_string_length(gb_String str, const void *other, gb_String_Size 
 }
 
 gb_String
-gb_string_append_cstring(gb_String str, const char *other)
+gb_string_append_cstring(gb_String str, char const* other)
 {
 	return gb_string_append_string_length(str, other, cast(gb_String_Size, strlen(other)));
 }
 
 
 gb_String
-gb_string_set(gb_String str, const char *cstr)
+gb_string_set(gb_String str, char const* cstr)
 {
 	gb_String_Size len = cast(gb_String_Size, strlen(cstr));
 	if (gb_string_capacity(str) < len)
@@ -1826,8 +1844,8 @@ gb_string_set(gb_String str, const char *cstr)
 }
 
 
-internal_linkage void *
-gb__string_realloc(gb_Allocator *a, void *ptr, gb_String_Size old_size, gb_String_Size new_size)
+internal_linkage void*
+gb__string_realloc(gb_Allocator* a, void* ptr, gb_String_Size old_size, gb_String_Size new_size)
 {
 	if (!ptr) return gb_alloc(a, new_size);
 
@@ -1861,14 +1879,14 @@ gb_string_make_space_for(gb_String str, gb_String_Size add_len)
 		return str;
 
 
-	void *ptr = GB_STRING_HEADER(str);
+	void* ptr = GB_STRING_HEADER(str);
 	gb_String_Size old_size = sizeof(struct gb_String_Header) + gb_string_length(str) + 1;
 	gb_String_Size new_size = sizeof(struct gb_String_Header) + new_len + 1;
 
-	void *new_ptr = gb__string_realloc(GB_STRING_HEADER(str)->allocator, ptr, old_size, new_size);
+	void* new_ptr = gb__string_realloc(GB_STRING_HEADER(str)->allocator, ptr, old_size, new_size);
 	if (new_ptr == NULL)
 		return NULL;
-	str = cast(char *, GB_STRING_HEADER(new_ptr) + 1);
+	str = cast(char*, GB_STRING_HEADER(new_ptr) + 1);
 
 	gb__string_set_capacity(str, new_len);
 
@@ -1876,7 +1894,7 @@ gb_string_make_space_for(gb_String str, gb_String_Size add_len)
 }
 
 gb_String_Size
-gb_string_allocation_size(const gb_String str)
+gb_string_allocation_size(gb_String const str)
 {
 	gb_String_Size cap = gb_string_capacity(str);
 	return sizeof(gb_String_Header) + cap;
@@ -1884,7 +1902,7 @@ gb_string_allocation_size(const gb_String str)
 
 
 bool32
-gb_strings_are_equal(const gb_String lhs, const gb_String rhs)
+gb_strings_are_equal(gb_String const lhs, gb_String const rhs)
 {
 	gb_String_Size lhs_len = gb_string_length(lhs);
 	gb_String_Size rhs_len = gb_string_length(rhs);
@@ -1901,12 +1919,12 @@ gb_strings_are_equal(const gb_String lhs, const gb_String rhs)
 
 
 gb_String
-gb_string_trim(gb_String str, const char *cut_set)
+gb_string_trim(gb_String str, char const* cut_set)
 {
-	char *start;
-	char *end;
-	char *start_pos;
-	char *end_pos;
+	char* start;
+	char* end;
+	char* start_pos;
+	char* end_pos;
 
 	start_pos = start = str;
 	end_pos   = end   = str + gb_string_length(str) - 1;
@@ -1932,15 +1950,16 @@ gb_String gb_string_trim_space(gb_String str) { return gb_string_trim(str, " \t\
 
 
 u32
-gb_hash_adler32(const void *key, u32 num_bytes)
+gb_hash_adler32(void const* key, u32 num_bytes)
 {
 	const u32 MOD_ADLER = 65521;
 
 	u32 a = 1;
 	u32 b = 0;
 
-	const u8* bytes = cast(const u8 *, key);
-	for (u32 i = 0; i < num_bytes; i++) {
+	u8 const* bytes = cast(u8 const*, key);
+	for (u32 i = 0; i < num_bytes; i++)
+	{
 		a = (a + bytes[i]) % MOD_ADLER;
 		b = (b + a) % MOD_ADLER;
 	}
@@ -2083,10 +2102,10 @@ global_variable const u64 GB_CRC64_TABLE[256] = {
 };
 
 u32
-gb_hash_crc32(const void* key, u32 num_bytes)
+gb_hash_crc32(void const* key, u32 num_bytes)
 {
 	u32 result = cast(u32, ~0);
-	const u8 *c = cast(const u8 *, key);
+	u8 const* c = cast(u8 const*, key);
 
 	for (u32 remaining = num_bytes; remaining--; c++)
 		result = (result >> 8) ^ (GB_CRC32_TABLE[(result ^ *c) & 0xff]);
@@ -2095,10 +2114,10 @@ gb_hash_crc32(const void* key, u32 num_bytes)
 }
 
 u64
-gb_hash_crc64(const void* key, usize num_bytes)
+gb_hash_crc64(void const* key, usize num_bytes)
 {
 	u64 result = cast(u64, ~0);
-	const u8 *c = cast(const u8 *, key);
+	u8 const* c = cast(u8 const*, key);
 	for (usize remaining = num_bytes; remaining--; c++)
 		result = (result >> 8) ^ (GB_CRC64_TABLE[(result ^ *c) & 0xff]);
 
@@ -2107,60 +2126,56 @@ gb_hash_crc64(const void* key, usize num_bytes)
 
 
 u32
-gb_hash_fnv32(const void* key, usize num_bytes)
+gb_hash_fnv32(void const* key, usize num_bytes)
 {
 	u32 h = 0x811c9dc5;
-	const u8 *buffer = cast(const u8 *, key);
+	u8 const* buffer = cast(u8 const*, key);
 
-	for (usize i = 0; i < num_bytes; i++) {
+	for (usize i = 0; i < num_bytes; i++)
 		h = (h * 0x01000193) ^ buffer[i];
-	}
 
 	return h;
 }
 
 u64
-gb_hash_fnv64(const void* key, usize num_bytes)
+gb_hash_fnv64(void const* key, usize num_bytes)
 {
 	u64 h = 0xcbf29ce484222325ull;
-	const u8 *buffer = cast(const u8 *, key);
+	u8 const* buffer = cast(u8 const*, key);
 
-	for (usize i = 0; i < num_bytes; i++) {
+	for (usize i = 0; i < num_bytes; i++)
 		h = (h * 0x100000001b3ll) ^ buffer[i];
-	}
 
 	return h;
 }
 
 u32
-gb_hash_fnv32a(const void* key, usize num_bytes)
+gb_hash_fnv32a(void const* key, usize num_bytes)
 {
 	u32 h = 0x811c9dc5;
-	const u8 * buffer = cast(const u8 *, key);
+	u8 const* buffer = cast(u8 const*, key);
 
-	for (usize i = 0; i < num_bytes; i++) {
+	for (usize i = 0; i < num_bytes; i++)
 		h = (h ^ buffer[i]) * 0x01000193;
-	}
 
 	return h;
 }
 
 u64
-gb_hash_fnv64a(const void* key, usize num_bytes)
+gb_hash_fnv64a(void const* key, usize num_bytes)
 {
 	u64 h = 0xcbf29ce484222325ull;
-	const u8 * buffer = cast(const u8 *, key);
+	u8 const* buffer = cast(u8 const*, key);
 
-	for (usize i = 0; i < num_bytes; i++) {
+	for (usize i = 0; i < num_bytes; i++)
 		h = (h ^ buffer[i]) * 0x100000001b3ll;
-	}
 
 	return h;
 }
 
 
 u32
-gb_hash_murmur32(const void* key, u32 num_bytes, u32 seed)
+gb_hash_murmur32(void const* key, u32 num_bytes, u32 seed)
 {
 	const u32 c1 = 0xcc9e2d51;
 	const u32 c2 = 0x1b873593;
@@ -2172,8 +2187,9 @@ gb_hash_murmur32(const void* key, u32 num_bytes, u32 seed)
 	u32 hash = seed;
 
 	const usize nblocks = num_bytes / 4;
-	const u32 *blocks = cast(const u32 *, key);
-	for (usize i = 0; i < nblocks; i++) {
+	const u32* blocks = cast(const u32*, key);
+	for (usize i = 0; i < nblocks; i++)
+	{
 		u32 k = blocks[i];
 		k *= c1;
 		k = (k << r1) | (k >> (32 - r1));
@@ -2183,10 +2199,11 @@ gb_hash_murmur32(const void* key, u32 num_bytes, u32 seed)
 		hash = ((hash << r2) | (hash >> (32 - r2))) * m + n;
 	}
 
-	const u8 *tail = (cast(const u8 *, key)) + nblocks * 4;
+	u8 const* tail = (cast(u8 const*, key)) + nblocks * 4;
 	u32 k1 = 0;
 
-	switch (num_bytes & 3) {
+	switch (num_bytes & 3)
+	{
 	case 3:
 		k1 ^= tail[2] << 16;
 	case 2:
@@ -2212,17 +2229,18 @@ gb_hash_murmur32(const void* key, u32 num_bytes, u32 seed)
 
 #if defined(GB_ARCH_64_BIT)
 	u64
-	gb_hash_murmur64(const void* key, usize num_bytes, u64 seed)
+	gb_hash_murmur64(void const* key, usize num_bytes, u64 seed)
 	{
 		const u64 m = 0xc6a4a7935bd1e995ULL;
 		const s32 r = 47;
 
 		u64 h = seed ^ (num_bytes * m);
 
-		const u64 *data = cast(const u64 *, key);
-		const u64 *end = data + (num_bytes / 8);
+		const u64* data = cast(const u64*, key);
+		const u64* end = data + (num_bytes / 8);
 
-		while (data != end) {
+		while (data != end)
+		{
 			u64 k = *data++;
 
 			k *= m;
@@ -2233,9 +2251,10 @@ gb_hash_murmur32(const void* key, u32 num_bytes, u32 seed)
 			h *= m;
 		}
 
-		const u8* data2 = cast(const u8*, data);
+		u8 const* data2 = cast(u8 const*, data);
 
-		switch (num_bytes & 7) {
+		switch (num_bytes & 7)
+		{
 		case 7: h ^= cast(u64, data2[6]) << 48;
 		case 6: h ^= cast(u64, data2[5]) << 40;
 		case 5: h ^= cast(u64, data2[4]) << 32;
@@ -2254,7 +2273,7 @@ gb_hash_murmur32(const void* key, u32 num_bytes, u32 seed)
 	}
 #elif GB_ARCH_32_BIT
 	u64
-	gb_hash_murmur64(const void* key, usize num_bytes, u64 seed)
+	gb_hash_murmur64(void const* key, usize num_bytes, u64 seed)
 	{
 		const u32 m = 0x5bd1e995;
 		const s32 r = 24;
@@ -2262,9 +2281,10 @@ gb_hash_murmur32(const void* key, u32 num_bytes, u32 seed)
 		u32 h1 = cast(u32, seed) ^ cast(u32, num_bytes);
 		u32 h2 = cast(u32, seed >> 32);
 
-		const u32 *data = cast(const u32 *, key);
+		const u32* data = cast(const u32*, key);
 
-		while (num_bytes >= 8) {
+		while (num_bytes >= 8)
+		{
 			u32 k1 = *data++;
 			k1 *= m;
 			k1 ^= k1 >> r;
@@ -2282,7 +2302,8 @@ gb_hash_murmur32(const void* key, u32 num_bytes, u32 seed)
 			num_bytes -= 4;
 		}
 
-		if (num_bytes >= 4) {
+		if (num_bytes >= 4)
+		{
 			u32 k1 = *data++;
 			k1 *= m;
 			k1 ^= k1 >> r;
@@ -2292,10 +2313,11 @@ gb_hash_murmur32(const void* key, u32 num_bytes, u32 seed)
 			num_bytes -= 4;
 		}
 
-		switch (num_bytes) {
-		case 3: h2 ^= cast(const u8 *, data)[2] << 16;
-		case 2: h2 ^= cast(const u8 *, data)[1] <<  8;
-		case 1: h2 ^= cast(const u8 *, data)[0] <<  0;
+		switch (num_bytes)
+		{
+		case 3: h2 ^= cast(u8 const*, data)[2] << 16;
+		case 2: h2 ^= cast(u8 const*, data)[1] <<  8;
+		case 1: h2 ^= cast(u8 const*, data)[0] <<  0;
 			h2 *= m;
 		};
 
@@ -2344,7 +2366,7 @@ gb_hash_murmur32(const void* key, u32 num_bytes, u32 seed)
 		/* Get the frequency of the performance counter */
 		/* It is constant across the program's lifetime */
 		local_persist LARGE_INTEGER s_frequency;
-		QueryPerformanceFrequency(&s_frequency); /* Is this fast enough? */
+		QueryPerformanceFrequency(&s_frequency); /* TODO(bill): Is this fast enough? */
 
 		/* Get the current time */
 		LARGE_INTEGER t;

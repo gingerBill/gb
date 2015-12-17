@@ -4,6 +4,7 @@
 
 /*
 Version History:
+	0.04  - Change const position convention
 	0.03a - Remove templated clamp
 	0.03  - Remove templated min/max/clamp
 	0.02b - Typo fixes
@@ -221,16 +222,6 @@ CONTENTS:
 	#include <sys/time.h>
 #endif
 
-#ifndef GB_ARRAY_BOUND_CHECKING
-#define GB_ARRAY_BOUND_CHECKING 1
-#endif
-
-
-#ifndef GB_DISABLE_COPY
-#define GB_DISABLE_COPY(Type) \
-	Type(const Type&) = delete;      \
-	Type& operator=(const Type&) = delete
-#endif
 
 #if !defined(GB_ASSERT)
 	#if !defined(NDEBUG)
@@ -444,18 +435,18 @@ __GB_NAMESPACE_START
 	// *(T*)(&u) ~~ pseudo_cast<T>(u)
 	template <typename T, typename U>
 	inline T
-	pseudo_cast(const U& u)
+	pseudo_cast(U const& u)
 	{
-		return reinterpret_cast<const T&>(u);
+		return reinterpret_cast<T const&>(u);
 	}
 
 	// NOTE(bill): Very similar to doing `*(T*)(&u)`
 	template <typename Dest, typename Source>
 	inline Dest
-	bit_cast(const Source& source)
+	bit_cast(Source const& source)
 	{
 		static_assert(sizeof(Dest) <= sizeof(Source),
-		              "bit_cast<Dest>(const Source&) - sizeof(Dest) <= sizeof(Source)");
+		              "bit_cast<Dest>(Source const&) - sizeof(Dest) <= sizeof(Source)");
 		Dest dest;
 		::memcpy(&dest, &source, sizeof(Dest));
 		return dest;
@@ -486,8 +477,8 @@ struct Vector2
 		f32 data[2];
 	};
 
-	inline const f32& operator[](usize index) const { return data[index]; }
-	inline       f32& operator[](usize index)       { return data[index]; }
+	inline f32  operator[](usize index) const { return data[index]; }
+	inline f32& operator[](usize index)       { return data[index]; }
 };
 
 struct Vector3
@@ -500,8 +491,8 @@ struct Vector3
 		f32     data[3];
 	};
 
-	inline const f32& operator[](usize index) const { return data[index]; }
-	inline       f32& operator[](usize index)       { return data[index]; }
+	inline f32  operator[](usize index) const { return data[index]; }
+	inline f32& operator[](usize index)       { return data[index]; }
 };
 
 struct Vector4
@@ -516,8 +507,8 @@ struct Vector4
 		f32     data[4];
 	};
 
-	inline const f32& operator[](usize index) const { return data[index]; }
-	inline       f32& operator[](usize index)       { return data[index]; }
+	inline f32  operator[](usize index) const { return data[index]; }
+	inline f32& operator[](usize index)       { return data[index]; }
 };
 
 struct Complex
@@ -529,8 +520,8 @@ struct Complex
 		f32 data[2];
 	};
 
-	inline const f32& operator[](usize index) const { return data[index]; }
-	inline       f32& operator[](usize index)       { return data[index]; }
+	inline f32  operator[](usize index) const { return data[index]; }
+	inline f32& operator[](usize index)       { return data[index]; }
 };
 
 struct Quaternion
@@ -542,8 +533,8 @@ struct Quaternion
 		f32     data[4];
 	};
 
-	inline const f32& operator[](usize index) const { return data[index]; }
-	inline       f32& operator[](usize index)       { return data[index]; }
+	inline f32  operator[](usize index) const { return data[index]; }
+	inline f32& operator[](usize index)       { return data[index]; }
 };
 
 struct Matrix2
@@ -555,8 +546,8 @@ struct Matrix2
 		f32     data[4];
 	};
 
-	inline const Vector2& operator[](usize index) const { return columns[index]; }
-	inline       Vector2& operator[](usize index)       { return columns[index]; }
+	inline Vector2  operator[](usize index) const { return columns[index]; }
+	inline Vector2& operator[](usize index)       { return columns[index]; }
 };
 
 struct Matrix3
@@ -568,8 +559,8 @@ struct Matrix3
 		f32     data[9];
 	};
 
-	inline const Vector3& operator[](usize index) const { return columns[index]; }
-	inline       Vector3& operator[](usize index)       { return columns[index]; }
+	inline Vector3  operator[](usize index) const { return columns[index]; }
+	inline Vector3& operator[](usize index)       { return columns[index]; }
 };
 
 struct Matrix4
@@ -581,8 +572,8 @@ struct Matrix4
 		f32     data[16];
 	};
 
-	inline const Vector4& operator[](usize index) const { return columns[index]; }
-	inline       Vector4& operator[](usize index)       { return columns[index]; }
+	inline Vector4  operator[](usize index) const { return columns[index]; }
+	inline Vector4& operator[](usize index)       { return columns[index]; }
 };
 
 struct Angle
@@ -634,170 +625,170 @@ struct Plane
 ////////////////////////////////
 
 // Vector2 Operators
-bool operator==(const Vector2& a, const Vector2& b);
-bool operator!=(const Vector2& a, const Vector2& b);
+bool operator==(Vector2 a, Vector2 b);
+bool operator!=(Vector2 a, Vector2 b);
 
-Vector2 operator+(const Vector2& a);
-Vector2 operator-(const Vector2& a);
+Vector2 operator+(Vector2 a);
+Vector2 operator-(Vector2 a);
 
-Vector2 operator+(const Vector2& a, const Vector2& b);
-Vector2 operator-(const Vector2& a, const Vector2& b);
+Vector2 operator+(Vector2 a, Vector2 b);
+Vector2 operator-(Vector2 a, Vector2 b);
 
-Vector2 operator*(const Vector2& a, f32 scalar);
-Vector2 operator*(f32 scalar, const Vector2& a);
+Vector2 operator*(Vector2 a, f32 scalar);
+Vector2 operator*(f32 scalar, Vector2 a);
 
-Vector2 operator/(const Vector2& a, f32 scalar);
+Vector2 operator/(Vector2 a, f32 scalar);
 
-Vector2 operator*(const Vector2& a, const Vector2& b); // Hadamard Product
-Vector2 operator/(const Vector2& a, const Vector2& b); // Hadamard Product
+Vector2 operator*(Vector2 a, Vector2 b); // Hadamard Product
+Vector2 operator/(Vector2 a, Vector2 b); // Hadamard Product
 
-Vector2& operator+=(Vector2& a, const Vector2& b);
-Vector2& operator-=(Vector2& a, const Vector2& b);
+Vector2& operator+=(Vector2& a, Vector2 b);
+Vector2& operator-=(Vector2& a, Vector2 b);
 Vector2& operator*=(Vector2& a, f32 scalar);
 Vector2& operator/=(Vector2& a, f32 scalar);
 
 // Vector3 Operators
-bool operator==(const Vector3& a, const Vector3& b);
-bool operator!=(const Vector3& a, const Vector3& b);
+bool operator==(Vector3 a, Vector3 b);
+bool operator!=(Vector3 a, Vector3 b);
 
-Vector3 operator+(const Vector3& a);
-Vector3 operator-(const Vector3& a);
+Vector3 operator+(Vector3 a);
+Vector3 operator-(Vector3 a);
 
-Vector3 operator+(const Vector3& a, const Vector3& b);
-Vector3 operator-(const Vector3& a, const Vector3& b);
+Vector3 operator+(Vector3 a, Vector3 b);
+Vector3 operator-(Vector3 a, Vector3 b);
 
-Vector3 operator*(const Vector3& a, f32 scalar);
-Vector3 operator*(f32 scalar, const Vector3& a);
+Vector3 operator*(Vector3 a, f32 scalar);
+Vector3 operator*(f32 scalar, Vector3 a);
 
-Vector3 operator/(const Vector3& a, f32 scalar);
+Vector3 operator/(Vector3 a, f32 scalar);
 
-Vector3 operator*(const Vector3& a, const Vector3& b); // Hadamard Product
-Vector3 operator/(const Vector3& a, const Vector3& b); // Hadamard Product
+Vector3 operator*(Vector3 a, Vector3 b); // Hadamard Product
+Vector3 operator/(Vector3 a, Vector3 b); // Hadamard Product
 
-Vector3& operator+=(Vector3& a, const Vector3& b);
-Vector3& operator-=(Vector3& a, const Vector3& b);
+Vector3& operator+=(Vector3& a, Vector3 b);
+Vector3& operator-=(Vector3& a, Vector3 b);
 Vector3& operator*=(Vector3& a, f32 scalar);
 Vector3& operator/=(Vector3& a, f32 scalar);
 
 // Vector4 Operators
-bool operator==(const Vector4& a, const Vector4& b);
-bool operator!=(const Vector4& a, const Vector4& b);
+bool operator==(Vector4 a, Vector4 b);
+bool operator!=(Vector4 a, Vector4 b);
 
-Vector4 operator+(const Vector4& a);
-Vector4 operator-(const Vector4& a);
+Vector4 operator+(Vector4 a);
+Vector4 operator-(Vector4 a);
 
-Vector4 operator+(const Vector4& a, const Vector4& b);
-Vector4 operator-(const Vector4& a, const Vector4& b);
+Vector4 operator+(Vector4 a, Vector4 b);
+Vector4 operator-(Vector4 a, Vector4 b);
 
-Vector4 operator*(const Vector4& a, f32 scalar);
-Vector4 operator*(f32 scalar, const Vector4& a);
+Vector4 operator*(Vector4 a, f32 scalar);
+Vector4 operator*(f32 scalar, Vector4 a);
 
-Vector4 operator/(const Vector4& a, f32 scalar);
+Vector4 operator/(Vector4 a, f32 scalar);
 
-Vector4 operator*(const Vector4& a, const Vector4& b); // Hadamard Product
-Vector4 operator/(const Vector4& a, const Vector4& b); // Hadamard Product
+Vector4 operator*(Vector4 a, Vector4 b); // Hadamard Product
+Vector4 operator/(Vector4 a, Vector4 b); // Hadamard Product
 
-Vector4& operator+=(Vector4& a, const Vector4& b);
-Vector4& operator-=(Vector4& a, const Vector4& b);
+Vector4& operator+=(Vector4& a, Vector4 b);
+Vector4& operator-=(Vector4& a, Vector4 b);
 Vector4& operator*=(Vector4& a, f32 scalar);
 Vector4& operator/=(Vector4& a, f32 scalar);
 
 // Complex Operators
-bool operator==(const Complex& a, const Complex& b);
-bool operator!=(const Complex& a, const Complex& b);
+bool operator==(Complex a, Complex b);
+bool operator!=(Complex a, Complex b);
 
-Complex operator+(const Complex& a);
-Complex operator-(const Complex& a);
+Complex operator+(Complex a);
+Complex operator-(Complex a);
 
-Complex operator+(const Complex& a, const Complex& b);
-Complex operator-(const Complex& a, const Complex& b);
+Complex operator+(Complex a, Complex b);
+Complex operator-(Complex a, Complex b);
 
-Complex operator*(const Complex& a, const Complex& b);
-Complex operator*(const Complex& a, f32 s);
-Complex operator*(f32 s, const Complex& a);
+Complex operator*(Complex a, Complex b);
+Complex operator*(Complex a, f32 s);
+Complex operator*(f32 s, Complex a);
 
-Complex operator/(const Complex& a, f32 s);
+Complex operator/(Complex a, f32 s);
 
 // Quaternion Operators
-bool operator==(const Quaternion& a, const Quaternion& b);
-bool operator!=(const Quaternion& a, const Quaternion& b);
+bool operator==(Quaternion a, Quaternion b);
+bool operator!=(Quaternion a, Quaternion b);
 
-Quaternion operator+(const Quaternion& a);
-Quaternion operator-(const Quaternion& a);
+Quaternion operator+(Quaternion a);
+Quaternion operator-(Quaternion a);
 
-Quaternion operator+(const Quaternion& a, const Quaternion& b);
-Quaternion operator-(const Quaternion& a, const Quaternion& b);
+Quaternion operator+(Quaternion a, Quaternion b);
+Quaternion operator-(Quaternion a, Quaternion b);
 
-Quaternion operator*(const Quaternion& a, const Quaternion& b);
-Quaternion operator*(const Quaternion& a, f32 s);
-Quaternion operator*(f32 s, const Quaternion& a);
+Quaternion operator*(Quaternion a, Quaternion b);
+Quaternion operator*(Quaternion a, f32 s);
+Quaternion operator*(f32 s, Quaternion a);
 
-Quaternion operator/(const Quaternion& a, f32 s);
+Quaternion operator/(Quaternion a, f32 s);
 
-Vector3 operator*(const Quaternion& a, const Vector3& v); // Rotate v by a
+Vector3 operator*(Quaternion a, Vector3 v); // Rotate v by a
 
 // Matrix2 Operators
-bool operator==(const Matrix2& a, const Matrix2& b);
-bool operator!=(const Matrix2& a, const Matrix2& b);
+bool operator==(Matrix2 a, Matrix2 b);
+bool operator!=(Matrix2 a, Matrix2 b);
 
-Matrix2 operator+(const Matrix2& a);
-Matrix2 operator-(const Matrix2& a);
+Matrix2 operator+(Matrix2 a);
+Matrix2 operator-(Matrix2 a);
 
-Matrix2 operator+(const Matrix2& a, const Matrix2& b);
-Matrix2 operator-(const Matrix2& a, const Matrix2& b);
+Matrix2 operator+(Matrix2 a, Matrix2 b);
+Matrix2 operator-(Matrix2 a, Matrix2 b);
 
-Matrix2 operator*(const Matrix2& a, const Matrix2& b);
-Vector2 operator*(const Matrix2& a, const Vector2& v);
-Matrix2 operator*(const Matrix2& a, f32 scalar);
-Matrix2 operator*(f32 scalar, const Matrix2& a);
+Matrix2 operator*(Matrix2 a, Matrix2 b);
+Vector2 operator*(Matrix2 a, Vector2 v);
+Matrix2 operator*(Matrix2 a, f32 scalar);
+Matrix2 operator*(f32 scalar, Matrix2 a);
 
-Matrix2 operator/(const Matrix2& a, f32 scalar);
+Matrix2 operator/(Matrix2 a, f32 scalar);
 
-Matrix2& operator+=(Matrix2& a, const Matrix2& b);
-Matrix2& operator-=(Matrix2& a, const Matrix2& b);
-Matrix2& operator*=(Matrix2& a, const Matrix2& b);
+Matrix2& operator+=(Matrix2& a, Matrix2 b);
+Matrix2& operator-=(Matrix2& a, Matrix2 b);
+Matrix2& operator*=(Matrix2& a, Matrix2 b);
 
 // Matrix3 Operators
-bool operator==(const Matrix3& a, const Matrix3& b);
-bool operator!=(const Matrix3& a, const Matrix3& b);
+bool operator==(Matrix3 const& a, Matrix3 const& b);
+bool operator!=(Matrix3 const& a, Matrix3 const& b);
 
-Matrix3 operator+(const Matrix3& a);
-Matrix3 operator-(const Matrix3& a);
+Matrix3 operator+(Matrix3 const& a);
+Matrix3 operator-(Matrix3 const& a);
 
-Matrix3 operator+(const Matrix3& a, const Matrix3& b);
-Matrix3 operator-(const Matrix3& a, const Matrix3& b);
+Matrix3 operator+(Matrix3 const& a, Matrix3 const& b);
+Matrix3 operator-(Matrix3 const& a, Matrix3 const& b);
 
-Matrix3 operator*(const Matrix3& a, const Matrix3& b);
-Vector3 operator*(const Matrix3& a, const Vector3& v);
-Matrix3 operator*(const Matrix3& a, f32 scalar);
-Matrix3 operator*(f32 scalar, const Matrix3& a);
+Matrix3 operator*(Matrix3 const& a, Matrix3 const& b);
+Vector3 operator*(Matrix3 const& a, Vector3 v);
+Matrix3 operator*(Matrix3 const& a, f32 scalar);
+Matrix3 operator*(f32 scalar, Matrix3 const& a);
 
-Matrix3 operator/(const Matrix3& a, f32 scalar);
+Matrix3 operator/(Matrix3 const& a, f32 scalar);
 
-Matrix3& operator+=(Matrix3& a, const Matrix3& b);
-Matrix3& operator-=(Matrix3& a, const Matrix3& b);
-Matrix3& operator*=(Matrix3& a, const Matrix3& b);
+Matrix3& operator+=(Matrix3& a, Matrix3 const& b);
+Matrix3& operator-=(Matrix3& a, Matrix3 const& b);
+Matrix3& operator*=(Matrix3& a, Matrix3 const& b);
 
 // Matrix4 Operators
-bool operator==(const Matrix4& a, const Matrix4& b);
-bool operator!=(const Matrix4& a, const Matrix4& b);
+bool operator==(Matrix4 const& a, Matrix4 const& b);
+bool operator!=(Matrix4 const& a, Matrix4 const& b);
 
-Matrix4 operator+(const Matrix4& a);
-Matrix4 operator-(const Matrix4& a);
+Matrix4 operator+(Matrix4 const& a);
+Matrix4 operator-(Matrix4 const& a);
 
-Matrix4 operator+(const Matrix4& a, const Matrix4& b);
-Matrix4 operator-(const Matrix4& a, const Matrix4& b);
+Matrix4 operator+(Matrix4 const& a, Matrix4 const& b);
+Matrix4 operator-(Matrix4 const& a, Matrix4 const& b);
 
-Matrix4 operator*(const Matrix4& a, const Matrix4& b);
-Vector4 operator*(const Matrix4& a, const Vector4& v);
-Matrix4 operator*(const Matrix4& a, f32 scalar);
-Matrix4 operator*(f32 scalar, const Matrix4& a);
+Matrix4 operator*(Matrix4 const& a, Matrix4 const& b);
+Vector4 operator*(Matrix4 const& a, Vector4 v);
+Matrix4 operator*(Matrix4 const& a, f32 scalar);
+Matrix4 operator*(f32 scalar, Matrix4 const& a);
 
-Matrix4 operator/(const Matrix4& a, f32 scalar);
+Matrix4 operator/(Matrix4 const& a, f32 scalar);
 
-Matrix4& operator+=(Matrix4& a, const Matrix4& b);
-Matrix4& operator-=(Matrix4& a, const Matrix4& b);
-Matrix4& operator*=(Matrix4& a, const Matrix4& b);
+Matrix4& operator+=(Matrix4& a, Matrix4 const& b);
+Matrix4& operator-=(Matrix4& a, Matrix4 const& b);
+Matrix4& operator*=(Matrix4& a, Matrix4 const& b);
 
 // Angle Operators
 bool operator==(Angle a, Angle b);
@@ -823,11 +814,11 @@ Angle& operator/=(Angle& a, f32 scalar);
 
 // Transform Operators
 // World = Parent * Local
-Transform  operator*(const Transform& ps, const Transform& ls);
-Transform& operator*=(Transform& ps, const Transform& ls);
+Transform  operator*(Transform const& ps, Transform const& ls);
+Transform& operator*=(Transform& ps, Transform const& ls);
 // Local = World / Parent
-Transform  operator/(const Transform& ws, const Transform& ps);
-Transform& operator/=(Transform& ws, const Transform& ps);
+Transform  operator/(Transform const& ws, Transform const& ps);
+Transform& operator/=(Transform& ws, Transform const& ps);
 
 namespace angle
 {
@@ -849,31 +840,31 @@ f32 as_gons(Angle a);
 /// Math Functions & Constants ///
 ///                            ///
 //////////////////////////////////
-extern const Vector2      VECTOR2_ZERO;
-extern const Vector3      VECTOR3_ZERO;
-extern const Vector4      VECTOR4_ZERO;
-extern const Complex      COMPLEX_ZERO;
-extern const Quaternion   QUATERNION_IDENTITY;
-extern const Matrix2      MATRIX2_IDENTITY;
-extern const Matrix3      MATRIX3_IDENTITY;
-extern const Matrix4      MATRIX4_IDENTITY;
-extern const Euler_Angles EULER_ANGLES_ZERO;
-extern const Transform    TRANSFORM_IDENTITY;
+extern Vector2      const VECTOR2_ZERO;
+extern Vector3      const VECTOR3_ZERO;
+extern Vector4      const VECTOR4_ZERO;
+extern Complex      const COMPLEX_ZERO;
+extern Quaternion   const QUATERNION_IDENTITY;
+extern Matrix2      const MATRIX2_IDENTITY;
+extern Matrix3      const MATRIX3_IDENTITY;
+extern Matrix4      const MATRIX4_IDENTITY;
+extern Euler_Angles const EULER_ANGLES_ZERO;
+extern Transform    const TRANSFORM_IDENTITY;
 
 namespace math
 {
-extern const f32 ZERO;
-extern const f32 ONE;
-extern const f32 THIRD;
-extern const f32 TWO_THIRDS;
-extern const f32 E;
-extern const f32 PI;
-extern const f32 TAU;
-extern const f32 SQRT_2;
-extern const f32 SQRT_3;
-extern const f32 SQRT_5;
+extern f32 const ZERO;
+extern f32 const ONE;
+extern f32 const THIRD;
+extern f32 const TWO_THIRDS;
+extern f32 const E;
+extern f32 const PI;
+extern f32 const TAU;
+extern f32 const SQRT_2;
+extern f32 const SQRT_3;
+extern f32 const SQRT_5;
 
-extern const f32 F32_PRECISION;
+extern f32 const F32_PRECISION;
 
 // Power
 f32 sqrt(f32 x);
@@ -943,168 +934,168 @@ s64 clamp(s64 x, s64 min, s64 max);
 
 // TODO(bill): Should this be a template or just normal function overloading?
 template <typename T>
-T lerp(const T& x, const T& y, f32 t);
+T lerp(T const& x, T const& y, f32 t);
 
 bool equals(f32 a, f32 b, f32 precision = F32_PRECISION);
 
 // Vector2 functions
-f32 dot(const Vector2& a, const Vector2& b);
-f32 cross(const Vector2& a, const Vector2& b);
+f32 dot(Vector2 a, Vector2 b);
+f32 cross(Vector2 a, Vector2 b);
 
-f32 magnitude(const Vector2& a);
-Vector2 normalize(const Vector2& a);
+f32 magnitude(Vector2 a);
+Vector2 normalize(Vector2 a);
 
-Vector2 hadamard(const Vector2& a, const Vector2& b);
+Vector2 hadamard(Vector2 a, Vector2 b);
 
-f32 aspect_ratio(const Vector2& a);
+f32 aspect_ratio(Vector2 a);
 
 // Vector3 functions
-f32 dot(const Vector3& a, const Vector3& b);
-Vector3 cross(const Vector3& a, const Vector3& b);
+f32 dot(Vector3 a, Vector3 b);
+Vector3 cross(Vector3 a, Vector3 b);
 
-f32 magnitude(const Vector3& a);
-Vector3 normalize(const Vector3& a);
+f32 magnitude(Vector3 a);
+Vector3 normalize(Vector3 a);
 
-Vector3 hadamard(const Vector3& a, const Vector3& b);
+Vector3 hadamard(Vector3 a, Vector3 b);
 
 // Vector4 functions
-f32 dot(const Vector4& a, const Vector4& b);
+f32 dot(Vector4 a, Vector4 b);
 
-f32 magnitude(const Vector4& a);
-Vector4 normalize(const Vector4& a);
+f32 magnitude(Vector4 a);
+Vector4 normalize(Vector4 a);
 
-Vector4 hadamard(const Vector4& a, const Vector4& b);
+Vector4 hadamard(Vector4 a, Vector4 b);
 
 // Complex functions
-f32 dot(const Complex& a, const Complex& b);
+f32 dot(Complex a, Complex b);
 
-f32 magnitude(const Complex& a);
-f32 norm(const Complex& a);
-Complex normalize(const Complex& a);
+f32 magnitude(Complex a);
+f32 norm(Complex a);
+Complex normalize(Complex a);
 
-Complex conjugate(const Complex& a);
-Complex inverse(const Complex& a);
+Complex conjugate(Complex a);
+Complex inverse(Complex a);
 
-f32 complex_angle(const Complex& a);
-inline f32 complex_argument(const Complex& a) { return complex_angle(a); }
+f32 complex_angle(Complex a);
+inline f32 complex_argument(Complex a) { return complex_angle(a); }
 Complex magnitude_angle(f32 magnitude, Angle a);
 inline Complex complex_polar(f32 magnitude, Angle a) { return magnitude_angle(magnitude, a); }
 
 // Quaternion functions
-f32 dot(const Quaternion& a, const Quaternion& b);
-Quaternion cross(const Quaternion& a, const Quaternion& b);
+f32 dot(Quaternion a, Quaternion b);
+Quaternion cross(Quaternion a, Quaternion b);
 
-f32 magnitude(const Quaternion& a);
-f32 norm(const Quaternion& a);
-Quaternion normalize(const Quaternion& a);
+f32 magnitude(Quaternion a);
+f32 norm(Quaternion a);
+Quaternion normalize(Quaternion a);
 
-Quaternion conjugate(const Quaternion& a);
-Quaternion inverse(const Quaternion& a);
+Quaternion conjugate(Quaternion a);
+Quaternion inverse(Quaternion a);
 
-Angle quaternion_angle(const Quaternion& a);
-Vector3 quaternion_axis(const Quaternion& a);
-Quaternion axis_angle(const Vector3& axis, Angle a);
+Angle quaternion_angle(Quaternion a);
+Vector3 quaternion_axis(Quaternion a);
+Quaternion axis_angle(Vector3 axis, Angle a);
 
-Angle quaternion_roll(const Quaternion& a);
-Angle quaternion_pitch(const Quaternion& a);
-Angle quaternion_yaw(const Quaternion& a);
+Angle quaternion_roll(Quaternion a);
+Angle quaternion_pitch(Quaternion a);
+Angle quaternion_yaw(Quaternion a);
 
-Euler_Angles quaternion_to_euler_angles(const Quaternion& a);
-Quaternion euler_angles_to_quaternion(const Euler_Angles& e,
-									  const Vector3& x_axis = {1, 0, 0},
-									  const Vector3& y_axis = {0, 1, 0},
-									  const Vector3& z_axis = {0, 0, 1});
+Euler_Angles quaternion_to_euler_angles(Quaternion a);
+Quaternion euler_angles_to_quaternion(Euler_Angles const& e,
+									  Vector3 x_axis = {1, 0, 0},
+									  Vector3 y_axis = {0, 1, 0},
+									  Vector3 z_axis = {0, 0, 1});
 
 // Spherical Linear Interpolation
-Quaternion slerp(const Quaternion& x, const Quaternion& y, f32 t);
+Quaternion slerp(Quaternion x, Quaternion y, f32 t);
 
 // Shoemake's Quaternion Curves
 // Sqherical Cubic Interpolation
-Quaternion squad(const Quaternion& p,
-				 const Quaternion& a,
-				 const Quaternion& b,
-				 const Quaternion& q,
+Quaternion squad(Quaternion p,
+				 Quaternion a,
+				 Quaternion b,
+				 Quaternion q,
 				 f32 t);
 // Matrix2 functions
-Matrix2 transpose(const Matrix2& m);
-f32 determinant(const Matrix2& m);
-Matrix2 inverse(const Matrix2& m);
-Matrix2 hadamard(const Matrix2& a, const Matrix2&b);
-Matrix4 matrix2_to_matrix4(const Matrix2& m);
+Matrix2 transpose(Matrix2 m);
+f32 determinant(Matrix2 m);
+Matrix2 inverse(Matrix2 m);
+Matrix2 hadamard(Matrix2 a, const Matrix2&b);
+Matrix4 matrix2_to_matrix4(Matrix2 m);
 
 // Matrix3 functions
-Matrix3 transpose(const Matrix3& m);
-f32 determinant(const Matrix3& m);
-Matrix3 inverse(const Matrix3& m);
-Matrix3 hadamard(const Matrix3& a, const Matrix3&b);
-Matrix4 matrix3_to_matrix4(const Matrix3& m);
+Matrix3 transpose(Matrix3 const& m);
+f32 determinant(Matrix3 const& m);
+Matrix3 inverse(Matrix3 const& m);
+Matrix3 hadamard(Matrix3 const& a, const Matrix3&b);
+Matrix4 matrix3_to_matrix4(Matrix3 const& m);
 
 // Matrix4 functions
-Matrix4 transpose(const Matrix4& m);
-f32 determinant(const Matrix4& m);
-Matrix4 inverse(const Matrix4& m);
-Matrix4 hadamard(const Matrix4& a, const Matrix4&b);
-bool is_affine(const Matrix4& m);
+Matrix4 transpose(Matrix4 const& m);
+f32 determinant(Matrix4 const& m);
+Matrix4 inverse(Matrix4 const& m);
+Matrix4 hadamard(Matrix4 const& a, const Matrix4&b);
+bool is_affine(Matrix4 const& m);
 
-Matrix4 quaternion_to_matrix4(const Quaternion& a);
-Quaternion matrix4_to_quaternion(const Matrix4& m);
+Matrix4 quaternion_to_matrix4(Quaternion a);
+Quaternion matrix4_to_quaternion(Matrix4 const& m);
 
-Matrix4 translate(const Vector3& v);
-Matrix4 rotate(const Vector3& v, Angle angle);
-Matrix4 scale(const Vector3& v);
+Matrix4 translate(Vector3 v);
+Matrix4 rotate(Vector3 v, Angle angle);
+Matrix4 scale(Vector3 v);
 Matrix4 ortho(f32 left, f32 right, f32 bottom, f32 top);
 Matrix4 ortho(f32 left, f32 right, f32 bottom, f32 top, f32 z_near, f32 z_far);
 Matrix4 perspective(Angle fovy, f32 aspect, f32 z_near, f32 z_far);
 Matrix4 infinite_perspective(Angle fovy, f32 aspect, f32 z_near);
 
 Matrix4
-look_at_matrix4(const Vector3& eye, const Vector3& center, const Vector3& up = {0, 1, 0});
+look_at_matrix4(Vector3 eye, Vector3 center, Vector3 up = {0, 1, 0});
 
 Quaternion
-look_at_quaternion(const Vector3& eye, const Vector3& center, const Vector3& up = {0, 1, 0});
+look_at_quaternion(Vector3 eye, Vector3 center, Vector3 up = {0, 1, 0});
 
 // Transform Functions
-Vector3 transform_point(const Transform& transform, const Vector3& point);
-Transform inverse(const Transform& t);
-Matrix4 transform_to_matrix4(const Transform& t);
+Vector3 transform_point(Transform const& transform, Vector3 point);
+Transform inverse(Transform const& t);
+Matrix4 transform_to_matrix4(Transform const& t);
 } // namespace math
 
 namespace aabb
 {
-Aabb calculate(const void* vertices, usize num_vertices, usize stride, usize offset);
+Aabb calculate(void const* vertices, usize num_vertices, usize stride, usize offset);
 
-f32 surface_area(const Aabb& aabb);
-f32 volume(const Aabb& aabb);
+f32 surface_area(Aabb const& aabb);
+f32 volume(Aabb const& aabb);
 
-Sphere to_sphere(const Aabb& aabb);
+Sphere to_sphere(Aabb const& aabb);
 
-bool contains(const Aabb& aabb, const Vector3& point);
-bool contains(const Aabb& a, const Aabb& b);
-bool intersects(const Aabb& a, const Aabb& b);
+bool contains(Aabb const& aabb, Vector3 point);
+bool contains(Aabb const& a, Aabb const& b);
+bool intersects(Aabb const& a, Aabb const& b);
 
-Aabb transform_affine(const Aabb& aabb, const Matrix4& m);
+Aabb transform_affine(Aabb const& aabb, Matrix4 const& m);
 } // namespace aabb
 
 namespace sphere
 {
-Sphere calculate_min_bounding_sphere(const void* vertices, usize num_vertices, usize stride, usize offset, f32 step);
-Sphere calculate_max_bounding_sphere(const void* vertices, usize num_vertices, usize stride, usize offset);
+Sphere calculate_min_bounding_sphere(void const* vertices, usize num_vertices, usize stride, usize offset, f32 step);
+Sphere calculate_max_bounding_sphere(void const* vertices, usize num_vertices, usize stride, usize offset);
 
-f32 surface_area(const Sphere& s);
-f32 volume(const Sphere& s);
+f32 surface_area(Sphere s);
+f32 volume(Sphere s);
 
-Aabb to_aabb(const Sphere& sphere);
+Aabb to_aabb(Sphere sphere);
 
-bool contains_point(const Sphere& s, const Vector3& point);
+bool contains_point(Sphere s, Vector3 point);
 
-f32 ray_intersection(const Vector3& from, const Vector3& dir, const Sphere& s);
+f32 ray_intersection(Vector3 from, Vector3 dir, Sphere s);
 } // namespace sphere
 
 namespace plane
 {
-f32 ray_intersection(const Vector3& from, const Vector3& dir, const Plane& p);
+f32 ray_intersection(Vector3 from, Vector3 dir, Plane p);
 
-bool intersection3(const Plane& p1, const Plane& p2, const Plane& p3, Vector3* ip);
+bool intersection3(Plane p1, Plane p2, Plane p3, Vector3* ip);
 } // namespace plane
 
 
@@ -1154,7 +1145,7 @@ f32 perlin_3d(f32 x, f32 y, f32 z, s32 x_wrap = 0, s32 y_wrap = 0, s32 z_wrap = 
 
 namespace math
 {
-template <typename T> inline T lerp(const T& x, const T& y, f32 t) { return x + (y - x) * t; }
+template <typename T> inline T lerp(T const& x, T const& y, f32 t) { return x + (y - x) * t; }
 } // namespace math
 
 __GB_NAMESPACE_END
@@ -1237,22 +1228,22 @@ __GB_NAMESPACE_START
 ///                          ///
 ////////////////////////////////
 
-const Vector2      VECTOR2_ZERO        = Vector2{0, 0};
-const Vector3      VECTOR3_ZERO        = Vector3{0, 0, 0};
-const Vector4      VECTOR4_ZERO        = Vector4{0, 0, 0, 0};
-const Complex      COMPLEX_ZERO        = Complex{0, 0};
-const Quaternion   QUATERNION_IDENTITY = Quaternion{0, 0, 0, 1};
-const Matrix2      MATRIX2_IDENTITY    = Matrix2{1, 0,
+Vector2      const VECTOR2_ZERO        = Vector2{0, 0};
+Vector3      const VECTOR3_ZERO        = Vector3{0, 0, 0};
+Vector4      const VECTOR4_ZERO        = Vector4{0, 0, 0, 0};
+Complex      const COMPLEX_ZERO        = Complex{0, 0};
+Quaternion   const QUATERNION_IDENTITY = Quaternion{0, 0, 0, 1};
+Matrix2      const MATRIX2_IDENTITY    = Matrix2{1, 0,
 										         0, 1};
-const Matrix3      MATRIX3_IDENTITY    = Matrix3{1, 0, 0,
+Matrix3      const MATRIX3_IDENTITY    = Matrix3{1, 0, 0,
 										         0, 1, 0,
 										         0, 0, 1};
-const Matrix4      MATRIX4_IDENTITY    = Matrix4{1, 0, 0, 0,
+Matrix4      const MATRIX4_IDENTITY    = Matrix4{1, 0, 0, 0,
 										         0, 1, 0, 0,
 										         0, 0, 1, 0,
 										         0, 0, 0, 1};
-const Euler_Angles EULER_ANGLES_ZERO   = Euler_Angles{0, 0, 0};
-const Transform    TRANSFORM_IDENTITY  = Transform{VECTOR3_ZERO, QUATERNION_IDENTITY, 1};
+Euler_Angles const EULER_ANGLES_ZERO   = Euler_Angles{0, 0, 0};
+Transform    const TRANSFORM_IDENTITY  = Transform{VECTOR3_ZERO, QUATERNION_IDENTITY, 1};
 
 ////////////////////////////////
 /// Math Type Op Overloads   ///
@@ -1260,73 +1251,73 @@ const Transform    TRANSFORM_IDENTITY  = Transform{VECTOR3_ZERO, QUATERNION_IDEN
 
 // Vector2 Operators
 inline bool
-operator==(const Vector2& a, const Vector2& b)
+operator==(Vector2 a, Vector2 b)
 {
 	return (a.x == b.x) && (a.y == b.y);
 }
 
 inline bool
-operator!=(const Vector2& a, const Vector2& b)
+operator!=(Vector2 a, Vector2 b)
 {
 	return !operator==(a, b);
 }
 
 inline Vector2
-operator+(const Vector2& a)
+operator+(Vector2 a)
 {
 	return a;
 }
 
 inline Vector2
-operator-(const Vector2& a)
+operator-(Vector2 a)
 {
 	return {-a.x, -a.y};
 }
 
 inline Vector2
-operator+(const Vector2& a, const Vector2& b)
+operator+(Vector2 a, Vector2 b)
 {
 	return {a.x + b.x, a.y + b.y};
 }
 
 inline Vector2
-operator-(const Vector2& a, const Vector2& b)
+operator-(Vector2 a, Vector2 b)
 {
 	return {a.x - b.x, a.y - b.y};
 }
 
 inline Vector2
-operator*(const Vector2& a, f32 scalar)
+operator*(Vector2 a, f32 scalar)
 {
 	return {a.x * scalar, a.y * scalar};
 }
 
 inline Vector2
-operator*(f32 scalar, const Vector2& a)
+operator*(f32 scalar, Vector2 a)
 {
 	return {a.x * scalar, a.y * scalar};
 }
 
 inline Vector2
-operator/(const Vector2& a, f32 scalar)
+operator/(Vector2 a, f32 scalar)
 {
 	return {a.x / scalar, a.y / scalar};
 }
 
 inline Vector2
-operator*(const Vector2& a, const Vector2& b) // Hadamard Product
+operator*(Vector2 a, Vector2 b) // Hadamard Product
 {
 	return {a.x * b.x, a.y * b.y};
 }
 
 inline Vector2
-operator/(const Vector2& a, const Vector2& b) // Hadamard Product
+operator/(Vector2 a, Vector2 b) // Hadamard Product
 {
 	return {a.x / b.x, a.y / b.y};
 }
 
 inline Vector2&
-operator+=(Vector2& a, const Vector2& b)
+operator+=(Vector2& a, Vector2 b)
 {
 	a.x += b.x;
 	a.y += b.y;
@@ -1335,7 +1326,7 @@ operator+=(Vector2& a, const Vector2& b)
 }
 
 inline Vector2&
-operator-=(Vector2& a, const Vector2& b)
+operator-=(Vector2& a, Vector2 b)
 {
 	a.x -= b.x;
 	a.y -= b.y;
@@ -1363,73 +1354,73 @@ operator/=(Vector2& a, f32 scalar)
 
 // Vector3 Operators
 inline bool
-operator==(const Vector3& a, const Vector3& b)
+operator==(Vector3 a, Vector3 b)
 {
 	return (a.x == b.x) && (a.y == b.y) && (a.z == b.z);
 }
 
 inline bool
-operator!=(const Vector3& a, const Vector3& b)
+operator!=(Vector3 a, Vector3 b)
 {
 	return !operator==(a, b);
 }
 
 inline Vector3
-operator+(const Vector3& a)
+operator+(Vector3 a)
 {
 	return a;
 }
 
 inline Vector3
-operator-(const Vector3& a)
+operator-(Vector3 a)
 {
 	return {-a.x, -a.y, -a.z};
 }
 
 inline Vector3
-operator+(const Vector3& a, const Vector3& b)
+operator+(Vector3 a, Vector3 b)
 {
 	return {a.x + b.x, a.y + b.y, a.z + b.z};
 }
 
 inline Vector3
-operator-(const Vector3& a, const Vector3& b)
+operator-(Vector3 a, Vector3 b)
 {
 	return {a.x - b.x, a.y - b.y, a.z - b.z};
 }
 
 inline Vector3
-operator*(const Vector3& a, f32 scalar)
+operator*(Vector3 a, f32 scalar)
 {
 	return {a.x * scalar, a.y * scalar, a.z * scalar};
 }
 
 inline Vector3
-operator*(f32 scalar, const Vector3& a)
+operator*(f32 scalar, Vector3 a)
 {
 	return {a.x * scalar, a.y * scalar, a.z * scalar};
 }
 
 inline Vector3
-operator/(const Vector3& a, f32 scalar)
+operator/(Vector3 a, f32 scalar)
 {
 	return {a.x / scalar, a.y / scalar, a.z / scalar};
 }
 
 inline Vector3
-operator*(const Vector3& a, const Vector3& b) // Hadamard Product
+operator*(Vector3 a, Vector3 b) // Hadamard Product
 {
 	return {a.x * b.x, a.y * b.y, a.z * b.z};
 }
 
 inline Vector3
-operator/(const Vector3& a, const Vector3& b) // Hadamard Product
+operator/(Vector3 a, Vector3 b) // Hadamard Product
 {
 	return {a.x / b.x, a.y / b.y, a.z / b.z};
 }
 
 inline Vector3&
-operator+=(Vector3& a, const Vector3& b)
+operator+=(Vector3& a, Vector3 b)
 {
 	a.x += b.x;
 	a.y += b.y;
@@ -1439,7 +1430,7 @@ operator+=(Vector3& a, const Vector3& b)
 }
 
 inline Vector3&
-operator-=(Vector3& a, const Vector3& b)
+operator-=(Vector3& a, Vector3 b)
 {
 	a.x -= b.x;
 	a.y -= b.y;
@@ -1470,73 +1461,73 @@ operator/=(Vector3& a, f32 scalar)
 
 // Vector4 Operators
 inline bool
-operator==(const Vector4& a, const Vector4& b)
+operator==(Vector4 a, Vector4 b)
 {
 	return (a.x == b.x) && (a.y == b.y) && (a.z == b.z) && (a.w == b.w);
 }
 
 inline bool
-operator!=(const Vector4& a, const Vector4& b)
+operator!=(Vector4 a, Vector4 b)
 {
 	return !operator==(a, b);
 }
 
 inline Vector4
-operator+(const Vector4& a)
+operator+(Vector4 a)
 {
 	return a;
 }
 
 inline Vector4
-operator-(const Vector4& a)
+operator-(Vector4 a)
 {
 	return {-a.x, -a.y, -a.z, -a.w};
 }
 
 inline Vector4
-operator+(const Vector4& a, const Vector4& b)
+operator+(Vector4 a, Vector4 b)
 {
 	return {a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w};
 }
 
 inline Vector4
-operator-(const Vector4& a, const Vector4& b)
+operator-(Vector4 a, Vector4 b)
 {
 	return {a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w};
 }
 
 inline Vector4
-operator*(const Vector4& a, f32 scalar)
+operator*(Vector4 a, f32 scalar)
 {
 	return {a.x * scalar, a.y * scalar, a.z * scalar, a.w * scalar};
 }
 
 inline Vector4
-operator*(f32 scalar, const Vector4& a)
+operator*(f32 scalar, Vector4 a)
 {
 	return {a.x * scalar, a.y * scalar, a.z * scalar, a.w * scalar};
 }
 
 inline Vector4
-operator/(const Vector4& a, f32 scalar)
+operator/(Vector4 a, f32 scalar)
 {
 	return {a.x / scalar, a.y / scalar, a.z / scalar, a.w / scalar};
 }
 
 inline Vector4
-operator*(const Vector4& a, const Vector4& b) // Hadamard Product
+operator*(Vector4 a, Vector4 b) // Hadamard Product
 {
 	return {a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w};
 }
 
 inline Vector4
-operator/(const Vector4& a, const Vector4& b) // Hadamard Product
+operator/(Vector4 a, Vector4 b) // Hadamard Product
 {
 	return {a.x / b.x, a.y / b.y, a.z / b.z, a.w / b.w};
 }
 
 inline Vector4&
-operator+=(Vector4& a, const Vector4& b)
+operator+=(Vector4& a, Vector4 b)
 {
 	a.x += b.x;
 	a.y += b.y;
@@ -1547,7 +1538,7 @@ operator+=(Vector4& a, const Vector4& b)
 }
 
 inline Vector4&
-operator-=(Vector4& a, const Vector4& b)
+operator-=(Vector4& a, Vector4 b)
 {
 	a.x -= b.x;
 	a.y -= b.y;
@@ -1581,44 +1572,44 @@ operator/=(Vector4& a, f32 scalar)
 
 // Complex Operators
 inline bool
-operator==(const Complex& a, const Complex& b)
+operator==(Complex a, Complex b)
 {
 	return (a.x == b.x) && (a.y == b.y);
 }
 
 inline bool
-operator!=(const Complex& a, const Complex& b)
+operator!=(Complex a, Complex b)
 {
 	return !operator==(a, b);
 }
 
 inline Complex
-operator+(const Complex& a)
+operator+(Complex a)
 {
 	return a;
 }
 
 inline Complex
-operator-(const Complex& a)
+operator-(Complex a)
 {
 	return {-a.x, -a.y};
 }
 
 inline Complex
-operator+(const Complex& a, const Complex& b)
+operator+(Complex a, Complex b)
 {
 	return {a.x + b.x, a.y + b.y};
 }
 
 inline Complex
-operator-(const Complex& a, const Complex& b)
+operator-(Complex a, Complex b)
 {
 	return {a.x - b.x, a.y - b.y};
 
 }
 
 inline Complex
-operator*(const Complex& a, const Complex& b)
+operator*(Complex a, Complex b)
 {
 	Complex c = {};
 
@@ -1629,63 +1620,63 @@ operator*(const Complex& a, const Complex& b)
 }
 
 inline Complex
-operator*(const Complex& a, f32 s)
+operator*(Complex a, f32 s)
 {
 	return {a.x * s, a.y * s};
 }
 
 inline Complex
-operator*(f32 s, const Complex& a)
+operator*(f32 s, Complex a)
 {
 	return {a.x * s, a.y * s};
 }
 
 inline Complex
-operator/(const Complex& a, f32 s)
+operator/(Complex a, f32 s)
 {
 	return {a.x / s, a.y / s};
 }
 
 // Quaternion Operators
 inline bool
-operator==(const Quaternion& a, const Quaternion& b)
+operator==(Quaternion a, Quaternion b)
 {
 	return (a.x == b.x) && (a.y == b.y) && (a.z == b.z) && (a.w == b.w);
 }
 
 inline bool
-operator!=(const Quaternion& a, const Quaternion& b)
+operator!=(Quaternion a, Quaternion b)
 {
 	return !operator==(a, b);
 }
 
 inline Quaternion
-operator+(const Quaternion& a)
+operator+(Quaternion a)
 {
 	return {+a.x, +a.y, +a.z, +a.w};
 }
 
 inline Quaternion
-operator-(const Quaternion& a)
+operator-(Quaternion a)
 {
 	return {-a.x, -a.y, -a.z, -a.w};
 }
 
 inline Quaternion
-operator+(const Quaternion& a, const Quaternion& b)
+operator+(Quaternion a, Quaternion b)
 {
 	return {a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w};
 }
 
 inline Quaternion
-operator-(const Quaternion& a, const Quaternion& b)
+operator-(Quaternion a, Quaternion b)
 {
 	return {a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w};
 
 }
 
 inline Quaternion
-operator*(const Quaternion& a, const Quaternion& b)
+operator*(Quaternion a, Quaternion b)
 {
 	Quaternion q = {};
 
@@ -1698,25 +1689,25 @@ operator*(const Quaternion& a, const Quaternion& b)
 }
 
 inline Quaternion
-operator*(const Quaternion& a, f32 s)
+operator*(Quaternion a, f32 s)
 {
 	return {a.x * s, a.y * s, a.z * s, a.w * s};
 }
 
 inline Quaternion
-operator*(f32 s, const Quaternion& a)
+operator*(f32 s, Quaternion a)
 {
 	return {a.x * s, a.y * s, a.z * s, a.w * s};
 }
 
 inline Quaternion
-operator/(const Quaternion& a, f32 s)
+operator/(Quaternion a, f32 s)
 {
 	return {a.x / s, a.y / s, a.z / s, a.w / s};
 }
 
 inline Vector3
-operator*(const Quaternion& a, const Vector3& v) // Rotate v by q
+operator*(Quaternion a, Vector3 v) // Rotate v by q
 {
 	// return (q * Quaternion{v.x, v.y, v.z, 0} * math::conjugate(q)).xyz; // More Expensive
 	const Vector3 t = 2.0f * math::cross(a.xyz, v);
@@ -1725,7 +1716,7 @@ operator*(const Quaternion& a, const Vector3& v) // Rotate v by q
 
 // Matrix2 Operators
 inline bool
-operator==(const Matrix2& a, const Matrix2& b)
+operator==(Matrix2 a, Matrix2 b)
 {
 	for (usize i = 0; i < 4; i++)
 	{
@@ -1736,25 +1727,25 @@ operator==(const Matrix2& a, const Matrix2& b)
 }
 
 inline bool
-operator!=(const Matrix2& a, const Matrix2& b)
+operator!=(Matrix2 a, Matrix2 b)
 {
 	return !operator==(a, b);
 }
 
 inline Matrix2
-operator+(const Matrix2& a)
+operator+(Matrix2 a)
 {
 	return a;
 }
 
 inline Matrix2
-operator-(const Matrix2& a)
+operator-(Matrix2 a)
 {
 	return {-a.x, -a.y};
 }
 
 inline Matrix2
-operator+(const Matrix2& a, const Matrix2& b)
+operator+(Matrix2 a, Matrix2 b)
 {
 	Matrix2 mat;
 	mat[0] = a[0] + b[0];
@@ -1763,7 +1754,7 @@ operator+(const Matrix2& a, const Matrix2& b)
 }
 
 inline Matrix2
-operator-(const Matrix2& a, const Matrix2& b)
+operator-(Matrix2 a, Matrix2 b)
 {
 	Matrix2 mat;
 	mat[0] = a[0] - b[0];
@@ -1772,7 +1763,7 @@ operator-(const Matrix2& a, const Matrix2& b)
 }
 
 inline Matrix2
-operator*(const Matrix2& a, const Matrix2& b)
+operator*(Matrix2 a, Matrix2 b)
 {
 	Matrix2 result;
 	result[0] = a[0] * b[0][0] + a[1] * b[0][1];
@@ -1781,14 +1772,14 @@ operator*(const Matrix2& a, const Matrix2& b)
 }
 
 inline Vector2
-operator*(const Matrix2& a, const Vector2& v)
+operator*(Matrix2 a, Vector2 v)
 {
 	return Vector2{a[0][0] * v.x + a[1][0] * v.y,
 				   a[0][1] * v.x + a[1][1] * v.y};
 }
 
 inline Matrix2
-operator*(const Matrix2& a, f32 scalar)
+operator*(Matrix2 a, f32 scalar)
 {
 	Matrix2 mat;
 	mat[0] = a[0] * scalar;
@@ -1797,7 +1788,7 @@ operator*(const Matrix2& a, f32 scalar)
 }
 
 inline Matrix2
-operator*(f32 scalar, const Matrix2& a)
+operator*(f32 scalar, Matrix2 a)
 {
 	Matrix2 mat;
 	mat[0] = a[0] * scalar;
@@ -1806,7 +1797,7 @@ operator*(f32 scalar, const Matrix2& a)
 }
 
 inline Matrix2
-operator/(const Matrix2& a, f32 scalar)
+operator/(Matrix2 a, f32 scalar)
 {
 	Matrix2 mat;
 	mat[0] = a[0] / scalar;
@@ -1815,19 +1806,19 @@ operator/(const Matrix2& a, f32 scalar)
 }
 
 inline Matrix2&
-operator+=(Matrix2& a, const Matrix2& b)
+operator+=(Matrix2& a, Matrix2 b)
 {
 	return (a = a + b);
 }
 
 inline Matrix2&
-operator-=(Matrix2& a, const Matrix2& b)
+operator-=(Matrix2& a, Matrix2 b)
 {
 	return (a = a - b);
 }
 
 inline Matrix2&
-operator*=(Matrix2& a, const Matrix2& b)
+operator*=(Matrix2& a, Matrix2 b)
 {
 	return (a = a * b);
 }
@@ -1835,7 +1826,7 @@ operator*=(Matrix2& a, const Matrix2& b)
 
 // Matrix3 Operators
 inline bool
-operator==(const Matrix3& a, const Matrix3& b)
+operator==(Matrix3 const& a, Matrix3 const& b)
 {
 	for (usize i = 0; i < 3; i++)
 	{
@@ -1846,25 +1837,25 @@ operator==(const Matrix3& a, const Matrix3& b)
 }
 
 inline bool
-operator!=(const Matrix3& a, const Matrix3& b)
+operator!=(Matrix3 const& a, Matrix3 const& b)
 {
 	return !operator==(a, b);
 }
 
 inline Matrix3
-operator+(const Matrix3& a)
+operator+(Matrix3 const& a)
 {
 	return a;
 }
 
 inline Matrix3
-operator-(const Matrix3& a)
+operator-(Matrix3 const& a)
 {
 	return {-a.x, -a.y, -a.z};
 }
 
 inline Matrix3
-operator+(const Matrix3& a, const Matrix3& b)
+operator+(Matrix3 const& a, Matrix3 const& b)
 {
 	Matrix3 mat;
 	mat[0] = a[0] + b[0];
@@ -1874,7 +1865,7 @@ operator+(const Matrix3& a, const Matrix3& b)
 }
 
 inline Matrix3
-operator-(const Matrix3& a, const Matrix3& b)
+operator-(Matrix3 const& a, Matrix3 const& b)
 {
 	Matrix3 mat;
 	mat[0] = a[0] - b[0];
@@ -1884,7 +1875,7 @@ operator-(const Matrix3& a, const Matrix3& b)
 }
 
 inline Matrix3
-operator*(const Matrix3& a, const Matrix3& b)
+operator*(Matrix3 const& a, Matrix3 const& b)
 {
 	Matrix3 result;
 	result[0] = a[0] * b[0][0] + a[1] * b[0][1] + a[2] * b[0][2];
@@ -1894,7 +1885,7 @@ operator*(const Matrix3& a, const Matrix3& b)
 }
 
 inline Vector3
-operator*(const Matrix3& a, const Vector3& v)
+operator*(Matrix3 const& a, Vector3 v)
 {
 	return Vector3{a[0][0] * v.x + a[1][0] * v.y + a[2][0] * v.z,
 				   a[0][1] * v.x + a[1][1] * v.y + a[2][1] * v.z,
@@ -1902,7 +1893,7 @@ operator*(const Matrix3& a, const Vector3& v)
 }
 
 inline Matrix3
-operator*(const Matrix3& a, f32 scalar)
+operator*(Matrix3 const& a, f32 scalar)
 {
 	Matrix3 mat;
 	mat[0] = a[0] * scalar;
@@ -1912,7 +1903,7 @@ operator*(const Matrix3& a, f32 scalar)
 }
 
 inline Matrix3
-operator*(f32 scalar, const Matrix3& a)
+operator*(f32 scalar, Matrix3 const& a)
 {
 	Matrix3 mat;
 	mat[0] = a[0] * scalar;
@@ -1922,7 +1913,7 @@ operator*(f32 scalar, const Matrix3& a)
 }
 
 inline Matrix3
-operator/(const Matrix3& a, f32 scalar)
+operator/(Matrix3 const& a, f32 scalar)
 {
 	Matrix3 mat;
 	mat[0] = a[0] / scalar;
@@ -1932,19 +1923,19 @@ operator/(const Matrix3& a, f32 scalar)
 }
 
 inline Matrix3&
-operator+=(Matrix3& a, const Matrix3& b)
+operator+=(Matrix3& a, Matrix3 const& b)
 {
 	return (a = a + b);
 }
 
 inline Matrix3&
-operator-=(Matrix3& a, const Matrix3& b)
+operator-=(Matrix3& a, Matrix3 const& b)
 {
 	return (a = a - b);
 }
 
 inline Matrix3&
-operator*=(Matrix3& a, const Matrix3& b)
+operator*=(Matrix3& a, Matrix3 const& b)
 {
 	return (a = a * b);
 }
@@ -1952,7 +1943,7 @@ operator*=(Matrix3& a, const Matrix3& b)
 
 // Matrix4 Operators
 inline bool
-operator==(const Matrix4& a, const Matrix4& b)
+operator==(Matrix4 const& a, Matrix4 const& b)
 {
 	for (usize i = 0; i < 4; i++)
 	{
@@ -1963,25 +1954,25 @@ operator==(const Matrix4& a, const Matrix4& b)
 }
 
 inline bool
-operator!=(const Matrix4& a, const Matrix4& b)
+operator!=(Matrix4 const& a, Matrix4 const& b)
 {
 	return !operator==(a, b);
 }
 
 inline Matrix4
-operator+(const Matrix4& a)
+operator+(Matrix4 const& a)
 {
 	return a;
 }
 
 inline Matrix4
-operator-(const Matrix4& a)
+operator-(Matrix4 const& a)
 {
 	return {-a.x, -a.y, -a.z, -a.w};
 }
 
 inline Matrix4
-operator+(const Matrix4& a, const Matrix4& b)
+operator+(Matrix4 const& a, Matrix4 const& b)
 {
 	Matrix4 mat;
 	mat[0] = a[0] + b[0];
@@ -1992,7 +1983,7 @@ operator+(const Matrix4& a, const Matrix4& b)
 }
 
 inline Matrix4
-operator-(const Matrix4& a, const Matrix4& b)
+operator-(Matrix4 const& a, Matrix4 const& b)
 {
 	Matrix4 mat;
 	mat[0] = a[0] - b[0];
@@ -2003,7 +1994,7 @@ operator-(const Matrix4& a, const Matrix4& b)
 }
 
 inline Matrix4
-operator*(const Matrix4& a, const Matrix4& b)
+operator*(Matrix4 const& a, Matrix4 const& b)
 {
 	Matrix4 result;
 	result[0] = a[0] * b[0][0] + a[1] * b[0][1] + a[2] * b[0][2] + a[3] * b[0][3];
@@ -2014,7 +2005,7 @@ operator*(const Matrix4& a, const Matrix4& b)
 }
 
 inline Vector4
-operator*(const Matrix4& a, const Vector4& v)
+operator*(Matrix4 const& a, Vector4 v)
 {
 	return Vector4{a[0][0] * v.x + a[1][0] * v.y + a[2][0] * v.z + a[3][0] * v.w,
 				   a[0][1] * v.x + a[1][1] * v.y + a[2][1] * v.z + a[3][1] * v.w,
@@ -2023,7 +2014,7 @@ operator*(const Matrix4& a, const Vector4& v)
 }
 
 inline Matrix4
-operator*(const Matrix4& a, f32 scalar)
+operator*(Matrix4 const& a, f32 scalar)
 {
 	Matrix4 mat;
 	mat[0] = a[0] * scalar;
@@ -2034,7 +2025,7 @@ operator*(const Matrix4& a, f32 scalar)
 }
 
 inline Matrix4
-operator*(f32 scalar, const Matrix4& a)
+operator*(f32 scalar, Matrix4 const& a)
 {
 	Matrix4 mat;
 	mat[0] = a[0] * scalar;
@@ -2045,7 +2036,7 @@ operator*(f32 scalar, const Matrix4& a)
 }
 
 inline Matrix4
-operator/(const Matrix4& a, f32 scalar)
+operator/(Matrix4 const& a, f32 scalar)
 {
 	Matrix4 mat;
 	mat[0] = a[0] / scalar;
@@ -2056,19 +2047,19 @@ operator/(const Matrix4& a, f32 scalar)
 }
 
 inline Matrix4&
-operator+=(Matrix4& a, const Matrix4& b)
+operator+=(Matrix4& a, Matrix4 const& b)
 {
 	return (a = a + b);
 }
 
 inline Matrix4&
-operator-=(Matrix4& a, const Matrix4& b)
+operator-=(Matrix4& a, Matrix4 const& b)
 {
 	return (a = a - b);
 }
 
 inline Matrix4&
-operator*=(Matrix4& a, const Matrix4& b)
+operator*=(Matrix4& a, Matrix4 const& b)
 {
 	return (a = a * b);
 }
@@ -2162,7 +2153,7 @@ operator/=(Angle& a, f32 scalar)
 // Transform Operators
 // World = Parent * Local
 Transform
-operator*(const Transform& ps, const Transform& ls)
+operator*(Transform const& ps, Transform const& ls)
 {
 	Transform ws;
 
@@ -2175,14 +2166,14 @@ operator*(const Transform& ps, const Transform& ls)
 }
 
 inline Transform&
-operator*=(Transform& ps, const Transform& ls)
+operator*=(Transform& ps, Transform const& ls)
 {
 	return (ps = ps * ls);
 }
 
 // Local = World / Parent
 Transform
-operator/(const Transform& ws, const Transform& ps)
+operator/(Transform const& ws, Transform const& ps)
 {
 	Transform ls;
 
@@ -2197,7 +2188,7 @@ operator/(const Transform& ws, const Transform& ps)
 }
 
 inline Transform&
-operator/=(Transform& ws, const Transform& ps)
+operator/=(Transform& ws, Transform const& ps)
 {
 	return (ws = ws / ps);
 }
@@ -2227,18 +2218,18 @@ inline f32 as_gons(Angle a)   { return a.radians * (400.0f / math::TAU); }
 
 namespace math
 {
-const f32 ZERO       = 0.0f;
-const f32 ONE        = 1.0f;
-const f32 THIRD      = 0.33333333f;
-const f32 TWO_THIRDS = 0.66666667f;
-const f32 E          = 2.718281828f;
-const f32 PI         = 3.141592654f;
-const f32 TAU        = 6.283185307f;
-const f32 SQRT_2     = 1.414213562f;
-const f32 SQRT_3     = 1.732050808f;
-const f32 SQRT_5     = 2.236067978f;
+f32 const ZERO       = 0.0f;
+f32 const ONE        = 1.0f;
+f32 const THIRD      = 0.33333333f;
+f32 const TWO_THIRDS = 0.66666667f;
+f32 const E          = 2.718281828f;
+f32 const PI         = 3.141592654f;
+f32 const TAU        = 6.283185307f;
+f32 const SQRT_2     = 1.414213562f;
+f32 const SQRT_3     = 1.732050808f;
+f32 const SQRT_5     = 2.236067978f;
 
-const f32 F32_PRECISION = 1.0e-7f;
+f32 const F32_PRECISION = 1.0e-7f;
 
 // Power
 inline f32 sqrt(f32 x)       { return ::sqrtf(x);        }
@@ -2430,25 +2421,25 @@ equals(f32 a, f32 b, f32 precision)
 
 // Vector2 functions
 inline f32
-dot(const Vector2& a, const Vector2& b)
+dot(Vector2 a, Vector2 b)
 {
 	return a.x * b.x + a.y * b.y;
 }
 
 inline f32
-cross(const Vector2& a, const Vector2& b)
+cross(Vector2 a, Vector2 b)
 {
 	return a.x * b.y - a.y * b.x;
 }
 
 inline f32
-magnitude(const Vector2& a)
+magnitude(Vector2 a)
 {
 	return math::sqrt(math::dot(a, a));
 }
 
 inline Vector2
-normalize(const Vector2& a)
+normalize(Vector2 a)
 {
 	f32 m = magnitude(a);
 	if (m > 0)
@@ -2457,20 +2448,20 @@ normalize(const Vector2& a)
 }
 
 inline Vector2
-hadamard(const Vector2& a, const Vector2& b)
+hadamard(Vector2 a, Vector2 b)
 {
 	return {a.x * b.x, a.y * b.y};
 }
 
 inline f32
-aspect_ratio(const Vector2& a)
+aspect_ratio(Vector2 a)
 {
 	return a.x / a.y;
 }
 
 
 inline Matrix4
-matrix2_to_matrix4(const Matrix2& m)
+matrix2_to_matrix4(Matrix2 m)
 {
 	Matrix4 result = MATRIX4_IDENTITY;
 	result[0][0] = m[0][0];
@@ -2482,13 +2473,13 @@ matrix2_to_matrix4(const Matrix2& m)
 
 // Vector3 functions
 inline f32
-dot(const Vector3& a, const Vector3& b)
+dot(Vector3 a, Vector3 b)
 {
 	return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
 inline Vector3
-cross(const Vector3& a, const Vector3& b)
+cross(Vector3 a, Vector3 b)
 {
 	return Vector3{
 		a.y * b.z - b.y * a.z, // x
@@ -2498,13 +2489,13 @@ cross(const Vector3& a, const Vector3& b)
 }
 
 inline f32
-magnitude(const Vector3& a)
+magnitude(Vector3 a)
 {
 	return math::sqrt(math::dot(a, a));
 }
 
 inline Vector3
-normalize(const Vector3& a)
+normalize(Vector3 a)
 {
 	f32 m = magnitude(a);
 	if (m > 0)
@@ -2513,13 +2504,13 @@ normalize(const Vector3& a)
 }
 
 inline Vector3
-hadamard(const Vector3& a, const Vector3& b)
+hadamard(Vector3 a, Vector3 b)
 {
 	return {a.x * b.x, a.y * b.y, a.z * b.z};
 }
 
 inline Matrix4
-matrix3_to_matrix4(const Matrix3& m)
+matrix3_to_matrix4(Matrix3 const& m)
 {
 	Matrix4 result = MATRIX4_IDENTITY;
 	result[0][0] = m[0][0];
@@ -2536,19 +2527,19 @@ matrix3_to_matrix4(const Matrix3& m)
 
 // Vector4 functions
 inline f32
-dot(const Vector4& a, const Vector4& b)
+dot(Vector4 a, Vector4 b)
 {
 	return a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w;
 }
 
 inline f32
-magnitude(const Vector4& a)
+magnitude(Vector4 a)
 {
 	return math::sqrt(math::dot(a, a));
 }
 
 inline Vector4
-normalize(const Vector4& a)
+normalize(Vector4 a)
 {
 	f32 m = magnitude(a);
 	if (m > 0)
@@ -2557,32 +2548,32 @@ normalize(const Vector4& a)
 }
 
 inline Vector4
-hadamard(const Vector4& a, const Vector4& b)
+hadamard(Vector4 a, Vector4 b)
 {
 	return {a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w};
 }
 
 // Complex Functions
 inline f32
-dot(const Complex& a, const Complex& b)
+dot(Complex a, Complex b)
 {
 	return a.real * b.real + a.imag * b.imag;
 }
 
 inline f32
-magnitude(const Complex& a)
+magnitude(Complex a)
 {
 	return math::sqrt(norm(a));
 }
 
 inline f32
-norm(const Complex& a)
+norm(Complex a)
 {
 	return math::dot(a, a);
 }
 
 inline Complex
-normalize(const Complex& a)
+normalize(Complex a)
 {
 	f32 m = magnitude(a);
 	if (m > 0)
@@ -2591,13 +2582,13 @@ normalize(const Complex& a)
 }
 
 inline Complex
-conjugate(const Complex& a)
+conjugate(Complex a)
 {
 	return {a.real, -a.imag};
 }
 
 inline Complex
-inverse(const Complex& a)
+inverse(Complex a)
 {
 	f32 m = norm(a);
 	if (m > 0)
@@ -2606,9 +2597,9 @@ inverse(const Complex& a)
 }
 
 inline f32
-complex_angle(const Complex& a)
+complex_angle(Complex a)
 {
-	return atan2(a.imag, a.real);
+	return atan2f(a.imag, a.real);
 }
 
 inline Complex
@@ -2621,13 +2612,13 @@ magnitude_angle(f32 magnitude, Angle a)
 
 // Quaternion functions
 inline f32
-dot(const Quaternion& a, const Quaternion& b)
+dot(Quaternion a, Quaternion b)
 {
 	return math::dot(a.xyz, b.xyz) + a.w*b.w;
 }
 
 inline Quaternion
-cross(const Quaternion& a, const Quaternion& b)
+cross(Quaternion a, Quaternion b)
 {
 	return Quaternion{a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
 					  a.w * b.y + a.y * b.w + a.z * b.x - a.x * b.z,
@@ -2636,19 +2627,19 @@ cross(const Quaternion& a, const Quaternion& b)
 }
 
 inline f32
-magnitude(const Quaternion& a)
+magnitude(Quaternion a)
 {
 	return math::sqrt(math::dot(a, a));
 }
 
 inline f32
-norm(const Quaternion& a)
+norm(Quaternion a)
 {
 	return math::dot(a, a);
 }
 
 inline Quaternion
-normalize(const Quaternion& a)
+normalize(Quaternion a)
 {
 	f32 m = magnitude(a);
 	if (m > 0)
@@ -2657,26 +2648,26 @@ normalize(const Quaternion& a)
 }
 
 inline Quaternion
-conjugate(const Quaternion& a)
+conjugate(Quaternion a)
 {
 	return {-a.x, -a.y, -a.z, a.w};
 }
 
 inline Quaternion
-inverse(const Quaternion& a)
+inverse(Quaternion a)
 {
 	f32 m = 1.0f / dot(a, a);
 	return math::conjugate(a) * m;
 }
 
 inline Angle
-quaternion_angle(const Quaternion& a)
+quaternion_angle(Quaternion a)
 {
 	return 2.0f * math::arccos(a.w);
 }
 
 inline Vector3
-quaternion_axis(const Quaternion& a)
+quaternion_axis(Quaternion a)
 {
 	f32 s2 = 1.0f - a.w * a.w;
 
@@ -2689,7 +2680,7 @@ quaternion_axis(const Quaternion& a)
 }
 
 inline Quaternion
-axis_angle(const Vector3& axis, Angle angle)
+axis_angle(Vector3 axis, Angle angle)
 {
 	Vector3 a = math::normalize(axis);
 	f32 s = math::sin(0.5f * angle);
@@ -2702,37 +2693,37 @@ axis_angle(const Vector3& axis, Angle angle)
 }
 
 inline Angle
-quaternion_roll(const Quaternion& a)
+quaternion_roll(Quaternion a)
 {
 	return math::arctan2(2.0f * a.x * a.y + a.z * a.w,
 					     a.x * a.x + a.w * a.w - a.y * a.y - a.z * a.z);
 }
 
 inline Angle
-quaternion_pitch(const Quaternion& a)
+quaternion_pitch(Quaternion a)
 {
 	return math::arctan2(2.0f * a.y * a.z + a.w * a.x,
 					     a.w * a.w - a.x * a.x - a.y * a.y + a.z * a.z);
 }
 
 inline Angle
-quaternion_yaw(const Quaternion& a)
+quaternion_yaw(Quaternion a)
 {
 	return math::arcsin(-2.0f * (a.x * a.z - a.w * a.y));
 
 }
 
 inline Euler_Angles
-quaternion_to_euler_angles(const Quaternion& a)
+quaternion_to_euler_angles(Quaternion a)
 {
 	return {quaternion_pitch(a), quaternion_yaw(a), quaternion_roll(a)};
 }
 
 inline Quaternion
-euler_angles_to_quaternion(const Euler_Angles& e,
-						   const Vector3& x_axis,
-						   const Vector3& y_axis,
-						   const Vector3& z_axis)
+euler_angles_to_quaternion(Euler_Angles const& e,
+						   Vector3 x_axis,
+						   Vector3 y_axis,
+						   Vector3 z_axis)
 {
 	Quaternion p = axis_angle(x_axis, e.pitch);
 	Quaternion y = axis_angle(y_axis, e.yaw);
@@ -2744,7 +2735,7 @@ euler_angles_to_quaternion(const Euler_Angles& e,
 
 // Spherical Linear Interpolation
 inline Quaternion
-slerp(const Quaternion& x, const Quaternion& y, f32 t)
+slerp(Quaternion x, Quaternion y, f32 t)
 {
 	Quaternion z = y;
 
@@ -2773,10 +2764,10 @@ slerp(const Quaternion& x, const Quaternion& y, f32 t)
 // Shoemake's Quaternion Curves
 // Sqherical Cubic Interpolation
 inline Quaternion
-squad(const Quaternion& p,
-	  const Quaternion& a,
-	  const Quaternion& b,
-	  const Quaternion& q,
+squad(Quaternion p,
+	  Quaternion a,
+	  Quaternion b,
+	  Quaternion q,
 	  f32 t)
 {
 	return slerp(slerp(p, q, t), slerp(a, b, t), 2.0f * t * (1.0f - t));
@@ -2784,7 +2775,7 @@ squad(const Quaternion& p,
 
 // Matrix2 functions
 inline Matrix2
-transpose(const Matrix2& m)
+transpose(Matrix2 m)
 {
 	Matrix2 result;
 	for (usize i = 0; i < 2; i++)
@@ -2796,13 +2787,13 @@ transpose(const Matrix2& m)
 }
 
 inline f32
-determinant(const Matrix2& m)
+determinant(Matrix2 m)
 {
 	return m[0][0] * m[1][1] - m[1][0] * m[0][1];
 }
 
 inline Matrix2
-inverse(const Matrix2& m)
+inverse(Matrix2 m)
 {
 	f32 inv_det = 1.0f / (m[0][0] * m[1][1] - m[1][0] * m[0][1]);
 	Matrix2 result;
@@ -2814,7 +2805,7 @@ inverse(const Matrix2& m)
 }
 
 inline Matrix2
-hadamard(const Matrix2& a, const Matrix2&b)
+hadamard(Matrix2 a, const Matrix2&b)
 {
 	Matrix2 result;
 	result[0] = a[0] * b[0];
@@ -2824,7 +2815,7 @@ hadamard(const Matrix2& a, const Matrix2&b)
 
 // Matrix3 functions
 inline Matrix3
-transpose(const Matrix3& m)
+transpose(Matrix3 const& m)
 {
 	Matrix3 result;
 
@@ -2837,7 +2828,7 @@ transpose(const Matrix3& m)
 }
 
 inline f32
-determinant(const Matrix3& m)
+determinant(Matrix3 const& m)
 {
 	return (+m[0][0] * (m[1][1] * m[2][2] - m[2][1] * m[1][2])
 			-m[1][0] * (m[0][1] * m[2][2] - m[2][1] * m[0][2])
@@ -2845,7 +2836,7 @@ determinant(const Matrix3& m)
 }
 
 inline Matrix3
-inverse(const Matrix3& m)
+inverse(Matrix3 const& m)
 {
 	f32 inv_det = 1.0f / (
 		+ m[0][0] * (m[1][1] * m[2][2] - m[2][1] * m[1][2])
@@ -2868,7 +2859,7 @@ inverse(const Matrix3& m)
 }
 
 inline Matrix3
-hadamard(const Matrix3& a, const Matrix3&b)
+hadamard(Matrix3 const& a, const Matrix3&b)
 {
 	Matrix3 result;
 	result[0] = a[0] * b[0];
@@ -2879,7 +2870,7 @@ hadamard(const Matrix3& a, const Matrix3&b)
 
 // Matrix4 functions
 inline Matrix4
-transpose(const Matrix4& m)
+transpose(Matrix4 const& m)
 {
 	Matrix4 result;
 
@@ -2892,7 +2883,7 @@ transpose(const Matrix4& m)
 }
 
 f32
-determinant(const Matrix4& m)
+determinant(Matrix4 const& m)
 {
 	f32 coef00 = m[2][2] * m[3][3] - m[3][2] * m[2][3];
 	f32 coef02 = m[1][2] * m[3][3] - m[3][2] * m[1][3];
@@ -2947,7 +2938,7 @@ determinant(const Matrix4& m)
 }
 
 Matrix4
-inverse(const Matrix4& m)
+inverse(Matrix4 const& m)
 {
 	f32 coef00 = m[2][2] * m[3][3] - m[3][2] * m[2][3];
 	f32 coef02 = m[1][2] * m[3][3] - m[3][2] * m[1][3];
@@ -3000,7 +2991,7 @@ inverse(const Matrix4& m)
 }
 
 inline Matrix4
-hadamard(const Matrix4& a, const Matrix4& b)
+hadamard(Matrix4 const& a, Matrix4 const& b)
 {
 	Matrix4 result;
 
@@ -3013,7 +3004,7 @@ hadamard(const Matrix4& a, const Matrix4& b)
 }
 
 inline bool
-is_affine(const Matrix4& m)
+is_affine(Matrix4 const& m)
 {
 	// E.g. No translation
 	return (equals(m.columns[3].x, 0)) &
@@ -3024,7 +3015,7 @@ is_affine(const Matrix4& m)
 
 
 inline Matrix4
-quaternion_to_matrix4(const Quaternion& q)
+quaternion_to_matrix4(Quaternion q)
 {
 	Matrix4 mat = MATRIX4_IDENTITY;
 
@@ -3056,7 +3047,7 @@ quaternion_to_matrix4(const Quaternion& q)
 }
 
 Quaternion
-matrix4_to_quaternion(const Matrix4& m)
+matrix4_to_quaternion(Matrix4 const& m)
 {
 	f32 four_x_squared_minus_1 = m[0][0] - m[1][1] - m[2][2];
 	f32 four_y_squared_minus_1 = m[1][1] - m[0][0] - m[2][2];
@@ -3132,7 +3123,7 @@ matrix4_to_quaternion(const Matrix4& m)
 
 
 inline Matrix4
-translate(const Vector3& v)
+translate(Vector3 v)
 {
 	Matrix4 result = MATRIX4_IDENTITY;
 	result[3].xyz = v;
@@ -3141,7 +3132,7 @@ translate(const Vector3& v)
 }
 
 inline Matrix4
-rotate(const Vector3& v, Angle angle)
+rotate(Vector3 v, Angle angle)
 {
 	const f32 c = math::cos(angle);
 	const f32 s = math::sin(angle);
@@ -3170,7 +3161,7 @@ rotate(const Vector3& v, Angle angle)
 }
 
 inline Matrix4
-scale(const Vector3& v)
+scale(Vector3 v)
 {
 	return { v.x,   0,   0, 0,
 			   0, v.y,   0, 0,
@@ -3239,7 +3230,7 @@ infinite_perspective(Angle fovy, f32 aspect, f32 z_near)
 
 
 inline Matrix4
-look_at_matrix4(const Vector3& eye, const Vector3& center, const Vector3& up)
+look_at_matrix4(Vector3 eye, Vector3 center, Vector3 up)
 {
 	const Vector3 f = math::normalize(center - eye);
 	const Vector3 s = math::normalize(math::cross(f, up));
@@ -3268,7 +3259,7 @@ look_at_matrix4(const Vector3& eye, const Vector3& center, const Vector3& up)
 
 
 inline Quaternion
-look_at_quaternion(const Vector3& eye, const Vector3& center, const Vector3& up)
+look_at_quaternion(Vector3 eye, Vector3 center, Vector3 up)
 {
 	if (math::equals(math::magnitude(center - eye), 0, 0.001f))
 		return QUATERNION_IDENTITY; // You cannot look at where you are!
@@ -3305,13 +3296,13 @@ look_at_quaternion(const Vector3& eye, const Vector3& center, const Vector3& up)
 
 // Transform Functions
 inline Vector3
-transform_point(const Transform& transform, const Vector3& point)
+transform_point(Transform const& transform, Vector3 point)
 {
 	return (math::conjugate(transform.orientation) * (transform.position - point)) / transform.scale;
 }
 
 inline Transform
-inverse(const Transform& t)
+inverse(Transform const& t)
 {
 	const Quaternion inv_orientation = math::conjugate(t.orientation);
 
@@ -3326,7 +3317,7 @@ inverse(const Transform& t)
 }
 
 inline Matrix4
-transform_to_matrix4(const Transform& t)
+transform_to_matrix4(Transform const& t)
 {
 	return math::translate(t.position) *
 		   math::quaternion_to_matrix4(t.orientation) *
@@ -3338,7 +3329,7 @@ transform_to_matrix4(const Transform& t)
 namespace aabb
 {
 inline Aabb
-calculate(const void* vertices, usize num_vertices, usize stride, usize offset)
+calculate(void const* vertices, usize num_vertices, usize stride, usize offset)
 {
 	Vector3 min;
 	Vector3 max;
@@ -3373,7 +3364,7 @@ calculate(const void* vertices, usize num_vertices, usize stride, usize offset)
 }
 
 inline f32
-surface_area(const Aabb& aabb)
+surface_area(Aabb const& aabb)
 {
 	Vector3 h = aabb.half_size * 2.0f;
 	f32 s = 0.0f;
@@ -3385,14 +3376,14 @@ surface_area(const Aabb& aabb)
 }
 
 inline f32
-volume(const Aabb& aabb)
+volume(Aabb const& aabb)
 {
 	Vector3 h = aabb.half_size * 2.0f;
 	return h.x * h.y * h.z;
 }
 
 inline Sphere
-to_sphere(const Aabb& aabb)
+to_sphere(Aabb const& aabb)
 {
 	Sphere s;
 	s.center = aabb.center;
@@ -3402,7 +3393,7 @@ to_sphere(const Aabb& aabb)
 
 
 inline bool
-contains(const Aabb& aabb, const Vector3& point)
+contains(Aabb const& aabb, Vector3 point)
 {
 	Vector3 distance = aabb.center - point;
 
@@ -3413,7 +3404,7 @@ contains(const Aabb& aabb, const Vector3& point)
 }
 
 inline bool
-contains(const Aabb& a, const Aabb& b)
+contains(Aabb const& a, Aabb const& b)
 {
 	Vector3 dist = a.center - b.center;
 
@@ -3425,7 +3416,7 @@ contains(const Aabb& a, const Aabb& b)
 
 
 inline bool
-intersects(const Aabb& a, const Aabb& b)
+intersects(Aabb const& a, Aabb const& b)
 {
 	Vector3 dist = a.center - b.center;
 	Vector3 sum_half_sizes = a.half_size + b.half_size;
@@ -3437,7 +3428,7 @@ intersects(const Aabb& a, const Aabb& b)
 }
 
 inline Aabb
-transform_affine(const Aabb& aabb, const Matrix4& m)
+transform_affine(Aabb const& aabb, Matrix4 const& m)
 {
 	GB_ASSERT(math::is_affine(m),
 			  "Passed Matrix4 must be an affine matrix");
@@ -3464,7 +3455,7 @@ transform_affine(const Aabb& aabb, const Matrix4& m)
 namespace sphere
 {
 Sphere
-calculate_min_bounding(const void* vertices, usize num_vertices, usize stride, usize offset, f32 step)
+calculate_min_bounding(void const* vertices, usize num_vertices, usize stride, usize offset, f32 step)
 {
 	auto gen = random::make(0);
 
@@ -3515,7 +3506,7 @@ calculate_min_bounding(const void* vertices, usize num_vertices, usize stride, u
 }
 
 Sphere
-calculate_max_bounding(const void* vertices, usize num_vertices, usize stride, usize offset)
+calculate_max_bounding(void const* vertices, usize num_vertices, usize stride, usize offset)
 {
 	Aabb aabb = aabb::calculate(vertices, num_vertices, stride, offset);
 
@@ -3543,19 +3534,19 @@ calculate_max_bounding(const void* vertices, usize num_vertices, usize stride, u
 }
 
 inline f32
-surface_area(const Sphere& s)
+surface_area(Sphere s)
 {
 	return 2.0f * math::TAU * s.radius * s.radius;
 }
 
 inline f32
-volume(const Sphere& s)
+volume(Sphere s)
 {
 	return math::TWO_THIRDS * math::TAU * s.radius * s.radius * s.radius;
 }
 
 inline Aabb
-to_aabb(const Sphere& s)
+to_aabb(Sphere s)
 {
 	Aabb a;
 	a.center = s.center;
@@ -3566,7 +3557,7 @@ to_aabb(const Sphere& s)
 }
 
 inline bool
-contains_point(const Sphere& s, const Vector3& point)
+contains_point(Sphere s, Vector3 point)
 {
 	Vector3 dr   = point - s.center;
 	f32 distance = math::dot(dr, dr);
@@ -3574,7 +3565,7 @@ contains_point(const Sphere& s, const Vector3& point)
 }
 
 inline f32
-ray_intersection(const Vector3& from, const Vector3& dir, const Sphere& s)
+ray_intersection(Vector3 from, Vector3 dir, Sphere s)
 {
 	Vector3 v = s.center - from;
 	f32 b = math::dot(v, dir);
@@ -3589,7 +3580,7 @@ ray_intersection(const Vector3& from, const Vector3& dir, const Sphere& s)
 namespace plane
 {
 inline f32
-ray_intersection(const Vector3& from, const Vector3& dir, const Plane& p)
+ray_intersection(Vector3 from, Vector3 dir, Plane p)
 {
 	f32 nd   = math::dot(dir,  p.normal);
 	f32 orpn = math::dot(from, p.normal);
@@ -3602,20 +3593,16 @@ ray_intersection(const Vector3& from, const Vector3& dir, const Plane& p)
 }
 
 inline bool
-intersection3(const Plane& p1, const Plane& p2, const Plane& p3, Vector3* ip)
+intersection3(Plane p1, Plane p2, Plane p3, Vector3* ip)
 {
-	const Vector3& n1 = p1.normal;
-	const Vector3& n2 = p2.normal;
-	const Vector3& n3 = p3.normal;
-
-	f32 den = -math::dot(math::cross(n1, n2), n3);
+	f32 den = -math::dot(math::cross(p1.normal, p2.normal), p3.normal);
 
 	if (math::equals(den, 0.0f))
 		return false;
 
-	Vector3 res = p1.distance * math::cross(n2, n3)
-				+ p2.distance * math::cross(n3, n1)
-				+ p3.distance * math::cross(n1, n2);
+	Vector3 res = p1.distance * math::cross(p2.normal, p3.normal)
+				+ p2.distance * math::cross(p3.normal, p1.normal)
+				+ p3.distance * math::cross(p1.normal, p2.normal);
 	*ip = res / den;
 
 	return true;

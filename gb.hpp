@@ -1,4 +1,4 @@
-// gb.hpp - v0.31a - public domain C++11 helper library - no warranty implied; use at your own risk
+// gb.hpp - v0.32 - public domain C++11 helper library - no warranty implied; use at your own risk
 // (Experimental) A C++11 helper library without STL geared towards game development
 
 /*
@@ -39,6 +39,7 @@ CONTENTS:
 
 /*
 Version History:
+	0.32  - Change const position convention
 	0.31a - Minor fixes
 	0.31  - Remove `_Allocator` suffix for allocator types
 	0.30  - sort::quick
@@ -252,7 +253,10 @@ Version History:
 ////////////////////////////////
 
 #include <math.h>
+#include <stdarg.h>
+#if !defined(GB_NO_STDIO)
 #include <stdio.h>
+#endif
 
 #if defined(GB_SYSTEM_WINDOWS)
 	#define NOMINMAX            1
@@ -275,7 +279,9 @@ Version History:
 #endif
 
 
-
+#ifndef GB_UNUSED
+#define GB_UNUSED(x) ((void)sizeof(x))
+#endif
 
 #if !defined(GB_ASSERT)
 	#if !defined(NDEBUG)
@@ -284,9 +290,9 @@ Version History:
 		// Helper function used as a better alternative to assert which allows for
 		// optional printf style error messages
 		extern "C" void
-		gb__assert_handler(bool condition, const char* condition_str,
-		                   const char* filename, size_t line,
-		                   const char* error_text = nullptr, ...);
+		gb__assert_handler(bool condition, char const* condition_str,
+		                   char const* filename, size_t line,
+		                   char const* error_text = nullptr, ...);
 	#else
 		#define GB_ASSERT(x, ...) ((void)sizeof(x))
 	#endif
@@ -297,9 +303,9 @@ Version History:
 // snprintf_msvc              //
 //                            //
 ////////////////////////////////
-#if defined(_MSC_VER)
+#if !defined(GB_NO_STDIO) && defined(_MSC_VER)
 	extern "C" inline int
-	gb__vsnprintf_compatible(char* buffer, size_t size, const char* format, va_list args)
+	gb__vsnprintf_compatible(char* buffer, size_t size, char const* format, va_list args)
 	{
 		int result = -1;
 		if (size > 0)
@@ -311,7 +317,7 @@ Version History:
 	}
 
 	extern "C" inline int
-	gb__snprintf_compatible(char* buffer, size_t size, const char* format, ...)
+	gb__snprintf_compatible(char* buffer, size_t size, char const* format, ...)
 	{
 		va_list args;
 		va_start(args, format);
@@ -522,18 +528,18 @@ template <typename T> struct Add_Lvalue_Reference_Def                      { usi
 template <typename T> struct Add_Lvalue_Reference_Def<T&>                  { using Type = T&;                  };
 template <typename T> struct Add_Lvalue_Reference_Def<T&&>                 { using Type = T&;                  };
 template <>           struct Add_Lvalue_Reference_Def<void>                { using Type = void;                };
-template <>           struct Add_Lvalue_Reference_Def<const void>          { using Type = const void;          };
-template <>           struct Add_Lvalue_Reference_Def<volatile void>       { using Type = volatile void;       };
-template <>           struct Add_Lvalue_Reference_Def<const volatile void> { using Type = const volatile void; };
+template <>           struct Add_Lvalue_Reference_Def<void const>          { using Type = void const;          };
+template <>           struct Add_Lvalue_Reference_Def<void volatile>       { using Type = void volatile;       };
+template <>           struct Add_Lvalue_Reference_Def<void const volatile> { using Type = void const volatile; };
 template <typename T> using  Add_Lvalue_Reference = typename Add_Lvalue_Reference_Def<T>::Type;
 
 template <typename T> struct Add_Rvalue_Reference_Def                      { using Type = T&&;                 };
 template <typename T> struct Add_Rvalue_Reference_Def<T&>                  { using Type = T&;                  };
 template <typename T> struct Add_Rvalue_Reference_Def<T&&>                 { using Type = T&&;                 };
 template <>           struct Add_Rvalue_Reference_Def<void>                { using Type = void;                };
-template <>           struct Add_Rvalue_Reference_Def<const void>          { using Type = const void;          };
-template <>           struct Add_Rvalue_Reference_Def<volatile void>       { using Type = volatile void;       };
-template <>           struct Add_Rvalue_Reference_Def<const volatile void> { using Type = const volatile void; };
+template <>           struct Add_Rvalue_Reference_Def<void const>          { using Type = void const;          };
+template <>           struct Add_Rvalue_Reference_Def<void volatile>       { using Type = void volatile;       };
+template <>           struct Add_Rvalue_Reference_Def<void const volatile> { using Type = void const volatile; };
 template <typename T> using  Add_Rvalue_Reference = typename Add_Rvalue_Reference_Def<T>::Type;
 
 
@@ -691,10 +697,10 @@ __GB_NAMESPACE_START
 	// NOTE(bill): Very similar to doing `*(T*)(&u)`
 	template <typename Dest, typename Source>
 	inline Dest
-	bit_cast(const Source& source)
+	bit_cast(Source const& source)
 	{
 		static_assert(sizeof(Dest) <= sizeof(Source),
-		              "bit_cast<Dest>(const Source&) - sizeof(Dest) <= sizeof(Source)");
+		              "bit_cast<Dest>(Source const&) - sizeof(Dest) <= sizeof(Source)");
 		Dest dest;
 		::memcpy(&dest, &source, sizeof(Dest));
 		return dest;
@@ -705,9 +711,9 @@ __GB_NAMESPACE_START
 	// *(T*)(&u) ~~ pseudo_cast<T>(u)
 	template <typename T, typename U>
 	inline T
-	pseudo_cast(const U& u)
+	pseudo_cast(U const& u)
 	{
-		return reinterpret_cast<const T&>(u);
+		return reinterpret_cast<T const&>(u);
 	}
 
 	/*
@@ -720,11 +726,11 @@ __GB_NAMESPACE_START
 
 		// pseudo_cast - except from gb_math.hpp
 		Sphere
-		calculate_min_bounding(const void* vertices, usize num_vertices, usize stride, usize offset, f32 step)
+		calculate_min_bounding(void const* vertices, usize num_vertices, usize stride, usize offset, f32 step)
 		{
 			auto gen = random::make(0);
 
-			const u8* vertex = reinterpret_cast<const u8*>(vertices);
+			u8 const* vertex = reinterpret_cast<u8 const*>(vertices);
 			vertex += offset;
 
 			Vector3 position = pseudo_cast<Vector3>(vertex[0]);
@@ -794,7 +800,7 @@ __GB_NAMESPACE_START
 ////////////////////////////////
 
 template <typename T, usize N>
-inline usize array_count(const T(& )[N]) { return N; }
+inline usize array_count(T const(& )[N]) { return N; }
 
 inline s64 kilobytes(s64 x) { return          (x) * 1024ll; }
 inline s64 megabytes(s64 x) { return kilobytes(x) * 1024ll; }
@@ -831,21 +837,21 @@ struct Atomic64 { u64 nonatomic; };
 
 namespace atomic
 {
-u32  load(const volatile Atomic32* object);
-void store(volatile Atomic32* object, u32 value);
-u32  compare_exchange_strong(volatile Atomic32* object, u32 expected, u32 desired);
-u32  exchanged(volatile Atomic32* object, u32 desired);
-u32  fetch_add(volatile Atomic32* object, s32 operand);
-u32  fetch_and(volatile Atomic32* object, u32 operand);
-u32  fetch_or(volatile Atomic32* object, u32 operand);
+u32  load(Atomic32 const volatile* object);
+void store(Atomic32 volatile* object, u32 value);
+u32  compare_exchange_strong(Atomic32 volatile* object, u32 expected, u32 desired);
+u32  exchanged(Atomic32 volatile* object, u32 desired);
+u32  fetch_add(Atomic32 volatile* object, s32 operand);
+u32  fetch_and(Atomic32 volatile* object, u32 operand);
+u32  fetch_or(Atomic32 volatile* object, u32 operand);
 
-u64  load(const volatile Atomic64* object);
-void store(volatile Atomic64* object, u64 value);
-u64  compare_exchange_strong(volatile Atomic64* object, u64 expected, u64 desired);
-u64  exchanged(volatile Atomic64* object, u64 desired);
-u64  fetch_add(volatile Atomic64* object, s64 operand);
-u64  fetch_and(volatile Atomic64* object, u64 operand);
-u64  fetch_or(volatile Atomic64* object, u64 operand);
+u64  load(Atomic64 const volatile* object);
+void store(Atomic64 volatile* object, u64 value);
+u64  compare_exchange_strong(Atomic64 volatile* object, u64 expected, u64 desired);
+u64  exchanged(Atomic64 volatile* object, u64 desired);
+u64  fetch_add(Atomic64 volatile* object, s64 operand);
+u64  fetch_and(Atomic64 volatile* object, u64 operand);
+u64  fetch_or(Atomic64 volatile* object, u64 operand);
 } // namespace atomic
 
 
@@ -898,7 +904,7 @@ Thread make();
 void destroy(Thread* t);
 void start(Thread* t, Thread_Procedure* func, void* data = nullptr, usize stack_size = 0);
 void join(Thread* t);
-bool is_running(const Thread& t);
+bool is_running(Thread const& t);
 u32  current_id();
 } // namespace thread
 
@@ -921,7 +927,7 @@ struct Allocator
 	///
 	// If the allocator does not support tracking of the allocation size,
 	// the function will return -1
-	s64 (*allocated_size)(Allocator* a, const void* ptr);
+	s64 (*allocated_size)(Allocator* a, void const* ptr);
 	// Returns the total amount of memory allocated by this allocator
 	///
 	// If the allocator does not track memory, the function will return -1
@@ -1021,15 +1027,15 @@ namespace memory
 void* align_forward(void* ptr, usize align);
 void* pointer_add(void* ptr, usize bytes);
 void* pointer_sub(void* ptr, usize bytes);
-const void* pointer_add(const void* ptr, usize bytes);
-const void* pointer_sub(const void* ptr, usize bytes);
+void const* pointer_add(void const* ptr, usize bytes);
+void const* pointer_sub(void const* ptr, usize bytes);
 
 void* set(void* ptr, usize bytes, u8 value);
 
 void* zero(void* ptr, usize bytes);
-void* copy(const void* src, usize bytes, void* dest);
-void* move(const void* src, usize bytes, void* dest);
-bool equals(const void* a, const void* b, usize bytes);
+void* copy(void const* src, usize bytes, void* dest);
+void* move(void const* src, usize bytes, void* dest);
+bool equals(void const* a, void const* b, usize bytes);
 
 // TODO(bill): Should this be just zero(T*) ???
 template <typename T>
@@ -1039,7 +1045,7 @@ template <typename T>
 T* zero_array(T* ptr, usize count);
 
 template <typename T>
-T* copy_array(const T* src_array, usize count, T* dest_array);
+T* copy_array(T const* src_array, usize count, T* dest_array);
 
 // TODO(bill): Should I implement something like std::copy, std::fill, std::fill_n ???
 
@@ -1056,7 +1062,7 @@ void swap(T (& a)[N], T (& b)[N]);
 // Allocator Functions
 void* alloc(Allocator* a, usize size, usize align = GB_DEFAULT_ALIGNMENT);
 void  free(Allocator* a, void* ptr);
-s64   allocated_size(Allocator* a, const void* ptr);
+s64   allocated_size(Allocator* a, void const* ptr);
 s64   total_allocated(Allocator* a);
 
 template <typename T>
@@ -1093,30 +1099,30 @@ struct Header
 
 inline Header* header(String str) { return reinterpret_cast<Header*>(str) - 1; }
 
-String make(Allocator* a, const char* str = "");
-String make(Allocator* a, const void* str, Size num_bytes);
+String make(Allocator* a, char const* str = "");
+String make(Allocator* a, void const* str, Size num_bytes);
 void   free(String str);
 
-String duplicate(Allocator* a, const String str);
+String duplicate(Allocator* a, String const str);
 
-Size length(const String str);
-Size capacity(const String str);
-Size available_space(const String str);
+Size length(String const str);
+Size capacity(String const str);
+Size available_space(String const str);
 
 void clear(String str);
 
 void append(String* str, char c);
-void append(String* str, const String other);
-void append_cstring(String* str, const char* other);
-void append(String* str, const void* other, Size num_bytes);
+void append(String* str, String const other);
+void append_cstring(String* str, char const* other);
+void append(String* str, void const* other, Size num_bytes);
 
 void make_space_for(String* str, Size add_len);
-usize allocation_size(const String str);
+usize allocation_size(String const str);
 
-bool equals(const String lhs, const String rhs);
-int compare(const String lhs, const String rhs); // NOTE(bill): three-way comparison
+bool equals(String const lhs, String const rhs);
+int compare(String const lhs, String const rhs); // NOTE(bill): three-way comparison
 
-void trim(String* str, const char* cut_set);
+void trim(String* str, char const* cut_set);
 void trim_space(String* str);
 } // namespace string
 
@@ -1151,14 +1157,14 @@ struct Array
 
 	~Array();
 
-	Array(const Array& array);
+	Array(Array const& array);
 	Array(Array&& array);
 
-	Array& operator=(const Array& array);
+	Array& operator=(Array const& array);
 	Array& operator=(Array&& array);
 
-	const T& operator[](usize index) const;
-	      T& operator[](usize index);
+	T const& operator[](usize index) const;
+	T&       operator[](usize index);
 };
 
 
@@ -1178,10 +1184,10 @@ template <typename T> Array<T> make(Allocator* allocator, usize count = 0);
 template <typename T> void     free(Array<T>* array);
 
 // Appends `item` to the end of the array
-template <typename T> void append(Array<T>* a, const T& item);
+template <typename T> void append(Array<T>* a, T const& item);
 template <typename T> void append(Array<T>* a, T&& item);
 // Appends `items[count]` to the end of the array
-template <typename T> void append(Array<T>* a, const T* items, usize count);
+template <typename T> void append(Array<T>* a, T const* items, usize count);
 
 // Pops the last item form the array. The array cannot be empty.
 template <typename T> void pop(Array<T>* a);
@@ -1199,10 +1205,12 @@ template <typename T> void grow(Array<T>* a, usize min_capacity = 0);
 } // namespace array
 
 // Used to iterate over the array with a C++11 for loop
-template <typename T> inline       T* begin(Array<T>& a)       { return a.data; }
-template <typename T> inline const T* begin(const Array<T>& a) { return a.data; }
-template <typename T> inline       T* end(Array<T>& a)         { return a.data + a.count; }
-template <typename T> inline const T* end(const Array<T>& a)   { return a.data + a.count; }
+template <typename T> inline T*       begin(Array<T>& a)       { return a.data; }
+template <typename T> inline T const* begin(Array<T> const& a) { return a.data; }
+template <typename T> inline T*       begin(Array<T>&& a)       { return a.data; }
+template <typename T> inline T*       end(Array<T>& a)         { return a.data + a.count; }
+template <typename T> inline T const* end(Array<T> const& a)   { return a.data + a.count; }
+template <typename T> inline T*       end(Array<T>&& a)         { return a.data + a.count; }
 
 
 
@@ -1232,12 +1240,12 @@ struct Hash_Table
 
 	Hash_Table();
 	explicit Hash_Table(Allocator* a);
-	Hash_Table(const Hash_Table<T>& other);
+	Hash_Table(Hash_Table<T> const& other);
 	Hash_Table(Hash_Table<T>&& other);
 
 	~Hash_Table() = default;
 
-	Hash_Table<T>& operator=(const Hash_Table<T>& other);
+	Hash_Table<T>& operator=(Hash_Table<T> const& other);
 	Hash_Table<T>& operator=(Hash_Table<T>&& other);
 };
 
@@ -1247,11 +1255,11 @@ namespace hash_table
 template <typename T> Hash_Table<T> make(Allocator* a);
 
 // Return `true` if the specified key exist in the hash table
-template <typename T> bool has(const Hash_Table<T>& h, u64 key);
+template <typename T> bool has(Hash_Table<T> const& h, u64 key);
 // Returns the value stored at the key, or a `default_value` if the key is not found in the hash table
-template <typename T> const T& get(const Hash_Table<T>& h, u64 key, const T& default_value);
+template <typename T> T const& get(Hash_Table<T> const& h, u64 key, T const& default_value);
 // Sets the value for the key in the hash table
-template <typename T> void set(Hash_Table<T>* h, u64 key, const T& value);
+template <typename T> void set(Hash_Table<T>* h, u64 key, T const& value);
 template <typename T> void set(Hash_Table<T>* h, u64 key, T&& value);
 // Removes the key from the hash table if it exists
 template <typename T> void remove(Hash_Table<T>* h, u64 key);
@@ -1262,26 +1270,26 @@ template <typename T> void clear(Hash_Table<T>* h);
 } // namespace hash_table
 
 // Used to iterate over the array with a C++11 for loop - in random order
-template <typename T> typename const Hash_Table<T>::Entry* begin(const Hash_Table<T>& h);
-template <typename T> typename const Hash_Table<T>::Entry* end(const Hash_Table<T>& h);
+template <typename T> typename Hash_Table<T>::Entry const* begin(Hash_Table<T> const& h);
+template <typename T> typename Hash_Table<T>::Entry const* end(Hash_Table<T> const& h);
 
 namespace multi_hash_table
 {
 // Outputs all the items that with the specified key
-template <typename T> void get(const Hash_Table<T>& h, u64 key, Array<T>& items);
+template <typename T> void get(Hash_Table<T> const& h, u64 key, Array<T>& items);
 // Returns the count of entries with the specified key
-template <typename T> usize count(const Hash_Table<T>& h, u64 key);
+template <typename T> usize count(Hash_Table<T> const& h, u64 key);
 
 // Finds the first entry with specified key in the hash table
-template <typename T> typename const Hash_Table<T>::Entry* find_first(const Hash_Table<T>& h, u64 key);
+template <typename T> typename Hash_Table<T>::Entry const* find_first(Hash_Table<T> const& h, u64 key);
 // Finds the next entry with same key as `e`
-template <typename T> typename const Hash_Table<T>::Entry* find_next(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e);
+template <typename T> typename Hash_Table<T>::Entry const* find_next(Hash_Table<T> const& h, typename Hash_Table<T>::Entry const* e);
 
 // Inserts the `value` as an additional value for the specified key
-template <typename T> void insert(Hash_Table<T>* h, u64 key, const T& value);
+template <typename T> void insert(Hash_Table<T>* h, u64 key, T const& value);
 template <typename T> void insert(Hash_Table<T>* h, u64 key, T&& value);
 // Removes a specified entry `e` from the hash table
-template <typename T> void remove_entry(Hash_Table<T>* h, typename const Hash_Table<T>::Entry* e);
+template <typename T> void remove_entry(Hash_Table<T>* h, typename Hash_Table<T>::Entry const* e);
 // Removes all entries with from the hash table with the specified key
 template <typename T> void remove_all(Hash_Table<T>* h, u64 key);
 } // namespace multi_hash_table
@@ -1298,18 +1306,18 @@ template <typename T> void remove_all(Hash_Table<T>* h, u64 key);
 
 namespace hash
 {
-u32 adler32(const void* key, u32 num_bytes);
+u32 adler32(void const* key, u32 num_bytes);
 
-u32 crc32(const void* key, u32 num_bytes);
-u64 crc64(const void* key, usize num_bytes);
+u32 crc32(void const* key, u32 num_bytes);
+u64 crc64(void const* key, usize num_bytes);
 
-u32 fnv32(const void* key, usize num_bytes);
-u64 fnv64(const void* key, usize num_bytes);
-u32 fnv32a(const void* key, usize num_bytes);
-u64 fnv64a(const void* key, usize num_bytes);
+u32 fnv32(void const* key, usize num_bytes);
+u64 fnv64(void const* key, usize num_bytes);
+u32 fnv32a(void const* key, usize num_bytes);
+u64 fnv64a(void const* key, usize num_bytes);
 
-u32 murmur32(const void* key, u32 num_bytes, u32 seed = 0x9747b28c);
-u64 murmur64(const void* key, usize num_bytes, u64 seed = 0x9747b28c);
+u32 murmur32(void const* key, u32 num_bytes, u32 seed = 0x9747b28c);
+u64 murmur64(void const* key, usize num_bytes, u64 seed = 0x9747b28c);
 } // namespace hash
 
 
@@ -1347,7 +1355,7 @@ struct Time
 	s64 microseconds;
 };
 
-extern const Time TIME_ZERO;
+extern Time const TIME_ZERO;
 
 namespace time
 {
@@ -1452,13 +1460,13 @@ Array<T>::Array(Allocator* a, usize count_)
 
 template <typename T>
 inline
-Array<T>::Array(const Array<T>& other)
+Array<T>::Array(Array<T> const& other)
 : allocator(other.allocator)
 , count(0)
 , capacity(0)
 , data(nullptr)
 {
-	const auto new_count = other.count;
+	auto new_count = other.count;
 	array::set_capacity(this, new_count);
 	memory::copy_array(other.data, new_count, data);
 	this->count = new_count;
@@ -1487,11 +1495,11 @@ Array<T>::~Array()
 
 template <typename T>
 Array<T>&
-Array<T>::operator=(const Array<T>& other)
+Array<T>::operator=(Array<T> const& other)
 {
 	if (allocator == nullptr)
 		allocator = other.allocator;
-	const auto new_count = other.count;
+	auto new_count = other.count;
 	array::resize(this, new_count);
 	memory::copy_array(other.data, new_count, data);
 	return *this;
@@ -1524,7 +1532,7 @@ Array<T>::operator=(Array<T>&& other)
 
 
 template <typename T>
-inline const T&
+inline T const&
 Array<T>::operator[](usize index) const
 {
 #if GB_ARRAY_BOUND_CHECKING
@@ -1575,7 +1583,7 @@ free(Array<T>* a)
 
 template <typename T>
 inline void
-append(Array<T>* a, const T& item)
+append(Array<T>* a, T const& item)
 {
 	if (a->capacity < a->count + 1)
 		array::grow(a);
@@ -1593,7 +1601,7 @@ append(Array<T>* a, T&& item)
 
 template <typename T>
 inline void
-append(Array<T>* a, const T* items, usize count)
+append(Array<T>* a, T const* items, usize count)
 {
 	if (a->capacity <= a->count + static_cast<s64>(count))
 		array::grow(a, a->count + count);
@@ -1692,7 +1700,7 @@ Hash_Table<T>::Hash_Table(Allocator* a)
 
 template <typename T>
 inline
-Hash_Table<T>::Hash_Table(const Hash_Table<T>& other)
+Hash_Table<T>::Hash_Table(Hash_Table<T> const& other)
 : hashes(other.hashes)
 , entries(other.entries)
 {
@@ -1708,7 +1716,7 @@ Hash_Table<T>::Hash_Table(Hash_Table<T>&& other)
 
 template <typename T>
 inline Hash_Table<T>&
-Hash_Table<T>::operator=(const Hash_Table<T>& other)
+Hash_Table<T>::operator=(Hash_Table<T> const& other)
 {
 	hashes  = other.hashes;
 	entries = other.entries;
@@ -1744,12 +1752,12 @@ struct Find_Result
 };
 
 template <typename T> usize add_entry(Hash_Table<T>* h, u64 key);
-template <typename T> void  erase(Hash_Table<T>* h, const Find_Result& fr);
-template <typename T> Find_Result find_result_from_key(const Hash_Table<T>& h, u64 key);
-template <typename T> Find_Result find_result_from_entry(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e);
+template <typename T> void  erase(Hash_Table<T>* h, Find_Result const& fr);
+template <typename T> Find_Result find_result_from_key(Hash_Table<T> const& h, u64 key);
+template <typename T> Find_Result find_result_from_entry(Hash_Table<T> const& h, typename Hash_Table<T>::Entry const* e);
 template <typename T> s64  make_entry(Hash_Table<T>* h, u64 key);
 template <typename T> void find_and_erase_entry(Hash_Table<T>* h, u64 key);
-template <typename T> s64  find_entry_or_fail(const Hash_Table<T>& h, u64 key);
+template <typename T> s64  find_entry_or_fail(Hash_Table<T> const& h, u64 key);
 template <typename T> s64  find_or_make_entry(Hash_Table<T>* h, u64 key);
 template <typename T> void rehash(Hash_Table<T>* h, usize new_capacity);
 template <typename T> void grow(Hash_Table<T>* h);
@@ -1770,7 +1778,7 @@ add_entry(Hash_Table<T>* h, u64 key)
 
 template <typename T>
 void
-erase(Hash_Table<T>* h, const Find_Result& fr)
+erase(Hash_Table<T>* h, Find_Result const& fr)
 {
 	if (fr.data_prev < 0)
 		h->hashes[fr.hash_index] = h->entries[fr.entry_index].next;
@@ -1794,7 +1802,7 @@ erase(Hash_Table<T>* h, const Find_Result& fr)
 
 template <typename T>
 Find_Result
-find_result_from_key(const Hash_Table<T>& h, u64 key)
+find_result_from_key(Hash_Table<T> const& h, u64 key)
 {
 	Find_Result fr = {};
 	fr.hash_index  = -1;
@@ -1820,7 +1828,7 @@ find_result_from_key(const Hash_Table<T>& h, u64 key)
 
 template <typename T>
 Find_Result
-find_result_from_entry(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
+find_result_from_entry(Hash_Table<T> const& h, typename Hash_Table<T>::Entry const* e)
 {
 	Find_Result fr = {};
 	fr.hash_index  = -1;
@@ -1847,8 +1855,8 @@ template <typename T>
 s64
 make_entry(Hash_Table<T>* h, u64 key)
 {
-	const Find_Result fr = impl::find_result_from_key(*h, key);
-	const s64 index      = impl::add_entry(h, key);
+	Find_Result const fr = impl::find_result_from_key(*h, key);
+	s64 const index      = impl::add_entry(h, key);
 
 	if (fr.data_prev < 0)
 		h->hashes[fr.hash_index] = index;
@@ -1864,14 +1872,14 @@ template <typename T>
 void
 find_and_erase_entry(Hash_Table<T>* h, u64 key)
 {
-	const Find_Result fr = impl::find_result_from_key(*h, key);
+	Find_Result const fr = impl::find_result_from_key(*h, key);
 	if (fr.entry_index >= 0)
 		impl::erase(h, fr);
 }
 
 template <typename T>
 s64
-find_entry_or_fail(const Hash_Table<T>& h, u64 key)
+find_entry_or_fail(Hash_Table<T> const& h, u64 key)
 {
 	return impl::find_result_from_key(h, key).entry_index;
 }
@@ -1880,7 +1888,7 @@ template <typename T>
 s64
 find_or_make_entry(Hash_Table<T>* h, u64 key)
 {
-	const auto fr = impl::find_result_from_key(*h, key);
+	auto const fr = impl::find_result_from_key(*h, key);
 	if (fr.entry_index >= 0)
 		return fr.entry_index;
 
@@ -1906,7 +1914,7 @@ rehash(Hash_Table<T>* h, usize new_capacity)
 
 	for (u32 i = 0; i < h->entries.count; i++)
 	{
-		const auto* e = &h->entries[i];
+		auto const* e = &h->entries[i];
 		multi_hash_table::insert(&nh, e->key, e->value);
 	}
 
@@ -1930,23 +1938,23 @@ bool
 is_full(Hash_Table<T>* h)
 {
 	// Make sure that there is enough space
-	const f32 maximum_load_coefficient = 0.75f;
+	f32 const maximum_load_coefficient = 0.75f;
 	return h->entries.count >= maximum_load_coefficient * h->hashes.count;
 }
 } // namespace impl
 
 template <typename T>
 inline bool
-has(const Hash_Table<T>& h, u64 key)
+has(Hash_Table<T> const& h, u64 key)
 {
 	return impl::find_entry_or_fail(h, key) >= 0;
 }
 
 template <typename T>
-inline const T&
-get(const Hash_Table<T>& h, u64 key, const T& default_value)
+inline T const&
+get(Hash_Table<T> const& h, u64 key, T const& default_value)
 {
-	const s64 index = impl::find_entry_or_fail(h, key);
+	s64 const index = impl::find_entry_or_fail(h, key);
 
 	if (index < 0)
 		return default_value;
@@ -1955,12 +1963,12 @@ get(const Hash_Table<T>& h, u64 key, const T& default_value)
 
 template <typename T>
 inline void
-set(Hash_Table<T>* h, u64 key, const T& value)
+set(Hash_Table<T>* h, u64 key, T const& value)
 {
 	if (h->hashes.count == 0)
 		impl::grow(h);
 
-	const s64 index = impl::find_or_make_entry(h, key);
+	s64 const index = impl::find_or_make_entry(h, key);
 	h->entries[index].value = value;
 	if (impl::is_full(h))
 		impl::grow(h);
@@ -1973,7 +1981,7 @@ set(Hash_Table<T>* h, u64 key, T&& value)
 	if (h->hashes.count == 0)
 		impl::grow(h);
 
-	const s64 index = impl::find_or_make_entry(h, key);
+	s64 const index = impl::find_or_make_entry(h, key);
 	h->entries[index].value = move(value);
 	if (impl::is_full(h))
 		impl::grow(h);
@@ -2003,15 +2011,15 @@ clear(Hash_Table<T>* h)
 } // namespace hash_table
 
 template <typename T>
-inline typename const Hash_Table<T>::Entry*
-begin(const Hash_Table<T>& h)
+inline typename Hash_Table<T>::Entry const*
+begin(Hash_Table<T> const& h)
 {
 	return begin(h.entries);
 }
 
 template <typename T>
-inline typename const Hash_Table<T>::Entry*
-end(const Hash_Table<T>& h)
+inline typename Hash_Table<T>::Entry const*
+end(Hash_Table<T> const& h)
 {
 	return end(h.entries);
 }
@@ -2021,7 +2029,7 @@ namespace multi_hash_table
 {
 template <typename T>
 inline void
-get(const Hash_Table<T>& h, u64 key, Array<T>& items)
+get(Hash_Table<T> const& h, u64 key, Array<T>& items)
 {
 	auto e = multi_hash_table::find_first(h, key);
 	while (e)
@@ -2033,7 +2041,7 @@ get(const Hash_Table<T>& h, u64 key, Array<T>& items)
 
 template <typename T>
 inline usize
-count(const Hash_Table<T>& h, u64 key)
+count(Hash_Table<T> const& h, u64 key)
 {
 	usize count = 0;
 	auto e = multi_hash_table::find_first(h, key);
@@ -2048,18 +2056,18 @@ count(const Hash_Table<T>& h, u64 key)
 
 
 template <typename T>
-inline typename const Hash_Table<T>::Entry*
-find_first(const Hash_Table<T>& h, u64 key)
+inline typename Hash_Table<T>::Entry const*
+find_first(Hash_Table<T> const& h, u64 key)
 {
-	const s64 index = hash_table::impl::find_entry_or_fail(h, key);
+	s64 const index = hash_table::impl::find_entry_or_fail(h, key);
 	if (index < 0)
 		return nullptr;
 	return &h.entries[index];
 }
 
 template <typename T>
-typename const Hash_Table<T>::Entry*
-find_next(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
+typename Hash_Table<T>::Entry const*
+find_next(Hash_Table<T> const& h, typename Hash_Table<T>::Entry const* e)
 {
 	if (!e)
 		return nullptr;
@@ -2078,7 +2086,7 @@ find_next(const Hash_Table<T>& h, typename const Hash_Table<T>::Entry* e)
 
 template <typename T>
 inline void
-insert(Hash_Table<T>* h, u64 key, const T& value)
+insert(Hash_Table<T>* h, u64 key, T const& value)
 {
 	if (h->hashes.count == 0)
 		hash_table::impl::grow(h);
@@ -2106,9 +2114,9 @@ insert(Hash_Table<T>* h, u64 key, T&& value)
 
 template <typename T>
 inline void
-remove_entry(Hash_Table<T>* h, typename const Hash_Table<T>::Entry* e)
+remove_entry(Hash_Table<T>* h, typename Hash_Table<T>::Entry const* e)
 {
-	const auto fr = hash_table::impl::find_result_from_entry(*h, e);
+	auto const fr = hash_table::impl::find_result_from_entry(*h, e);
 	if (fr.entry_index >= 0)
 		hash_table::impl::erase(h, fr);
 }
@@ -2142,7 +2150,7 @@ zero_array(T* ptr, usize count)
 
 template <typename T>
 inline T*
-copy_array(const T* src_array, usize count, T* dest_array)
+copy_array(T const* src_array, usize count, T* dest_array)
 {
 	return static_cast<T*>(memory::copy(src_array, count * sizeof(T), dest_array));
 }
@@ -2181,7 +2189,7 @@ quick(T* array, usize count, Comparison_Function compare)
 {
 	if (count < 2) return;
 
-	const T& mid = array[count/2];
+	T const& mid = array[count/2];
 
 	s64 i = 0;
 	s64 j = count-1;
@@ -2282,83 +2290,85 @@ __GB_NAMESPACE_END
 
 #if defined(GB_SYSTEM_WINDOWS)
 
-	#include <dbghelp.h>
-	#pragma comment(lib, "dbghelp.lib") // TODO(bill): Should this be pragma included or not?
+	#if !defined(GB_NO_STDIO)
+		#include <dbghelp.h>
+		#pragma comment(lib, "dbghelp.lib") // TODO(bill): Should this be pragma included or not?
 
-	internal_linkage void
-	gb__print_call_stack(FILE* out_stream)
-	{
-		SymInitialize(GetCurrentProcess(), nullptr, true);
-		SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
-
-		DWORD mtype = {};
-		CONTEXT ctx = {};
-		ctx.ContextFlags = CONTEXT_CONTROL;
-
-		RtlCaptureContext(&ctx);
-
-		STACKFRAME64 stack = {};
-
-	#if defined(_M_IX86)
-		mtype = IMAGE_FILE_MACHINE_I386;
-		stack.AddrPC.Offset    = ctx.Eip;
-		stack.AddrPC.Mode      = AddrModeFlat;
-		stack.AddrFrame.Offset = ctx.Ebp;
-		stack.AddrFrame.Mode   = AddrModeFlat;
-		stack.AddrStack.Offset = ctx.Esp;
-		stack.AddrStack.Mode   = AddrModeFlat;
-	#elif defined(_M_X64)
-		mtype = IMAGE_FILE_MACHINE_AMD64;
-		stack.AddrPC.Offset    = ctx.Rip;
-		stack.AddrPC.Mode      = AddrModeFlat;
-		stack.AddrFrame.Offset = ctx.Rsp;
-		stack.AddrFrame.Mode   = AddrModeFlat;
-		stack.AddrStack.Offset = ctx.Rsp;
-		stack.AddrStack.Mode   = AddrModeFlat;
-	#else
-		#error Unknown Windows Platform
-	#endif
-
-		DWORD ldsp = 0;
-		IMAGEHLP_LINE64 line = {};
-		line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
-
-		char buf[sizeof(SYMBOL_INFO) + (MAX_SYM_NAME * sizeof(TCHAR))];
-
-		SYMBOL_INFO* sym  = reinterpret_cast<SYMBOL_INFO*>(buf);
-		sym->SizeOfStruct = sizeof(SYMBOL_INFO);
-		sym->MaxNameLen   = MAX_SYM_NAME;
-
-		UINT layer_count = 0;
-		while (StackWalk64(mtype,
-		                   GetCurrentProcess(), GetCurrentThread(),
-		                   &stack, &ctx, nullptr,
-		                   SymFunctionTableAccess64, SymGetModuleBase64, nullptr))
+		internal_linkage void
+		gb__print_call_stack(FILE* out_stream)
 		{
-			if (stack.AddrPC.Offset == 0)
-				break;
+			SymInitialize(GetCurrentProcess(), nullptr, true);
+			SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
 
-			BOOL result = SymGetLineFromAddr64(GetCurrentProcess(), stack.AddrPC.Offset, &ldsp, &line);
-			result = result && SymFromAddr(GetCurrentProcess(), stack.AddrPC.Offset, 0, sym);
+			DWORD mtype = {};
+			CONTEXT ctx = {};
+			ctx.ContextFlags = CONTEXT_CONTROL;
 
-			if (result)
+			RtlCaptureContext(&ctx);
+
+			STACKFRAME64 stack = {};
+
+		#if defined(_M_IX86)
+			mtype = IMAGE_FILE_MACHINE_I386;
+			stack.AddrPC.Offset    = ctx.Eip;
+			stack.AddrPC.Mode      = AddrModeFlat;
+			stack.AddrFrame.Offset = ctx.Ebp;
+			stack.AddrFrame.Mode   = AddrModeFlat;
+			stack.AddrStack.Offset = ctx.Esp;
+			stack.AddrStack.Mode   = AddrModeFlat;
+		#elif defined(_M_X64)
+			mtype = IMAGE_FILE_MACHINE_AMD64;
+			stack.AddrPC.Offset    = ctx.Rip;
+			stack.AddrPC.Mode      = AddrModeFlat;
+			stack.AddrFrame.Offset = ctx.Rsp;
+			stack.AddrFrame.Mode   = AddrModeFlat;
+			stack.AddrStack.Offset = ctx.Rsp;
+			stack.AddrStack.Mode   = AddrModeFlat;
+		#else
+			#error Unknown Windows Platform
+		#endif
+
+			DWORD ldsp = 0;
+			IMAGEHLP_LINE64 line = {};
+			line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+
+			char buf[sizeof(SYMBOL_INFO) + (MAX_SYM_NAME * sizeof(TCHAR))];
+
+			SYMBOL_INFO* sym  = reinterpret_cast<SYMBOL_INFO*>(buf);
+			sym->SizeOfStruct = sizeof(SYMBOL_INFO);
+			sym->MaxNameLen   = MAX_SYM_NAME;
+
+			UINT layer_count = 0;
+			while (StackWalk64(mtype,
+			                   GetCurrentProcess(), GetCurrentThread(),
+			                   &stack, &ctx, nullptr,
+			                   SymFunctionTableAccess64, SymGetModuleBase64, nullptr))
 			{
-				fprintf(out_stream,
-				        "\t[%u] `%s` (%s:%d)\n",
-				        layer_count, sym->Name, line.FileName, line.LineNumber);
-			}
-			else
-			{
-				fprintf(out_stream,
-				        "\t[%u] 0x%p\n",
-				        layer_count, stack.AddrPC.Offset);
+				if (stack.AddrPC.Offset == 0)
+					break;
+
+				BOOL result = SymGetLineFromAddr64(GetCurrentProcess(), stack.AddrPC.Offset, &ldsp, &line);
+				result = result && SymFromAddr(GetCurrentProcess(), stack.AddrPC.Offset, 0, sym);
+
+				if (result)
+				{
+					fprintf(out_stream,
+					        "\t[%u] `%s` (%s:%d)\n",
+					        layer_count, sym->Name, line.FileName, line.LineNumber);
+				}
+				else
+				{
+					fprintf(out_stream,
+					        "\t[%u] 0x%p\n",
+					        layer_count, stack.AddrPC.Offset);
+				}
+
+				layer_count++;
 			}
 
-			layer_count++;
+			SymCleanup(GetCurrentProcess());
 		}
-
-		SymCleanup(GetCurrentProcess());
-	}
+	#endif
 #else
 	#error gb__print_call_stack() not implemeneted
 	// TODO(bill): Implemenet gb__print_call_stack()
@@ -2367,13 +2377,14 @@ __GB_NAMESPACE_END
 // Helper function used as a better alternative to assert which allows for
 // optional printf style error messages
 inline void
-gb__assert_handler(bool condition, const char* condition_str,
-				   const char* filename, size_t line,
-				   const char* error_text, ...)
+gb__assert_handler(bool condition, char const* condition_str,
+				   char const* filename, size_t line,
+				   char const* error_text, ...)
 {
 	if (condition)
 		return;
 
+#if !defined(GB_NO_STDIO)
 	FILE* out_stream = stderr;
 
 	fprintf(out_stream, "ASSERT! %s(%lu): %s", filename, line, condition_str);
@@ -2390,7 +2401,7 @@ gb__assert_handler(bool condition, const char* condition_str,
 
 	fprintf(out_stream, "Stacktrack:\n");
 	gb__print_call_stack(out_stream);
-
+#endif
 
 	// TODO(bill): Are these decent breaking functions???
 #if defined(GB_COMPILER_MSVC)
@@ -2469,54 +2480,58 @@ unlock(Mutex* m)
 }
 } // namespace mutex
 
+
+
+
+
 // Atomics
 namespace atomic
 {
 #if defined(_MSC_VER)
 inline u32
-load(const volatile Atomic32* object)
+load(Atomic32 const volatile* object)
 {
 	return object->nonatomic;
 }
 
 inline void
-store(volatile Atomic32* object, u32 value)
+store(Atomic32 volatile* object, u32 value)
 {
 	object->nonatomic = value;
 }
 
 inline u32
-compare_exchange_strong(volatile Atomic32* object, u32 expected, u32 desired)
+compare_exchange_strong(Atomic32 volatile* object, u32 expected, u32 desired)
 {
-	return _InterlockedCompareExchange(reinterpret_cast<volatile long*>(object), desired, expected);
+	return _InterlockedCompareExchange(reinterpret_cast<long volatile*>(object), desired, expected);
 }
 
 inline u32
-exchanged(volatile Atomic32* object, u32 desired)
+exchanged(Atomic32 volatile* object, u32 desired)
 {
-	return _InterlockedExchange(reinterpret_cast<volatile long*>(object), desired);
+	return _InterlockedExchange(reinterpret_cast<long volatile*>(object), desired);
 }
 
 inline u32
-fetch_add(volatile Atomic32* object, s32 operand)
+fetch_add(Atomic32 volatile* object, s32 operand)
 {
-	return _InterlockedExchangeAdd(reinterpret_cast<volatile long*>(object), operand);
+	return _InterlockedExchangeAdd(reinterpret_cast<long volatile*>(object), operand);
 }
 
 inline u32
-fetch_and(volatile Atomic32* object, u32 operand)
+fetch_and(Atomic32 volatile* object, u32 operand)
 {
-	return _InterlockedAnd(reinterpret_cast<volatile long*>(object), operand);
+	return _InterlockedAnd(reinterpret_cast<long volatile*>(object), operand);
 }
 
 inline u32
-fetch_or_32(volatile Atomic32* object, u32 operand)
+fetch_or_32(Atomic32 volatile* object, u32 operand)
 {
-	return _InterlockedOr(reinterpret_cast<volatile long*>(object), operand);
+	return _InterlockedOr(reinterpret_cast<long volatile*>(object), operand);
 }
 
 inline u64
-load(const volatile Atomic64* object)
+load(Atomic64 const volatile* object)
 {
 #if defined(GB_ARCH_64_BIT)
 	return object->nonatomic;
@@ -2537,7 +2552,7 @@ load(const volatile Atomic64* object)
 }
 
 inline void
-store(volatile Atomic64* object, u64 value)
+store(Atomic64 volatile* object, u64 value)
 {
 #if defined(GB_ARCH_64_BIT)
 	object->nonatomic = value;
@@ -2556,21 +2571,21 @@ store(volatile Atomic64* object, u64 value)
 }
 
 inline u64
-compare_exchange_strong(volatile Atomic64* object, u64 expected, u64 desired)
+compare_exchange_strong(Atomic64 volatile* object, u64 expected, u64 desired)
 {
-	return _InterlockedCompareExchange64(reinterpret_cast<volatile s64*>(object), desired, expected);
+	return _InterlockedCompareExchange64(reinterpret_cast<s64 volatile*>(object), desired, expected);
 }
 
 inline u64
-exchanged(volatile Atomic64* object, u64 desired)
+exchanged(Atomic64 volatile* object, u64 desired)
 {
 #if defined(GB_ARCH_64_BIT)
-	return _InterlockedExchange64(reinterpret_cast<volatile s64*>(object), desired);
+	return _InterlockedExchange64(reinterpret_cast<s64 volatile*>(object), desired);
 #else
 	u64 expected = object->nonatomic;
 	while (true)
 	{
-		u64 original = _InterlockedCompareExchange64(reinterpret_cast<volatile s64*>(object), desired, expected);
+		u64 original = _InterlockedCompareExchange64(reinterpret_cast<s64 volatile*>(object), desired, expected);
 		if (original == expected)
 			return original;
 		expected = original;
@@ -2579,15 +2594,15 @@ exchanged(volatile Atomic64* object, u64 desired)
 }
 
 inline u64
-fetch_add(volatile Atomic64* object, s64 operand)
+fetch_add(Atomic64 volatile* object, s64 operand)
 {
 #if defined(GB_ARCH_64_BIT)
-	return _InterlockedExchangeAdd64(reinterpret_cast<volatile s64*>(object), operand);
+	return _InterlockedExchangeAdd64(reinterpret_cast<s64 volatile*>(object), operand);
 #else
 	u64 expected = object->nonatomic;
 	while (true)
 	{
-		u64 original = _InterlockedExchange64(reinterpret_cast<volatile s64*>(object), expected + operand, expected);
+		u64 original = _InterlockedExchange64(reinterpret_cast<s64 volatile*>(object), expected + operand, expected);
 		if (original == expected)
 			return original;
 		expected = original;
@@ -2596,15 +2611,15 @@ fetch_add(volatile Atomic64* object, s64 operand)
 }
 
 inline u64
-fetch_and(volatile Atomic64* object, u64 operand)
+fetch_and(Atomic64 volatile* object, u64 operand)
 {
 #if defined(GB_ARCH_64_BIT)
-	return _InterlockedAnd64(reinterpret_cast<volatile s64*>(object), operand);
+	return _InterlockedAnd64(reinterpret_cast<s64 volatile*>(object), operand);
 #else
 	u64 expected = object->nonatomic;
 	while (true)
 	{
-		u64 original = _InterlockedCompareExchange64(reinterpret_cast<volatile s64*>(object), expected & operand, expected);
+		u64 original = _InterlockedCompareExchange64(reinterpret_cast<s64 volatile*>(object), expected & operand, expected);
 		if (original == expected)
 			return original;
 		expected = original;
@@ -2613,15 +2628,15 @@ fetch_and(volatile Atomic64* object, u64 operand)
 }
 
 inline u64
-fetch_or(volatile Atomic64* object, u64 operand)
+fetch_or(Atomic64 volatile* object, u64 operand)
 {
 #if defined(GB_ARCH_64_BIT)
-	return _InterlockedAnd64(reinterpret_cast<volatile s64*>(object), operand);
+	return _InterlockedAnd64(reinterpret_cast<s64 volatile*>(object), operand);
 #else
 	u64 expected = object->nonatomic;
 	while (true)
 	{
-		u64 original = _InterlockedCompareExchange64(reinterpret_cast<volatile s64*>(object), expected | operand, expected);
+		u64 original = _InterlockedCompareExchange64(reinterpret_cast<s64 volatile*>(object), expected | operand, expected);
 		if (original == expected)
 			return original;
 		expected = original;
@@ -2634,6 +2649,9 @@ fetch_or(volatile Atomic64* object, u64 operand)
 #endif
 } // namespace atomic
 
+
+
+
 namespace semaphore
 {
 Semaphore
@@ -2642,6 +2660,7 @@ make()
 	Semaphore semaphore = {};
 #if defined(GB_SYSTEM_WINDOWS)
 	semaphore.win32_handle = CreateSemaphore(nullptr, 0, GB_S32_MAX, nullptr);
+
 	GB_ASSERT(semaphore.win32_handle != nullptr, "CreateSemaphore: GetLastError = %d", GetLastError());
 
 #else
@@ -2822,7 +2841,7 @@ join(Thread* t)
 }
 
 inline bool
-is_running(const Thread& thread)
+is_running(Thread const& thread)
 {
 	return thread.is_running != 0;
 }
@@ -2912,14 +2931,14 @@ free(Allocator* a, void* ptr)
 }
 
 inline s64
-allocated_size(Allocator* a, const void* ptr)
+allocated_size(Allocator* a, void const* ptr)
 {
 #if defined(GB_SYSTEM_WINDOWS)
 	auto* heap = reinterpret_cast<Heap*>(a);
 
 	if (heap->use_mutex) mutex::lock(&heap->mutex);
 
-	const auto* h = static_cast<const Heap::Header*>(ptr) - 1;
+	auto const* h = static_cast<Heap::Header const*>(ptr) - 1;
 	s64 result = h->size;
 
 	if (heap->use_mutex) mutex::unlock(&heap->mutex);
@@ -3010,7 +3029,7 @@ alloc(Allocator* a, usize size, usize align)
 
 inline void free(Allocator*, void*) {} // NOTE(bill): Arenas free all at once
 
-inline s64 allocated_size(Allocator*, const void*) { return -1; }
+inline s64 allocated_size(Allocator*, void const*) { return -1; }
 
 inline s64
 total_allocated(Allocator* a)
@@ -3142,7 +3161,7 @@ free(Allocator* a, void* ptr)
 }
 
 internal_linkage s64
-allocated_size(Allocator*, const void*)
+allocated_size(Allocator*, void const*)
 {
 	return -1;
 }
@@ -3233,10 +3252,10 @@ pointer_add(void* ptr, usize bytes)
 	return static_cast<void*>(static_cast<u8*>(ptr) + bytes);
 }
 
-inline const void*
-pointer_add(const void* ptr, usize bytes)
+inline void const*
+pointer_add(void const* ptr, usize bytes)
 {
-	return static_cast<const void*>(static_cast<const u8*>(ptr) + bytes);
+	return static_cast<void const*>(static_cast<u8 const*>(ptr) + bytes);
 }
 
 inline void*
@@ -3245,10 +3264,10 @@ pointer_sub(void* ptr, usize bytes)
 	return static_cast<void*>(static_cast<u8*>(ptr) - bytes);
 }
 
-inline const void*
-pointer_sub(const void* ptr, usize bytes)
+inline void const*
+pointer_sub(void const* ptr, usize bytes)
 {
-	return static_cast<const void*>(static_cast<const u8*>(ptr) - bytes);
+	return static_cast<void const*>(static_cast<u8 const*>(ptr) - bytes);
 }
 
 GB_FORCE_INLINE void*
@@ -3264,19 +3283,19 @@ zero(void* ptr, usize bytes)
 }
 
 GB_FORCE_INLINE void*
-copy(const void* src, usize bytes, void* dest)
+copy(void const* src, usize bytes, void* dest)
 {
 	return memcpy(dest, src, bytes);
 }
 
 GB_FORCE_INLINE void*
-move(const void* src, usize bytes, void* dest)
+move(void const* src, usize bytes, void* dest)
 {
 	return memmove(dest, src, bytes);
 }
 
 GB_FORCE_INLINE bool
-equals(const void* a, const void* b, usize bytes)
+equals(void const* a, void const* b, usize bytes)
 {
 	return (memcmp(a, b, bytes) == 0);
 }
@@ -3297,7 +3316,7 @@ free(Allocator* a, void* ptr)
 }
 
 inline s64
-allocated_size(Allocator* a, const void* ptr)
+allocated_size(Allocator* a, void const* ptr)
 {
 	GB_ASSERT(a != nullptr);
 	return a->allocated_size(a, ptr);
@@ -3319,13 +3338,13 @@ total_allocated(Allocator* a)
 namespace string
 {
 inline String
-make(Allocator* a, const char* str)
+make(Allocator* a, char const* str)
 {
 	return string::make(a, str, (string::Size)strlen(str));
 }
 
 String
-make(Allocator* a, const void* init_str, Size len)
+make(Allocator* a, void const* init_str, Size len)
 {
 	usize header_size = sizeof(string::Header);
 	void* ptr = alloc(a, header_size + len + 1);
@@ -3358,25 +3377,25 @@ free(String str)
 }
 
 inline String
-duplicate(Allocator* a, const String str)
+duplicate(Allocator* a, String const str)
 {
 	return string::make(a, str, string::length(str));
 }
 
 inline Size
-length(const String str)
+length(String const str)
 {
 	return string::header(str)->length;
 }
 
 inline Size
-capacity(const String str)
+capacity(String const str)
 {
 	return string::header(str)->capacity;
 }
 
 inline Size
-available_space(const String str)
+available_space(String const str)
 {
 	string::Header* h = string::header(str);
 	if (h->capacity > h->length)
@@ -3405,19 +3424,19 @@ append(String* str, char c)
 }
 
 inline void
-append(String* str, const String other)
+append(String* str, String const other)
 {
 	string::append(str, other, string::length(other));
 }
 
 inline void
-append_cstring(String* str, const char* other)
+append_cstring(String* str, char const* other)
 {
 	string::append(str, other, (Size)strlen(other));
 }
 
 void
-append(String* str, const void* other, Size other_len)
+append(String* str, void const* other, Size other_len)
 {
 	Size curr_len = string::length(*str);
 
@@ -3485,14 +3504,14 @@ make_space_for(String* str, Size add_len)
 }
 
 usize
-allocation_size(const String str)
+allocation_size(String const str)
 {
 	Size cap = string::capacity(str);
 	return sizeof(string::Header) + cap;
 }
 
 bool
-equals(const String lhs, const String rhs)
+equals(String const lhs, String const rhs)
 {
 	Size lhs_len = string::length(lhs);
 	Size rhs_len = string::length(rhs);
@@ -3509,11 +3528,11 @@ equals(const String lhs, const String rhs)
 }
 
 int
-compare(const String lhs, const String rhs) // NOTE(bill): three-way comparison
+compare(String const lhs, String const rhs) // NOTE(bill): three-way comparison
 {
 	// Treat as cstring
-	const char* str1 = lhs;
-	const char* str2 = rhs;
+	char const* str1 = lhs;
+	char const* str2 = rhs;
 	int s1;
 	int s2;
 	do
@@ -3529,7 +3548,7 @@ compare(const String lhs, const String rhs) // NOTE(bill): three-way comparison
 }
 
 void
-trim(String* str, const char* cut_set)
+trim(String* str, char const* cut_set)
 {
 	char* start;
 	char* end;
@@ -3576,14 +3595,14 @@ trim_space(String* str)
 namespace hash
 {
 u32
-adler32(const void* key, u32 num_bytes)
+adler32(void const* key, u32 num_bytes)
 {
 	const u32 MOD_ADLER = 65521;
 
 	u32 a = 1;
 	u32 b = 0;
 
-	const u8* bytes = static_cast<const u8*>(key);
+	u8 const* bytes = static_cast<u8 const*>(key);
 	for (u32 i = 0; i < num_bytes; i++)
 	{
 		a = (a + bytes[i]) % MOD_ADLER;
@@ -3729,10 +3748,10 @@ global_variable const u64 GB_CRC64_TABLE[256] = {
 
 
 u32
-crc32(const void* key, u32 num_bytes)
+crc32(void const* key, u32 num_bytes)
 {
 	u32 result = static_cast<u32>(~0);
-	const u8* c = reinterpret_cast<const u8*>(key);
+	u8 const* c = reinterpret_cast<u8 const*>(key);
 
 	for (u32 remaining = num_bytes; remaining--; c++)
 		result = (result >> 8) ^ (GB_CRC32_TABLE[(result ^ *c) & 0xff]);
@@ -3741,10 +3760,10 @@ crc32(const void* key, u32 num_bytes)
 }
 
 u64
-crc64(const void* key, usize num_bytes)
+crc64(void const* key, usize num_bytes)
 {
 	u64 result = static_cast<u64>(~0);
-	const u8* c = reinterpret_cast<const u8*>(key);
+	u8 const* c = reinterpret_cast<u8 const*>(key);
 	for (usize remaining = num_bytes; remaining--; c++)
 		result = (result >> 8) ^ (GB_CRC64_TABLE[(result ^ *c) & 0xff]);
 
@@ -3752,10 +3771,10 @@ crc64(const void* key, usize num_bytes)
 }
 
 inline u32
-fnv32(const void* key, usize num_bytes)
+fnv32(void const* key, usize num_bytes)
 {
 	u32 h = 0x811c9dc5;
-	const u8* buffer = static_cast<const u8*>(key);
+	u8 const* buffer = static_cast<u8 const*>(key);
 
 	for (usize i = 0; i < num_bytes; i++)
 	{
@@ -3766,10 +3785,10 @@ fnv32(const void* key, usize num_bytes)
 }
 
 inline u64
-fnv64(const void* key, usize num_bytes)
+fnv64(void const* key, usize num_bytes)
 {
 	u64 h = 0xcbf29ce484222325ull;
-	const u8* buffer = static_cast<const u8*>(key);
+	u8 const* buffer = static_cast<u8 const*>(key);
 
 	for (usize i = 0; i < num_bytes; i++)
 	{
@@ -3780,10 +3799,10 @@ fnv64(const void* key, usize num_bytes)
 }
 
 inline u32
-fnv32a(const void* key, usize num_bytes)
+fnv32a(void const* key, usize num_bytes)
 {
 	u32 h = 0x811c9dc5;
-	const u8* buffer = static_cast<const u8*>(key);
+	u8 const* buffer = static_cast<u8 const*>(key);
 
 	for (usize i = 0; i < num_bytes; i++)
 	{
@@ -3794,10 +3813,10 @@ fnv32a(const void* key, usize num_bytes)
 }
 
 inline u64
-fnv64a(const void* key, usize num_bytes)
+fnv64a(void const* key, usize num_bytes)
 {
 	u64 h = 0xcbf29ce484222325ull;
-	const u8* buffer = static_cast<const u8*>(key);
+	u8 const* buffer = static_cast<u8 const*>(key);
 
 	for (usize i = 0; i < num_bytes; i++)
 	{
@@ -3808,7 +3827,7 @@ fnv64a(const void* key, usize num_bytes)
 }
 
 u32
-murmur32(const void* key, u32 num_bytes, u32 seed)
+murmur32(void const* key, u32 num_bytes, u32 seed)
 {
 	const u32 c1 = 0xcc9e2d51;
 	const u32 c2 = 0x1b873593;
@@ -3831,7 +3850,7 @@ murmur32(const void* key, u32 num_bytes, u32 seed)
 		hash = ((hash << r2) | (hash >> (32 - r2))) * m + n;
 	}
 
-	const u8* tail = (static_cast<const u8*>(key)) + nblocks * 4;
+	u8 const* tail = (static_cast<u8 const*>(key)) + nblocks * 4;
 	u32 k1 = 0;
 
 	switch (num_bytes & 3) {
@@ -3860,7 +3879,7 @@ murmur32(const void* key, u32 num_bytes, u32 seed)
 
 #if defined(GB_ARCH_64_BIT)
 	u64
-	murmur64(const void* key, usize num_bytes, u64 seed)
+	murmur64(void const* key, usize num_bytes, u64 seed)
 	{
 		const u64 m = 0xc6a4a7935bd1e995ULL;
 		const s32 r = 47;
@@ -3882,7 +3901,7 @@ murmur32(const void* key, u32 num_bytes, u32 seed)
 			h *= m;
 		}
 
-		const u8* data2 = reinterpret_cast<const u8*>(data);
+		u8 const* data2 = reinterpret_cast<u8 const*>(data);
 
 		switch (num_bytes & 7)
 		{
@@ -3904,7 +3923,7 @@ murmur32(const void* key, u32 num_bytes, u32 seed)
 	}
 #elif GB_ARCH_32_BIT
 	u64
-	murmur64(const void* key, usize num_bytes, u64 seed)
+	murmur64(void const* key, usize num_bytes, u64 seed)
 	{
 		const u32 m = 0x5bd1e995;
 		const s32 r = 24;
@@ -3946,9 +3965,9 @@ murmur32(const void* key, u32 num_bytes, u32 seed)
 
 		switch (num_bytes)
 		{
-		case 3: h2 ^= reinterpret_cast<const u8*>(data)[2] << 16;
-		case 2: h2 ^= reinterpret_cast<const u8*>(data)[1] <<  8;
-		case 1: h2 ^= reinterpret_cast<const u8*>(data)[0] <<  0;
+		case 3: h2 ^= reinterpret_cast<u8 const*>(data)[2] << 16;
+		case 2: h2 ^= reinterpret_cast<u8 const*>(data)[1] <<  8;
+		case 1: h2 ^= reinterpret_cast<u8 const*>(data)[0] <<  0;
 			h2 *= m;
 		};
 
@@ -3978,7 +3997,7 @@ murmur32(const void* key, u32 num_bytes, u32 seed)
 //                            //
 ////////////////////////////////
 
-const Time TIME_ZERO = time::seconds(0);
+Time const TIME_ZERO = time::seconds(0);
 
 namespace time
 {
