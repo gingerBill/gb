@@ -15,12 +15,8 @@
 
  /*
 Version History:
-<<<<<<< HEAD
-
+	0.05  - Fix Macros
 	0.04a - Change conventions to be in keeping with `gb.hpp`
-=======
-	0.04a - Remove C++ specific macros
->>>>>>> origin/master
 	0.04  - Allow for no <stdio.h>
 	0.03  - Allocators can be passed to gb_alloc/free/etc. without cast using `typedef void* gb_Allocator_Ptr`
 	0.02  - Implement all functions (from gb.hpp)
@@ -151,7 +147,9 @@ extern "C" {
 	#define GB_IS_LITTLE_EDIAN (!GB_IS_BIG_EDIAN)
 #endif
 
+#ifndef GB_IS_POWER_OF_TWO
 #define GB_IS_POWER_OF_TWO(x) ((x) != 0) && !((x) & ((x) - 1))
+#endif
 
 #ifndef GB_FORCE_INLINE
 	#if defined(_MSC_VER)
@@ -211,7 +209,7 @@ extern "C" {
 
 #if !defined(GB_NO_STDIO) && defined(_MSC_VER)
 	/* snprintf_msvc */
-	int
+	GB_FORCE_INLINE int
 	gb__vsnprintf_compatible(char* buffer, size_t size, char const* format, va_list args)
 	{
 		int result = -1;
@@ -220,7 +218,7 @@ extern "C" {
 		return result;
 	}
 
-	int
+	GB_FORCE_INLINE int
 	gb__snprintf_compatible(char* buffer, size_t size, char const* format, ...)
 	{
 		va_list args;
@@ -326,16 +324,32 @@ typedef ptrdiff_t ptrdiff;
 /**********************************/
 
 /* NOTE(bill): Easier to grep/find for casts */
-/* Still not as type safe as C++ static_cast, reinterpret_cast, const_cast */
+/* NOTE(bill): Still not as type safe as C++ static_cast, reinterpret_cast, const_cast */
+#ifndef cast
 #define cast(Type, src) ((Type)(src))
-
-#if defined(GB_COMPILER_GNU_GCC)
-	#define bit_cast(Type, src) ({ GB_ASSERT(sizeof(Type) <= sizeof(src)); Type dst; memcpy(&dst, &(src), sizeof(Type)); dst; })
 #endif
 
-#define pseudo_cast(Type, src) (*cast(Type*, &(src)))
+#if defined(GB_COMPILER_GNU_GCC)
+	#ifndef bit_cast
+	#define bit_cast(Type, src) ({ GB_ASSERT(sizeof(Type) <= sizeof(src)); Type dst; memcpy(&dst, &(src), sizeof(Type)); dst; })
+	#endif
+#endif
 
+#ifndef pseudo_cast
+#define pseudo_cast(Type, src) (*cast(Type*, &(src)))
+#endif
+
+#ifndef GB_UNUSED
 #define GB_UNUSED(x) cast(void, sizeof(x))
+#endif
+
+
+
+
+
+
+
+
 
 
 /**********************************/
@@ -345,13 +359,16 @@ typedef ptrdiff_t ptrdiff;
 /**********************************/
 
 /* NOTE(bill): 0[x] is used to prevent C++ style arrays with operator overloading  */
+#ifndef GB_ARRAY_COUNT
 #define GB_ARRAY_COUNT(x) ((sizeof(x)/sizeof(0[x])) / (cast(size_t, !(sizeof(x) % sizeof(0[x])))))
+#endif
 
-#define GB_KILOBYTES(x) (         (x) * 1024ll)
+#ifndef GB_KILOBYTES
+#define GB_KILOBYTES(x) (            (x) * 1024ll)
 #define GB_MEGABYTES(x) (GB_KILOBYTES(x) * 1024ll)
 #define GB_GIGABYTES(x) (GB_MEGABYTES(x) * 1024ll)
 #define GB_TERABYTES(x) (GB_GIGABYTES(x) * 1024ll)
-
+#endif
 
 typedef struct gb_Mutex
 {
@@ -416,7 +433,7 @@ void gb_semaphore_wait(gb_Semaphore* s);
 
 
 
-typedef void(gb_Thread_Procedure)(void*);
+typedef void(gb_Thread_Procedure)(void* data);
 
 typedef struct gb_Thread
 {
@@ -487,7 +504,7 @@ void*
 gb_alloc_align(gb_Allocator_Ptr allocator, usize size, usize align)
 {
 	GB_ASSERT(allocator != NULL);
-	gb_Allocator* a = allocator;
+	gb_Allocator* a = cast(gb_Allocator*, allocator);
 	return a->alloc(a, size, align);
 }
 void*
@@ -497,14 +514,16 @@ gb_alloc(gb_Allocator_Ptr allocator, usize size)
 	return gb_alloc_align(allocator, size, GB_DEFAULT_ALIGNMENT);
 }
 
-#define gb_alloc_struct(allocator, Type)       cast((Type)*, gb_alloc_align(allocator, sizeof(Type),         alignof(Type)))
-#define gb_alloc_array(allocator, Type, count) cast((Type)*, gb_alloc_align(allocator, sizeof(Type)*(count), alignof(Type)))
+#ifndef gb_alloc_struct
+#define gb_alloc_struct(allocator, Type)       cast(Type*, gb_alloc_align(allocator, sizeof(Type),         alignof(Type)))
+#define gb_alloc_array(allocator, Type, count) cast(Type*, gb_alloc_align(allocator, sizeof(Type)*(count), alignof(Type)))
+#endif
 
 void
 gb_free(gb_Allocator_Ptr allocator, void* ptr)
 {
 	GB_ASSERT(allocator != NULL);
-	gb_Allocator* a = allocator;
+	gb_Allocator* a = cast(gb_Allocator*, allocator);
 	if (ptr) a->free(a, ptr);
 }
 
@@ -512,7 +531,7 @@ s64
 gb_allocated_size(gb_Allocator_Ptr allocator, void const* ptr)
 {
 	GB_ASSERT(allocator != NULL);
-	gb_Allocator* a = allocator;
+	gb_Allocator* a = cast(gb_Allocator*, allocator);
 	return a->allocated_size(a, ptr);
 }
 
@@ -520,7 +539,7 @@ s64
 gb_total_allocated(gb_Allocator_Ptr allocator)
 {
 	GB_ASSERT(allocator != NULL);
-	gb_Allocator* a = allocator;
+	gb_Allocator* a = cast(gb_Allocator*, allocator);
 	return a->total_allocated(a);
 }
 
@@ -529,7 +548,7 @@ gb_total_allocated(gb_Allocator_Ptr allocator)
 
 typedef struct gb_Heap
 {
-	gb_Allocator base; /* NOTE(bill): Must be first into order to allow for polymorphism */
+	gb_Allocator base; /* NOTE(bill): Must be first into order to act as a vtable */
 
 	gb_Mutex mutex;
 	bool32   use_mutex;
@@ -547,7 +566,7 @@ void    gb_heap_destroy(gb_Heap* heap);
 
 typedef struct gb_Arena
 {
-	gb_Allocator base; /* NOTE(bill): Must be first into order to allow for polymorphism */
+	gb_Allocator base; /* NOTE(bill): Must be first into order to act as a vtable */
 
 	gb_Allocator* backing;
 	void*         physical_start;
@@ -575,7 +594,7 @@ void gb_temporary_arena_memory_free(gb_Temporary_Arena_Memory t);
 
 typedef struct gb_Pool
 {
-	gb_Allocator base; /* NOTE(bill): Must be first into order to allow for polymorphism */
+	gb_Allocator base; /* NOTE(bill): Must be first into order to act as a vtable */
 
 	gb_Allocator* backing;
 
@@ -602,10 +621,11 @@ void    gb_pool_destroy(gb_Pool* pool);
 
 void* gb_align_forward(void* ptr, usize align);
 
-void   *gb_zero_size(void* ptr, usize bytes);
+void* gb_zero_size(void* ptr, usize bytes);
+#ifndef gb_zero_struct
 #define gb_zero_struct(element) (cast(void, gb_zero_size(&(element), sizeof(element))))
 #define gb_zero_array(ptr, Type, count) cast(Type, gb_zero_size((ptr), sizeof(Type)*(count)))
-
+#endif
 
 
 
@@ -744,9 +764,14 @@ u64 gb_hash_murmur64(void const* key, usize num_bytes, u64 seed);
 /**********************************/
 
 /* TODO(bill): How should I this  */
-typedef struct gb_Time { s64 microseconds; } gb_Time;
+typedef struct gb_Time
+{
+	s64 microseconds;
+} gb_Time;
 
+#ifndef GB_TIME_ZERO
 #define GB_TIME_ZERO (cast(gb_Time, {0}))
+#endif
 
 gb_Time gb_time_now(void);
 void gb_time_sleep(gb_Time time);

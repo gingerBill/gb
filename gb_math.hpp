@@ -144,38 +144,17 @@ CONTENTS:
 #endif
 
 
-// TODO(bill): Get this to work
-// #if !defined(GB_LITTLE_EDIAN) && !defined(GB_BIG_EDIAN)
 
-// 	// Source: http://sourceforge.net/p/predef/wiki/Endianness/
-// 	#if defined(__BYTE_ORDER) && __BYTE_ORDER == __BIG_ENDIAN || \
-// 		defined(__BIG_ENDIAN__)                               || \
-// 		defined(__ARMEB__)                                    || \
-// 		defined(__THUMBEB__)                                  || \
-// 		defined(__AARCH64EB__)                                || \
-// 		defined(_MIBSEB) || defined(__MIBSEB) || defined(__MIBSEB__)
-// 	// It's a big-endian target architecture
-// 		#define GB_BIG_EDIAN 1
+#ifndef GB_EDIAN_ORDER
+#define GB_EDIAN_ORDER
+	#define GB_IS_BIG_EDIAN    (!*(unsigned char*)&(unsigned short){1})
+	#define GB_IS_LITTLE_EDIAN (!GB_IS_BIG_EDIAN)
+#endif
 
-// 	#elif defined(__BYTE_ORDER) && __BYTE_ORDER == __LITTLE_ENDIAN || \
-// 		defined(__LITTLE_ENDIAN__)                                 || \
-// 		defined(__ARMEL__)                                         || \
-// 		defined(__THUMBEL__)                                       || \
-// 		defined(__AARCH64EL__)                                     || \
-// 		defined(_MIPSEL) || defined(__MIPSEL) || defined(__MIPSEL__)
-// 	// It's a little-endian target architecture
-// 		#define GB_LITTLE_EDIAN 1
-
-// 	#else
-// 		#error I don't know what architecture this is!
-// 	#endif
-// #endif
-
-
+#ifndef GB_IS_POWER_OF_TWO
 #define GB_IS_POWER_OF_TWO(x) ((x) != 0) && !((x) & ((x) - 1))
+#endif
 
-#include <math.h>
-#include <stdio.h>
 
 #if !defined(GB_HAS_NO_CONSTEXPR)
 	#if defined(_GNUC_VER) && _GNUC_VER < 406  // Less than gcc 4.06
@@ -208,18 +187,14 @@ CONTENTS:
 	#define WIN32_LEAN_AND_MEAN 1
 
 	#include <windows.h>
-	#include <mmsystem.h> // Time functions
 	#include <wincrypt.h>
 
 	#undef NOMINMAX
 	#undef VC_EXTRALEAN
 	#undef WIN32_EXTRA_LEAN
 	#undef WIN32_LEAN_AND_MEAN
-
-	#include <intrin.h>
 #else
-	#include <pthread.h>
-	#include <sys/time.h>
+	//
 #endif
 
 
@@ -1099,6 +1074,7 @@ bool intersection3(Plane p1, Plane p2, Plane p3, Vector3* ip);
 } // namespace plane
 
 
+#if !defined(GB_MATH_NO_RANDOM)
 
 namespace random
 {
@@ -1142,6 +1118,7 @@ f32 perlin_3d(f32 x, f32 y, f32 z, s32 x_wrap = 0, s32 y_wrap = 0, s32 z_wrap = 
 
 } // namespace random
 
+#endif
 
 namespace math
 {
@@ -1220,6 +1197,9 @@ __GB_NAMESPACE_END
 ///                          ///
 ////////////////////////////////
 #if defined(GB_MATH_IMPLEMENTATION)
+
+#include <math.h>
+
 __GB_NAMESPACE_START
 
 ////////////////////////////////
@@ -3457,9 +3437,11 @@ namespace sphere
 Sphere
 calculate_min_bounding(void const* vertices, usize num_vertices, usize stride, usize offset, f32 step)
 {
+#if !defined(GB_MATH_NO_RANDOM)
 	auto gen = random::make(0);
+#endif
 
-	const u8* vertex = reinterpret_cast<const u8*>(vertices);
+	u8 const* vertex = reinterpret_cast<u8 const*>(vertices);
 	vertex += offset;
 
 	Vector3 position = pseudo_cast<Vector3>(vertex[0]);
@@ -3475,9 +3457,15 @@ calculate_min_bounding(void const* vertices, usize num_vertices, usize stride, u
 	do
 	{
 		done = true;
+#if !defined(GB_MATH_NO_RANDOM)
 		for (u32 i = 0, index = random::uniform_u32(&gen, 0, num_vertices-1);
 			 i < num_vertices;
 			 i++, index = (index + 1)%num_vertices)
+#else
+		for (u32 i = 0, index = num_vertices/2;
+			 i < num_vertices;
+			 i++, index = (index + 1)%num_vertices)
+#endif
 		{
 			Vector3 position = pseudo_cast<Vector3>(vertex[index * stride]);
 
@@ -3609,6 +3597,7 @@ intersection3(Plane p1, Plane p2, Plane p3, Vector3* ip)
 }
 } // namespace plane
 
+#if !defined(GB_MATH_NO_RANDOM)
 namespace random
 {
 inline Random
@@ -3886,6 +3875,8 @@ perlin_3d(f32 x, f32 y, f32 z, s32 x_wrap, s32 y_wrap, s32 z_wrap)
 }
 
 } // namespace random
+#endif
+
 __GB_NAMESPACE_END
 
 #endif // GB_MATH_IMPLEMENTATION

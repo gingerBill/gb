@@ -215,8 +215,9 @@ Version History:
 	#define GB_IS_LITTLE_EDIAN (!GB_IS_BIG_EDIAN)
 #endif
 
+#ifndef GB_IS_POWER_OF_TWO
 #define GB_IS_POWER_OF_TWO(x) ((x) != 0) && !((x) & ((x) - 1))
-
+#endif
 
 #if !defined(GB_HAS_NO_CONSTEXPR)
 	#if defined(_GNUC_VER) && _GNUC_VER < 406  // Less than gcc 4.06
