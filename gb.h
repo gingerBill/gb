@@ -15,6 +15,7 @@
 
  /*
 Version History:
+	0.06  - Explicit Everything
 	0.05  - Fix Macros
 	0.04a - Change conventions to be in keeping with `gb.hpp`
 	0.04  - Allow for no <stdio.h>
@@ -31,30 +32,31 @@ Version History:
 extern "C" {
 #endif
 
-/* NOTE(bill): Because static means three different things in C/C++
- *             Great Design(!)
- */
-#ifndef global_variable
-#define global_variable  static
-#define internal_linkage static
-#define local_persist    static
+#ifndef GB_DO_NOT_USE_CUSTOM_STATIC
+	/* NOTE(bill): Because static means three different things in C/C++
+	 *             Great Design(!)
+	 */
+	#ifndef global_variable
+	#define global_variable  static
+	#define internal_linkage static
+	#define local_persist    static
+	#endif
+
+	/* Example for static defines
+
+		global_variable f32 const TAU = 6.283185f;
+		global_variable void* g_memory;
+
+		internal_linkage void
+		some_function(...)
+		{
+			local_persist u32 count = 0;
+			...
+			count++;
+			...
+		}
+	*/
 #endif
-
-/* Example for static defines
-
-	global_variable f32 const TAU = 6.283185f;
-	global_variable void* g_memory;
-
-	internal_linkage void
-	some_function(...)
-	{
-		local_persist u32 count = 0;
-		...
-		count++;
-		...
-	}
-*/
-
 
 #if defined(_MSC_VER)
 	#define _ALLOW_KEYWORD_MACROS
@@ -177,19 +179,9 @@ extern "C" {
 	#undef VC_EXTRALEAN
 	#undef WIN32_EXTRA_LEAN
 	#undef WIN32_LEAN_AND_MEAN
-
 #else
 	#include <pthread.h>
 	#include <sys/time.h>
-#endif
-
-#ifndef true
-#define true  (0==0)
-#define false (0!=0)
-#endif
-
-#ifndef NULL
-#define NULL ((void*)0)
 #endif
 
 #if defined(NDEBUG)
@@ -264,8 +256,6 @@ GB_COMPILE_TIME_ASSERT(sizeof(s64) == 8);
 typedef float  f32;
 typedef double f64;
 
-typedef s32 bool32;
-
 #if defined(GB_ARCH_32_BIT)
 	typedef u32 usize;
 	typedef s32 ssize;
@@ -275,8 +265,22 @@ typedef s32 bool32;
 #else
 	#error Unknown architecture bit size
 #endif
-
 GB_COMPILE_TIME_ASSERT(sizeof(usize) == sizeof(size_t));
+
+
+
+typedef enum bool32
+{
+	false = 0 != 0,
+	true  = !false,
+} bool32;
+
+#ifndef NULL
+#define NULL ((void*)0)
+#endif
+
+GB_COMPILE_TIME_ASSERT(sizeof(bool32) == sizeof(s32));
+
 
 typedef uintptr_t uintptr;
 typedef intptr_t  intptr;
@@ -329,25 +333,24 @@ typedef ptrdiff_t ptrdiff;
 #define cast(Type, src) ((Type)(src))
 #endif
 
-#if defined(GB_COMPILER_GNU_GCC)
-	#ifndef bit_cast
-	#define bit_cast(Type, src) ({ GB_ASSERT(sizeof(Type) <= sizeof(src)); Type dst; memcpy(&dst, &(src), sizeof(Type)); dst; })
-	#endif
-#endif
 
 #ifndef pseudo_cast
 #define pseudo_cast(Type, src) (*cast(Type*, &(src)))
 #endif
 
-#ifndef GB_UNUSED
-#define GB_UNUSED(x) cast(void, sizeof(x))
+#if defined(GB_COMPILER_GNU_GCC)
+	#ifndef bit_cast
+		#define bit_cast(Type, src) ({ GB_ASSERT(sizeof(Type) <= sizeof(src)); Type dst; memcpy(&dst, &(src), sizeof(Type)); dst; })
+	#else
+		// TODO(bill): Figure out a version for `bit_cast` that is not `pseudo_cast`
+		#define bit_cast(Type, src) (pseudo_cast(Type, src))
+	#endif
 #endif
 
 
-
-
-
-
+#ifndef GB_UNUSED
+#define GB_UNUSED(x) cast(void, sizeof(x))
+#endif
 
 
 
@@ -360,7 +363,7 @@ typedef ptrdiff_t ptrdiff;
 
 /* NOTE(bill): 0[x] is used to prevent C++ style arrays with operator overloading  */
 #ifndef GB_ARRAY_COUNT
-#define GB_ARRAY_COUNT(x) ((sizeof(x)/sizeof(0[x])) / (cast(size_t, !(sizeof(x) % sizeof(0[x])))))
+#define GB_ARRAY_COUNT(x) ((sizeof(x)/sizeof(0[x])) / (cast(usize, !(sizeof(x) % sizeof(0[x])))))
 #endif
 
 #ifndef GB_KILOBYTES
@@ -498,17 +501,15 @@ typedef struct gb_Allocator
 	s64 (*total_allocated)(struct gb_Allocator* a);
 } gb_Allocator;
 
-typedef void* gb_Allocator_Ptr;
 
 void*
-gb_alloc_align(gb_Allocator_Ptr allocator, usize size, usize align)
+gb_alloc_align(gb_Allocator* allocator, usize size, usize align)
 {
 	GB_ASSERT(allocator != NULL);
-	gb_Allocator* a = cast(gb_Allocator*, allocator);
-	return a->alloc(a, size, align);
+	return allocator->alloc(allocator, size, align);
 }
 void*
-gb_alloc(gb_Allocator_Ptr allocator, usize size)
+gb_alloc(gb_Allocator* allocator, usize size)
 {
 	GB_ASSERT(allocator != NULL);
 	return gb_alloc_align(allocator, size, GB_DEFAULT_ALIGNMENT);
@@ -520,27 +521,24 @@ gb_alloc(gb_Allocator_Ptr allocator, usize size)
 #endif
 
 void
-gb_free(gb_Allocator_Ptr allocator, void* ptr)
+gb_free(gb_Allocator* allocator, void* ptr)
 {
 	GB_ASSERT(allocator != NULL);
-	gb_Allocator* a = cast(gb_Allocator*, allocator);
-	if (ptr) a->free(a, ptr);
+	if (ptr) allocator->free(allocator, ptr);
 }
 
 s64
-gb_allocated_size(gb_Allocator_Ptr allocator, void const* ptr)
+gb_allocated_size(gb_Allocator* allocator, void const* ptr)
 {
 	GB_ASSERT(allocator != NULL);
-	gb_Allocator* a = cast(gb_Allocator*, allocator);
-	return a->allocated_size(a, ptr);
+	return allocator->allocated_size(allocator, ptr);
 }
 
 s64
-gb_total_allocated(gb_Allocator_Ptr allocator)
+gb_total_allocated(gb_Allocator* allocator)
 {
 	GB_ASSERT(allocator != NULL);
-	gb_Allocator* a = cast(gb_Allocator*, allocator);
-	return a->total_allocated(a);
+	return allocator->total_allocated(allocator);
 }
 
 
@@ -1198,7 +1196,7 @@ gb_thread_destroy(gb_Thread* t)
 	gb_semaphore_destroy(&t->semaphore);
 }
 
-internal_linkage void
+static void
 gb__thread_run(gb_Thread* t)
 {
 	gb_semaphore_post(&t->semaphore);
@@ -1206,7 +1204,7 @@ gb__thread_run(gb_Thread* t)
 }
 
 #if defined(GB_SYSTEM_WINDOWS)
-internal_linkage DWORD WINAPI
+static DWORD WINAPI
 gb__thread_proc(void* arg)
 {
 	gb__thread_run(cast(gb_Thread* , arg));
@@ -1214,7 +1212,7 @@ gb__thread_proc(void* arg)
 }
 
 #else
-internal_linkage void*
+static void*
 gb__thread_proc(void* arg)
 {
 	gb__thread_run(cast(gb_Thread* , arg));
@@ -1297,7 +1295,7 @@ gb_thread_current_id(void)
 
 #if defined(GB_SYSTEM_WINDOWS)
 	u8* thread_local_storage = cast(u8*, __readgsqword(0x30));
-	thread_id = *cast(u32 *, thread_local_storage + 0x48);
+	thread_id = *cast(u32*, thread_local_storage + 0x48);
 
 #elif defined(GB_SYSTEM_OSX) && defined(GB_ARCH_64_BIT)
 	asm("mov %%gs:0x00,%0" : "=r"(thread_id));
@@ -1327,7 +1325,7 @@ typedef struct gb__Heap_Header
 } gb__Heap_Header;
 
 
-internal_linkage void*
+static void*
 gb__heap_alloc(gb_Allocator* a, usize size, usize align)
 {
 	gb_Heap* heap = cast(gb_Heap*, a);
@@ -1360,7 +1358,7 @@ gb__heap_alloc(gb_Allocator* a, usize size, usize align)
 
 
 
-internal_linkage void
+static void
 gb__heap_free(gb_Allocator* a, void* ptr)
 {
 	if (!ptr) return;
@@ -1369,7 +1367,7 @@ gb__heap_free(gb_Allocator* a, void* ptr)
 
 	if (heap->use_mutex) gb_mutex_lock(&heap->mutex);
 
-	heap->total_allocated_count -= gb_allocated_size(heap, ptr);
+	heap->total_allocated_count -= gb_allocated_size(a, ptr);
 	heap->allocation_count--;
 
 #if defined (GB_SYSTEM_WINDOWS)
@@ -1382,7 +1380,7 @@ gb__heap_free(gb_Allocator* a, void* ptr)
 	if (heap->use_mutex) gb_mutex_unlock(&heap->mutex);
 }
 
-internal_linkage s64
+static s64
 gb__heap_allocated_size(gb_Allocator* a, void const* ptr)
 {
 #if defined(GB_SYSTEM_WINDOWS)
@@ -1408,7 +1406,7 @@ gb__heap_allocated_size(gb_Allocator* a, void const* ptr)
 #endif
 }
 
-internal_linkage s64
+static s64
 gb__heap_total_allocated(gb_Allocator* a)
 {
 	gb_Heap* heap = cast(gb_Heap*, a);
@@ -1459,7 +1457,7 @@ gb_heap_destroy(gb_Heap* heap)
 
 
 
-internal_linkage void*
+static void*
 gb__arena_alloc(gb_Allocator* a, usize size, usize align)
 {
 	gb_Arena* arena = cast(gb_Arena*, a);
@@ -1479,14 +1477,14 @@ gb__arena_alloc(gb_Allocator* a, usize size, usize align)
 	return ptr;
 }
 
-internal_linkage void
+static void
 gb__arena_free(gb_Allocator* a, void* ptr) /* NOTE(bill): Arenas free all at once */
 {
 	GB_UNUSED(a);
 	GB_UNUSED(ptr);
 }
 
-internal_linkage s64
+static s64
 gb__arena_allocated_size(gb_Allocator* a, void const* ptr)
 {
 	GB_UNUSED(a);
@@ -1494,7 +1492,7 @@ gb__arena_allocated_size(gb_Allocator* a, void const* ptr)
 	return -1;
 }
 
-internal_linkage s64
+static s64
 gb__arena_total_allocated(gb_Allocator* a)
 {
 	return cast(gb_Arena*, a)->total_allocated_count;
@@ -1574,7 +1572,7 @@ gb_make_temporary_arena_memory(gb_Arena* arena)
 void
 gb_temporary_arena_memory_free(gb_Temporary_Arena_Memory tmp)
 {
-	GB_ASSERT(gb_total_allocated(tmp.arena) >= tmp.original_count);
+	GB_ASSERT(gb_total_allocated(cast(gb_Allocator*, tmp.arena)) >= tmp.original_count);
 	tmp.arena->total_allocated_count = tmp.original_count;
 	GB_ASSERT(tmp.arena->temp_count > 0);
 	tmp.arena->temp_count--;
@@ -1587,7 +1585,7 @@ gb_temporary_arena_memory_free(gb_Temporary_Arena_Memory tmp)
 
 
 
-internal_linkage void*
+static void*
 gb__pool_alloc(gb_Allocator* a, usize size, usize align)
 {
 	gb_Pool* pool = cast(gb_Pool*, a);
@@ -1605,7 +1603,7 @@ gb__pool_alloc(gb_Allocator* a, usize size, usize align)
 	return ptr;
 }
 
-internal_linkage void
+static void
 gb__pool_free(gb_Allocator* a, void* ptr)
 {
 	if (!ptr) return;
@@ -1620,7 +1618,7 @@ gb__pool_free(gb_Allocator* a, void* ptr)
 	pool->total_size -= pool->block_size;
 }
 
-internal_linkage s64
+static s64
 gb__pool_allocated_size(gb_Allocator* a, void const* ptr)
 {
 	GB_UNUSED(a);
@@ -1628,7 +1626,7 @@ gb__pool_allocated_size(gb_Allocator* a, void const* ptr)
 	return -1;
 }
 
-internal_linkage s64
+static s64
 gb__pool_total_allocated(gb_Allocator* a)
 {
 	gb_Pool* pool = cast(gb_Pool*, a);
@@ -1719,14 +1717,14 @@ void* gb_zero_size(void* ptr, usize bytes) { return memset(ptr, 0, bytes); }
 /**********************************/
 
 
-internal_linkage void
+static void
 gb__string_set_length(gb_String str, gb_String_Size len)
 {
 	GB_STRING_HEADER(str)->length = len;
 }
 
 
-internal_linkage void
+static void
 gb__string_set_capacity(gb_String str, gb_String_Size cap)
 {
 	GB_STRING_HEADER(str)->capacity = cap;
@@ -1856,7 +1854,7 @@ gb_string_set(gb_String str, char const* cstr)
 }
 
 
-internal_linkage void*
+static void*
 gb__string_realloc(gb_Allocator* a, void* ptr, gb_String_Size old_size, gb_String_Size new_size)
 {
 	if (!ptr) return gb_alloc(a, new_size);
@@ -1979,7 +1977,7 @@ gb_hash_adler32(void const* key, u32 num_bytes)
 	return (b << 16) | a;
 }
 
-global_variable const u32 GB_CRC32_TABLE[256] = {
+static const u32 GB_CRC32_TABLE[256] = {
 	0x00000000, 0x77073096, 0xee0e612c, 0x990951ba,
 	0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3,
 	0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988,
@@ -2046,7 +2044,7 @@ global_variable const u32 GB_CRC32_TABLE[256] = {
 	0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d,
 };
 
-global_variable const u64 GB_CRC64_TABLE[256] = {
+static const u64 GB_CRC64_TABLE[256] = {
 	0x0000000000000000ull, 0x42F0E1EBA9EA3693ull, 0x85E1C3D753D46D26ull, 0xC711223CFA3E5BB5ull,
 	0x493366450E42ECDFull, 0x0BC387AEA7A8DA4Cull, 0xCCD2A5925D9681F9ull, 0x8E224479F47CB76Aull,
 	0x9266CC8A1C85D9BEull, 0xD0962D61B56FEF2Dull, 0x17870F5D4F51B498ull, 0x5577EEB6E6BB820Bull,
@@ -2377,7 +2375,7 @@ gb_hash_murmur32(void const* key, u32 num_bytes, u32 seed)
 
 		/* Get the frequency of the performance counter */
 		/* It is constant across the program's lifetime */
-		local_persist LARGE_INTEGER s_frequency;
+		static LARGE_INTEGER s_frequency;
 		QueryPerformanceFrequency(&s_frequency); /* TODO(bill): Is this fast enough? */
 
 		/* Get the current time */

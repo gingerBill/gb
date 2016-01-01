@@ -91,7 +91,7 @@
 //
 //           printf("%c %c\n", str[0], str[13]);
 //
-//     * gb strings are singularlly allocated. The meta-data is next to the character 
+//     * gb strings are singularly allocated. The meta-data is next to the character
 //       array which is better for the cache.
 //
 // Disadvantages:

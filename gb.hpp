@@ -39,6 +39,7 @@ CONTENTS:
 
 /*
 Version History:
+	0.33  - Explicit Everything! No ctor/dtor on Array<T> and Hash_Table<T>
 	0.32  - Change const position convention
 	0.31a - Minor fixes
 	0.31  - Remove `_Allocator` suffix for allocator types
@@ -584,33 +585,29 @@ template <typename T, usize N> struct Remove_Extent_Def<T[N]> { using Type = T; 
 // TODO(bill): Do I "need" all of these template traits?
 
 
-
-
 ////////////////////////////////
 //                            //
 // C++11 Move Semantics       //
 //                            //
 ////////////////////////////////
 
-// TODO(bill): Are these decent names? Are `forward` and `move` clear enough?
-
 template <typename T>
 inline T&&
-forward(Remove_Reference<T>& t)
+forward_ownership(Remove_Reference<T>& t)
 {
 	return static_cast<T&&>(t);
 }
 
 template <typename T>
 inline T&&
-forward(Remove_Reference<T>&& t)
+forward_ownership(Remove_Reference<T>&& t)
 {
 	return static_cast<T&&>(t);
 }
 
 template <typename T>
 inline Remove_Reference<T>&&
-move(T&& t)
+move_ownership(T&& t)
 {
 	return static_cast<Remove_Reference<T>&&>(t);
 }
@@ -636,13 +633,13 @@ __GB_NAMESPACE_END
 	{
 		Func f;
 
-		Defer(Func&& f) : f{forward<Func>(f)} {}
+		Defer(Func&& f) : f{forward_ownership<Func>(f)} {}
 		~Defer() { f(); };
 	};
 
 	template <typename Func>
 	inline Defer<Func>
-	defer_func(Func&& f) { return Defer<Func>(forward<Func>(f)); }
+	defer_func(Func&& f) { return Defer<Func>(forward_ownership<Func>(f)); }
 	} // namespace impl
 	__GB_NAMESPACE_END
 
@@ -650,7 +647,7 @@ __GB_NAMESPACE_END
 	#define GB_DEFER_1(x, y) x##y
 	#define GB_DEFER_2(x, y) GB_DEFER_1(x, y)
 	#define GB_DEFER_3(x)    GB_DEFER_2(GB_DEFER_2(GB_DEFER_2(x, __COUNTER__), _), __LINE__)
-	#define defer(code) auto GB_DEFER_3(_defer_) = __GB_NAMESPACE_PREFIX::impl::defer_func([&](){code;})
+	#define defer(code) auto GB_DEFER_3(_defer_) = ::impl::defer_func([&](){code;})
 
 	/* EXAMPLES
 
@@ -1026,29 +1023,35 @@ void destroy(Pool* pool);
 namespace memory
 {
 void* align_forward(void* ptr, usize align);
-void* pointer_add(void* ptr, usize bytes);
-void* pointer_sub(void* ptr, usize bytes);
+
+void*       pointer_add(void*       ptr, usize bytes);
+void*       pointer_sub(void*       ptr, usize bytes);
 void const* pointer_add(void const* ptr, usize bytes);
 void const* pointer_sub(void const* ptr, usize bytes);
 
-void* set(void* ptr, usize bytes, u8 value);
+template <typename T>
+void fill(T* ptr, usize count, T const& value);
 
-void* zero(void* ptr, usize bytes);
-void* copy(void const* src, usize bytes, void* dest);
-void* move(void const* src, usize bytes, void* dest);
+template <typename T>
+void fill(T* ptr, usize count, T&& value);
+
+void zero(void* ptr, usize bytes);
+void copy(void const* src, usize bytes, void* dest);
+void move(void const* src, usize bytes, void* dest);
 bool equals(void const* a, void const* b, usize bytes);
 
-// TODO(bill): Should this be just zero(T*) ???
 template <typename T>
-T* zero_struct(T* ptr);
+void zero_struct(T* ptr);
 
 template <typename T>
-T* zero_array(T* ptr, usize count);
+void zero_array(T* ptr, usize count);
 
 template <typename T>
-T* copy_array(T const* src_array, usize count, T* dest_array);
+void copy_array(T const* src_array, usize count, T* dest_array);
 
-// TODO(bill): Should I implement something like std::copy, std::fill, std::fill_n ???
+template <typename T>
+void copy_struct(T const* src_array, T* dest_array);
+
 
 template <typename T>
 void swap(T* a, T* b);
@@ -1153,42 +1156,36 @@ struct Array
 	s64        capacity;
 	T*         data;
 
-	Array() = default;
-	explicit Array(Allocator* a, usize count = 0);
-
-	~Array();
-
-	Array(Array const& array);
-	Array(Array&& array);
-
-	Array& operator=(Array const& array);
-	Array& operator=(Array&& array);
-
 	T const& operator[](usize index) const;
 	T&       operator[](usize index);
 };
 
-
-// TODO(bill): Should I even have ctor, dtor, copy/move overloads for Array<T>?
-// Should these be explicit functions e.g.
+// NOTE(bill): There are not ctor/dtor for Array<T>.
+// These are explicit functions e.g.
 /*
-auto old_array = array::make(...);
+auto old_array = array::make<T>(...);
 auto new_array = array::copy(old_array);
 array::free(&old_array);
 array::free(&new_array);
 */
+// This allows functions to be passed by value at a low cost
 
 namespace array
 {
-// Helper functions to make and free an array
+// Helper functions to make, free, and copy an array
 template <typename T> Array<T> make(Allocator* allocator, usize count = 0);
 template <typename T> void     free(Array<T>* array);
+// TODO(bill): Is passing by value okay here or is pass by const& ?
+// (sizeof(Array<T>) = 16 + sizeof(void*)) (24 bytes on x86, 32 bytes on x64)
+template <typename T> Array<T> copy(Array<T> array, Allocator* allocator = nullptr);
 
 // Appends `item` to the end of the array
 template <typename T> void append(Array<T>* a, T const& item);
 template <typename T> void append(Array<T>* a, T&& item);
 // Appends `items[count]` to the end of the array
 template <typename T> void append(Array<T>* a, T const* items, usize count);
+// Append the contents of another array of the same type
+template <typename T> void append(Array<T>* a, Array<T> other);
 
 // Pops the last item form the array. The array cannot be empty.
 template <typename T> void pop(Array<T>* a);
@@ -1208,10 +1205,10 @@ template <typename T> void grow(Array<T>* a, usize min_capacity = 0);
 // Used to iterate over the array with a C++11 for loop
 template <typename T> inline T*       begin(Array<T>& a)       { return a.data; }
 template <typename T> inline T const* begin(Array<T> const& a) { return a.data; }
-template <typename T> inline T*       begin(Array<T>&& a)       { return a.data; }
+template <typename T> inline T*       begin(Array<T>&& a)      { return a.data; }
 template <typename T> inline T*       end(Array<T>& a)         { return a.data + a.count; }
 template <typename T> inline T const* end(Array<T> const& a)   { return a.data + a.count; }
-template <typename T> inline T*       end(Array<T>&& a)         { return a.data + a.count; }
+template <typename T> inline T*       end(Array<T>&& a)        { return a.data + a.count; }
 
 
 
@@ -1238,22 +1235,14 @@ struct Hash_Table
 
 	Array<s64>   hashes;
 	Array<Entry> entries;
-
-	Hash_Table();
-	explicit Hash_Table(Allocator* a);
-	Hash_Table(Hash_Table<T> const& other);
-	Hash_Table(Hash_Table<T>&& other);
-
-	~Hash_Table() = default;
-
-	Hash_Table<T>& operator=(Hash_Table<T> const& other);
-	Hash_Table<T>& operator=(Hash_Table<T>&& other);
 };
 
 namespace hash_table
 {
-// Helper function to make a hash table
+// Helper function to make, free, and copy a hash table
 template <typename T> Hash_Table<T> make(Allocator* a);
+template <typename T> void          free(Hash_Table<T>* h);
+template <typename T> Hash_Table<T> copy(Hash_Table<T> const& h, Allocator* a = nullptr);
 
 // Return `true` if the specified key exist in the hash table
 template <typename T> bool has(Hash_Table<T> const& h, u64 key);
@@ -1443,96 +1432,6 @@ u64 rdtsc();
 ////////////////////////////////
 
 template <typename T>
-inline
-Array<T>::Array(Allocator* a, usize count_)
-: allocator(a)
-, count(0)
-, capacity(0)
-, data(nullptr)
-{
-	if (count_ > 0)
-	{
-		data = alloc_array<T>(a, count_);
-		if (data)
-			count = capacity = count_;
-	}
-}
-
-
-template <typename T>
-inline
-Array<T>::Array(Array<T> const& other)
-: allocator(other.allocator)
-, count(0)
-, capacity(0)
-, data(nullptr)
-{
-	auto new_count = other.count;
-	array::set_capacity(this, new_count);
-	memory::copy_array(other.data, new_count, data);
-	this->count = new_count;
-}
-
-template <typename T>
-inline
-Array<T>::Array(Array<T>&& other)
-: allocator(nullptr)
-, count(0)
-, capacity(0)
-, data(nullptr)
-{
-	*this = move(other);
-}
-
-
-template <typename T>
-inline
-Array<T>::~Array()
-{
-	if (allocator && capacity > 0)
-		free(allocator, data);
-}
-
-
-template <typename T>
-Array<T>&
-Array<T>::operator=(Array<T> const& other)
-{
-	if (allocator == nullptr)
-		allocator = other.allocator;
-	auto new_count = other.count;
-	array::resize(this, new_count);
-	memory::copy_array(other.data, new_count, data);
-	return *this;
-}
-
-
-template <typename T>
-Array<T>&
-Array<T>::operator=(Array<T>&& other)
-{
-	if (this != &other)
-	{
-		if (allocator && capacity > 0)
-			free(allocator, data);
-
-		allocator = other.allocator;
-		count     = other.count;
-		capacity  = other.capacity;
-		data      = other.data;
-
-		other.allocator = nullptr;
-		other.count     = 0;
-		other.capacity  = 0;
-		other.data      = nullptr;
-	}
-
-	return *this;
-}
-
-
-
-template <typename T>
 inline T const&
 Array<T>::operator[](usize index) const
 {
@@ -1559,16 +1458,17 @@ template <typename T>
 inline Array<T>
 make(Allocator* allocator, usize count)
 {
-	Array<T> array{allocator};
+	Array<T> result = {};
+	result.allocator = allocator;
 
 	if (count > 0)
 	{
-		array.data = alloc_array<T>(allocator, count);
-		if (array.data)
-			array.count = array.capacity = count;
+		result.data = alloc_array<T>(allocator, count);
+		if (result.data)
+			result.count = result.capacity = count;
 	}
 
-	return array;
+	return result;
 }
 
 template <typename T>
@@ -1581,6 +1481,28 @@ free(Array<T>* a)
 	a->capacity = 0;
 	a->data     = nullptr;
 }
+
+template <typename T>
+inline Array<T>
+copy(Array<T> other, Allocator* allocator)
+{
+	Array<T> result = {};
+
+	if (allocator)
+		result.allocator = allocator;
+	else
+		result.allocator = other.allocator;
+
+	auto new_count = other.count;
+
+	array::resize(&result, new_count);
+	memory::copy_array(other.data, new_count, data);
+
+	return result;
+}
+
+
+
 
 template <typename T>
 inline void
@@ -1597,7 +1519,7 @@ append(Array<T>* a, T&& item)
 {
 	if (a->capacity < a->count + 1)
 		array::grow(a);
-	a->data[a->count++] = move(item);
+	a->data[a->count++] = move_ownership(item);
 }
 
 template <typename T>
@@ -1610,6 +1532,14 @@ append(Array<T>* a, T const* items, usize count)
 	memory::copy_array(items, count, &a->data[a->count]);
 	a->count += count;
 }
+
+template <typename T>
+inline void
+append(Array<T>* a, Array<T> other)
+{
+	array::append(a, other.data, other.count);
+}
+
 
 template <typename T>
 inline void
@@ -1662,7 +1592,9 @@ set_capacity(Array<T>* a, usize capacity)
 	}
 	free(a->allocator, a->data);
 	a->data = data;
-	a->capacity = capacity;
+	a
+
+	->capacity = capacity;
 }
 
 template <typename T>
@@ -1677,62 +1609,17 @@ grow(Array<T>* a, usize min_capacity)
 }
 } // namespace array
 
+
+
+
+
+
+
 ////////////////////////////////
 //                            //
 // Hash Table                 //
 //                            //
 ////////////////////////////////
-
-template <typename T>
-inline
-Hash_Table<T>::Hash_Table()
-: hashes()
-, entries()
-{
-}
-
-template <typename T>
-inline
-Hash_Table<T>::Hash_Table(Allocator* a)
-: hashes(a)
-, entries(a)
-{
-}
-
-template <typename T>
-inline
-Hash_Table<T>::Hash_Table(Hash_Table<T> const& other)
-: hashes(other.hashes)
-, entries(other.entries)
-{
-}
-
-template <typename T>
-inline
-Hash_Table<T>::Hash_Table(Hash_Table<T>&& other)
-: hashes(move(other.hashes))
-, entries(move(other.entries))
-{
-}
-
-template <typename T>
-inline Hash_Table<T>&
-Hash_Table<T>::operator=(Hash_Table<T> const& other)
-{
-	hashes  = other.hashes;
-	entries = other.entries;
-	return *this;
-}
-
-template <typename T>
-inline Hash_Table<T>&
-Hash_Table<T>::operator=(Hash_Table<T>&& other)
-{
-	hashes  = move(other.hashes);
-	entries = move(other.entries);
-	return *this;
-}
-
 
 namespace hash_table
 {
@@ -1740,8 +1627,39 @@ template <typename T>
 inline Hash_Table<T>
 make(Allocator* a)
 {
-	return Hash_Table<T>{a};
+	Hash_Table<T> result = {};
+
+	result.hashes  = array::make<s64>(a);
+	result.entries = array::make<typename Hash_Table<T>::Entry>(a);
+
+	return result;
 }
+
+template <typename T>
+inline void
+free(Hash_Table<T>* h)
+{
+	if (h->hashes.allocator)
+		array::free(&h->hashes);
+
+	if (h->entries.allocator)
+		array::free(&h->entries);
+}
+
+template <typename T>
+inline Hash_Table<T>
+copy(Hash_Table<T> const& other, Allocator* allocator)
+{
+	Allocator* a = other.hashes.allocator;
+	if (allocator) a = allocator;
+
+	Hash_Table<T> result = {};
+	result.hashes  = array::copy(other.hashes,  a);
+	result.entries = array::copy(other.entries, a);
+
+	return result;
+}
+
 
 namespace impl
 {
@@ -1913,21 +1831,21 @@ rehash(Hash_Table<T>* h, usize new_capacity)
 	for (usize i = 0; i < new_capacity; i++)
 		nh.hashes[i] = -1;
 
-	for (u32 i = 0; i < h->entries.count; i++)
+	for (s64 i = 0; i < h->entries.count; i++)
 	{
 		auto const* e = &h->entries[i];
 		multi_hash_table::insert(&nh, e->key, e->value);
 	}
 
 	Hash_Table<T> empty_ht{h->hashes.allocator};
-	h->~Hash_Table<T>();
+	hash_table::free(h);
 
-	memory::copy_array(&nh,       1, h);
-	memory::copy_array(&empty_ht, 1, &nh);
+	memory::copy_struct(&nh,       h);
+	memory::copy_struct(&empty_ht, &nh);
 }
 
 template <typename T>
-void
+inline void
 grow(Hash_Table<T>* h)
 {
 	const usize new_capacity = 2 * h->entries.count + 8;
@@ -1935,11 +1853,11 @@ grow(Hash_Table<T>* h)
 }
 
 template <typename T>
-bool
+inline bool
 is_full(Hash_Table<T>* h)
 {
 	// Make sure that there is enough space
-	f32 const maximum_load_coefficient = 0.75f;
+	f64 const maximum_load_coefficient = 0.75;
 	return h->entries.count >= maximum_load_coefficient * h->hashes.count;
 }
 } // namespace impl
@@ -1983,7 +1901,7 @@ set(Hash_Table<T>* h, u64 key, T&& value)
 		impl::grow(h);
 
 	s64 const index = impl::find_or_make_entry(h, key);
-	h->entries[index].value = move(value);
+	h->entries[index].value = move_ownership(value);
 	if (impl::is_full(h))
 		impl::grow(h);
 }
@@ -2107,7 +2025,7 @@ insert(Hash_Table<T>* h, u64 key, T&& value)
 		hash_table::impl::grow(h);
 
 	auto next = hash_table::impl::make_entry(h, key);
-	h->entries[next].value = move(value);
+	h->entries[next].value = move_ownership(value);
 
 	if (hash_table::impl::is_full(h))
 		hash_table::impl::grow(h);
@@ -2135,34 +2053,57 @@ remove_all(Hash_Table<T>* h, u64 key)
 namespace memory
 {
 template <typename T>
-inline T*
+inline void
+fill(T* ptr, usize count, T const& value)
+{
+	for (usize i = 0; i < count; i++)
+		ptr[i] = value;
+}
+
+template <typename T>
+inline void
+fill(T* ptr, usize count, T&& value)
+{
+	for (usize i = 0; i < count; i++)
+		ptr[i] = move_ownership(value);
+}
+
+template <typename T>
+inline void
 zero_struct(T* ptr)
 {
-	return static_cast<T*>(memory::zero(ptr, sizeof(T)));
+	memory::zero(ptr, sizeof(T));
 }
 
-
 template <typename T>
-inline T*
+inline void
 zero_array(T* ptr, usize count)
 {
-	return static_cast<T*>(memory::zero(ptr, count * sizeof(T)));
+	memory::zero(ptr, count * sizeof(T));
 }
 
 template <typename T>
-inline T*
+inline void
 copy_array(T const* src_array, usize count, T* dest_array)
 {
-	return static_cast<T*>(memory::copy(src_array, count * sizeof(T), dest_array));
+	memory::copy(src_array, count * sizeof(T), dest_array);
 }
+
+template <typename T>
+inline void
+copy_struct(T const* src_array, T* dest_array)
+{
+	memory::copy(src_array, sizeof(T), dest_array);
+}
+
 
 template <typename T>
 inline void
 swap(T* a, T* b)
 {
-	T c = __GB_NAMESPACE_PREFIX::move(*a);
-	*a  = __GB_NAMESPACE_PREFIX::move(*b);
-	*b  = __GB_NAMESPACE_PREFIX::move(c);
+	T c = move_ownership(*a);
+	*a  = move_ownership(*b);
+	*b  = move_ownership(c);
 }
 
 template <typename T, usize N>
@@ -2208,8 +2149,8 @@ quick(T* array, usize count, Comparison_Function compare)
 		j--;
 	}
 
-	quick(array,   i,       compare);
-	quick(array+i, count-i, compare);
+	sort::quick(array,   i,       compare);
+	sort::quick(array+i, count-i, compare);
 }
 } // namespace sort
 
@@ -3271,28 +3212,23 @@ pointer_sub(void const* ptr, usize bytes)
 	return static_cast<void const*>(static_cast<u8 const*>(ptr) - bytes);
 }
 
-GB_FORCE_INLINE void*
-set(void* ptr, usize bytes, u8 value)
-{
-	return memset(ptr, value, bytes);
-}
 
-GB_FORCE_INLINE void*
+GB_FORCE_INLINE void
 zero(void* ptr, usize bytes)
 {
-	return memory::set(ptr, bytes, 0);
+	memset(ptr, 0, bytes);
 }
 
-GB_FORCE_INLINE void*
+GB_FORCE_INLINE void
 copy(void const* src, usize bytes, void* dest)
 {
-	return memcpy(dest, src, bytes);
+	memcpy(dest, src, bytes);
 }
 
-GB_FORCE_INLINE void*
+GB_FORCE_INLINE void
 move(void const* src, usize bytes, void* dest)
 {
-	return memmove(dest, src, bytes);
+	memmove(dest, src, bytes);
 }
 
 GB_FORCE_INLINE bool
