@@ -1,4 +1,4 @@
-// gb.h - v0.01 - public domain C helper library - no warranty implied; use at your own risk
+// gb.h - v0.02 - public domain C helper library - no warranty implied; use at your own risk
 // (Experimental) A C helper library geared towards game development
 
 /*
@@ -33,6 +33,7 @@ TODO
 
 /*
 Version History:
+	0.02  - Minor fixes
 	0.01  - Initial Version
 */
 
@@ -72,13 +73,14 @@ extern "C" {
 #ifndef GB_ASSERT
 #include <assert.h>
 #define GB_ASSERT(cond) assert(cond)
+#define GB_ASSERT_MSG(cond, msg) assert((cond) && (msg))
 #endif
 
-#define GB_STATIC_ASSERT(cond, msg) typedef char gb__static_assertion_##msg[(!!(cond))*2-1]
+#define GB_STATIC_ASSERT3(cond, msg) typedef char gb__static_assertion_##msg[(!!(cond))*2-1]
 // NOTE(bill): Token pasting madness
-#define GB_COMPILE_TIME_ASSERT3(cond, line) GB_STATIC_ASSERT(cond, static_assertion_at_line_##line)
-#define GB_COMPILE_TIME_ASSERT2(cond, line) GB_COMPILE_TIME_ASSERT3(cond, line)
-#define GB_COMPILE_TIME_ASSERT(cond)        GB_COMPILE_TIME_ASSERT2(cond, __LINE__)
+#define GB_STATIC_ASSERT2(cond, line) GB_STATIC_ASSERT3(cond, static_assertion_at_line_##line)
+#define GB_STATIC_ASSERT1(cond, line) GB_STATIC_ASSERT2(cond, line)
+#define GB_STATIC_ASSERT(cond)        GB_STATIC_ASSERT1(cond, __LINE__)
 
 
 #if !defined(GB_NO_STDIO) && defined(_MSC_VER)
@@ -136,26 +138,37 @@ extern "C" {
 	typedef  int64_t s64;
 #endif
 
-GB_COMPILE_TIME_ASSERT(sizeof(s8)  == 1);
-GB_COMPILE_TIME_ASSERT(sizeof(s16) == 2);
-GB_COMPILE_TIME_ASSERT(sizeof(s32) == 4);
-GB_COMPILE_TIME_ASSERT(sizeof(s64) == 8);
+GB_STATIC_ASSERT(sizeof(s8)  == 1);
+GB_STATIC_ASSERT(sizeof(s16) == 2);
+GB_STATIC_ASSERT(sizeof(s32) == 4);
+GB_STATIC_ASSERT(sizeof(s64) == 8);
 
 typedef size_t usize;
 
 typedef uintptr_t uintptr;
+typedef  intptr_t  intptr;
 
 typedef float  f32;
 typedef double f64;
 
-#include <stdbool.h> // NOTE(bill): To get false/true
+#if defined(_MSC_VER) && _MSC_VER < 1900
+	#ifndef false
+	#define false 0
+	#endif
+
+	#ifndef true
+	#define true 1
+	#endif
+#else
+	#include <stdbool.h> // NOTE(bill): To get false/true
+#endif
 
 // Boolean Types
 typedef s8  b8;
 typedef s32 b32;
 
 
-
+#ifndef U8_MIN
 #define U8_MIN 0u
 #define U8_MAX 0xffu
 #define S8_MIN (-0x7f - 1)
@@ -175,7 +188,7 @@ typedef s32 b32;
 #define U64_MAX 0xffffffffffffffffull
 #define S64_MIN (-0x7fffffffffffffffll - 1)
 #define S64_MAX 0x7fffffffffffffffll
-
+#endif
 
 
 
@@ -185,7 +198,7 @@ typedef s32 b32;
 #endif
 
 // NOTE(bill): Allows for easy grep of casts
-// NOTE(bill): Still not as type safe as C++ static_cast, reinterpret_cast, const_cast
+// NOTE(bill): Still not as type safe as C++ static_cast, reinterpret_cast, and const_cast, but I don't need them
 #ifndef cast
 #define cast(x) (x)
 #endif
@@ -271,7 +284,10 @@ typedef enum gb_Allocation_Type
 	GB_ALLOCATION_TYPE_RESIZE,
 } gb_Allocation_Type;
 
+
+#ifndef GB_ALLOCATOR_PROCEDURE
 #define GB_ALLOCATOR_PROCEDURE(name) void *name(void *allocator_data, gb_Allocation_Type type, usize size, usize alignment, void *old_memory, usize old_size, u32 options)
+#endif
 typedef GB_ALLOCATOR_PROCEDURE(gb_Allocator_Procedure);
 
 typedef struct gb_Allocator
@@ -471,27 +487,30 @@ gb_init_pool(gb_Pool *pool, gb_Allocator backing, usize num_blocks, usize block_
 void
 gb_init_pool_align(gb_Pool *pool, gb_Allocator backing, usize num_blocks, usize block_size, usize block_align)
 {
-	memset(pool, 0, sizeof(gb_Pool));
+	usize actual_block_size, pool_size, block_index;
+	u8 *data, *curr;
 
 	pool->backing = backing;
 	pool->block_size = block_size;
 	pool->block_align = block_align;
 
-	usize actual_block_size = block_size + block_align;
-	usize pool_size = num_blocks * actual_block_size;
+	actual_block_size = block_size + block_align;
+	pool_size = num_blocks * actual_block_size;
 
-	u8 *data = cast(u8 *)gb_alloc_align(backing, pool_size, block_align);
+	data = cast(u8 *)gb_alloc_align(backing, pool_size, block_align);
 
 	// Init intrusive freelist
-	u8 *curr = data;
-	for (usize block_index = 0; block_index < num_blocks-1; block_index++) {
+	curr = data;
+	for (block_index = 0; block_index < num_blocks-1; block_index++) {
 		uintptr *next = cast(uintptr *)curr;
 		*next = cast(uintptr)curr + actual_block_size;
 		curr += actual_block_size;
 	}
 
-	uintptr *end = cast(uintptr*)curr;
-	*end = cast(uintptr)NULL;
+	{
+		uintptr *end = cast(uintptr*)curr;
+		*end = cast(uintptr)NULL;
+	}
 
 	pool->physical_start = data;
 	pool->free_list      = data;
@@ -646,22 +665,23 @@ gb_string_make_length(gb_Allocator a, void const *init_str, gb_String_Size num_b
 	gb_String_Size header_size = sizeof(gb_String_Header);
 	void *ptr = gb_alloc(a, header_size + num_bytes + 1);
 
-	gb_String str;
-	gb_String_Header *header;
+	if (ptr == NULL) {
+		return NULL;
+	} else {
+		gb_String str = cast(char *)ptr + header_size;
+		gb_String_Header *header = GB_STRING_HEADER(str);
+		// Zero all data first
+		if (!init_str) gb_zero_size(ptr, header_size + num_bytes + 1);
+		header->allocator = a;
+		header->length    = num_bytes;
+		header->capacity  = num_bytes;
 
-	if (!init_str) gb_zero_size(ptr, header_size + num_bytes + 1);
-	if (ptr == NULL) return NULL;
+		if (num_bytes && init_str)
+			memcpy(str, init_str, num_bytes);
+		str[num_bytes] = '\0'; // Just in case
 
-	str = cast(char *)ptr + header_size;
-	header = GB_STRING_HEADER(str);
-	header->allocator = a;
-	header->length    = num_bytes;
-	header->capacity  = num_bytes;
-	if (num_bytes && init_str)
-		memcpy(str, init_str, num_bytes);
-	str[num_bytes] = '\0';
-
-	return str;
+		return str;
+	}
 }
 
 gb_inline void
@@ -746,6 +766,7 @@ gb__string_realloc(gb_Allocator a, void *ptr, gb_String_Size old_size, gb_String
 	if (old_size == new_size) {
 		return ptr;
 	} else {
+		// TODO(bill): Use gb_resize here??
 		void *new_ptr = gb_alloc(a, new_size);
 		if (!new_ptr)
 			return NULL;
@@ -785,8 +806,8 @@ gb_string_make_space_for(gb_String str, gb_String_Size add_len)
 gb_inline gb_String_Size
 gb_string_allocation_size(gb_String const str)
 {
-	gb_String_Size cap = gb_string_capacity(str);
-	return sizeof(gb_String_Header) + cap;
+	gb_String_Size result = gb_string_capacity(str) + cast(gb_String_Size)sizeof(gb_String_Header);
+	return result;
 }
 
 
