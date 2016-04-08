@@ -25,7 +25,7 @@ CONTENTS
 		- gbMat(2,3,4)
 		- gbFloat(2,3,4)
 		- gbQuat
-		- Rect(2,3)
+		- gbRect(2,3)
 		- gbAabb(2,3)
 		- gb_half (16-bit floating point) (storage only)
 	- Operations
@@ -174,6 +174,7 @@ GB_MATH_DEF float gb_angle_diff(float radians_a, float radians_b);
 
 GB_MATH_DEF float gb_sqrt(float a);
 GB_MATH_DEF float gb_quake_inv_sqrt(float a); // NOTE(bill): It's probably better to use 1.0f/gb_sqrt(a)
+                                              // And for simd, there is usually isqrt functions too!
 
 GB_MATH_DEF float gb_sin(float radians);
 GB_MATH_DEF float gb_cos(float radians);
