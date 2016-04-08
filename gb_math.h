@@ -1,9 +1,10 @@
-// gb_math.h - v0.04a - public domain C math library - no warranty implied; use at your own risk
+// gb_math.h - v0.04b - public domain C math library - no warranty implied; use at your own risk
 // A C math library geared towards game development
 // use '#define GB_MATH_IMPLEMENTATION' before including to create the implementation in _ONE_ file
 
 /*
 Version History:
+	0.04b - Fix strict aliasing in gb_quake_inv_sqrt
 	0.04a - Minor bug fixes
 	0.04  - Namespace everything with gb
 	0.03  - Complete Replacement
@@ -719,19 +720,20 @@ float gb_sqrt(float a) { return sqrtf(a); }
 float
 gb_quake_inv_sqrt(float a)
 {
-	int i;
-	float x2, y;
+	union {
+		int i;
+		float f;
+	} t;
+	float x2;
 	float const three_halfs = 1.5f;
 
 	x2 = a * 0.5f;
-	y = a;
-	i = *(int *)&y;                       // Evil floating point bit level hacking
-	i = 0x5f375a86 - (i >> 1);            // What the fuck?
-	y = *(float *)&i;
-	y = y * (three_halfs - (x2 * y * y)); // 1st iteration
-	y = y * (three_halfs - (x2 * y * y)); // 2nd iteration, this can be removed
+	t.f = a;
+	t.i = 0x5f375a86 - (t.i >> 1);                // What the fuck?
+	t.f = t.f * (three_halfs - (x2 * t.f * t.f)); // 1st iteration
+	t.f = t.f * (three_halfs - (x2 * t.f * t.f)); // 2nd iteration, this can be removed
 
-	return y;
+	return t.f;
 }
 
 float gb_sin(float radians)        { return sinf(radians); }
