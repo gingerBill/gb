@@ -1,9 +1,10 @@
-// gb_math.h - v0.04b - public domain C math library - no warranty implied; use at your own risk
+// gb_math.h - v0.04c - public domain C math library - no warranty implied; use at your own risk
 // A C math library geared towards game development
 // use '#define GB_MATH_IMPLEMENTATION' before including to create the implementation in _ONE_ file
 
 /*
 Version History:
+	0.04c - Use 64-bit murmur64 version on WIN64
 	0.04b - Fix strict aliasing in gb_quake_inv_sqrt
 	0.04a - Minor bug fixes
 	0.04  - Namespace everything with gb
@@ -1814,8 +1815,7 @@ gb_rect2_intersection_result(gbRect2 a, gbRect2 b, gbRect2 *intersection)
 }
 
 
-#if defined(__x86_64__) || defined(__ppc64__)
-
+#if defined(_WIN64) || defined(__x86_64__) || defined(__ppc64__)
 	gb_math_u64
 	gb_hash_murmur64(void const *key, size_t num_bytes, gb_math_u64 seed)
 	{
