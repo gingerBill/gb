@@ -1,9 +1,10 @@
-// gb_math.h - v0.04 - public domain C math library - no warranty implied; use at your own risk
+// gb_math.h - v0.04a - public domain C math library - no warranty implied; use at your own risk
 // A C math library geared towards game development
 // use '#define GB_MATH_IMPLEMENTATION' before including to create the implementation in _ONE_ file
 
 /*
 Version History:
+	0.04a - Minor bug fixes
 	0.04  - Namespace everything with gb
 	0.03  - Complete Replacement
 	0.01  - Initial Version
@@ -20,12 +21,12 @@ WARNING
 CONTENTS
 	- Common Macros
 	- Types
-		- Vec(2,3,4)
-		- Mat(2,3,4)
-		- Float(2,3,4)
+		- gbVec(2,3,4)
+		- gbMat(2,3,4)
+		- gbFloat(2,3,4)
 		- gbQuat
 		- Rect(2,3)
-		- Aabb(2,3)
+		- gbAabb(2,3)
 		- gb_half (16-bit floating point) (storage only)
 	- Operations
 	- Functions
@@ -37,6 +38,7 @@ CONTENTS
 #ifndef GB_MATH_INCLUDE_GB_MATH_H
 #define GB_MATH_INCLUDE_GB_MATH_H
 
+// TODO(bill): What of this do I actually need? And can include elsewhere (e.g. implementation)
 #include <stddef.h>
 #include <math.h>
 #include <limits.h>
@@ -148,8 +150,8 @@ typedef short gb_half;
 	#define GB_MATH_SQRT_THREE   1.73205080756887729352744634150587236f
 	#define GB_MATH_SQRT_FIVE    2.23606797749978969640917366873127623f
 
-	#define GB_LOG_TWO           0.693147180559945309417232121458176568f
-	#define GB_LOG_TEN           2.30258509299404568401799145468436421f
+	#define GB_MATH_LOG_TWO       0.693147180559945309417232121458176568f
+	#define GB_MATH_LOG_TEN       2.30258509299404568401799145468436421f
 #endif
 
 
@@ -161,8 +163,8 @@ extern "C" {
 GB_MATH_DEF float gb_clamp(float a, float lower, float upper);
 GB_MATH_DEF float gb_clamp01(float a);
 
-GB_MATH_DEF float gb_as_radians(float degrees);
-GB_MATH_DEF float gb_as_degrees(float radians);
+GB_MATH_DEF float gb_to_radians(float degrees);
+GB_MATH_DEF float gb_to_degrees(float radians);
 
 // NOTE(bill): Because to interpolate angles
 GB_MATH_DEF float gb_angle_diff(float radians_a, float radians_b);
@@ -171,7 +173,7 @@ GB_MATH_DEF float gb_angle_diff(float radians_a, float radians_b);
 #define gb_max(a, b) ((a) > (b) ? (a) : (b))
 
 GB_MATH_DEF float gb_sqrt(float a);
-GB_MATH_DEF float gb_inv_sqrt(float a); // NOTE(bill): Fast inverse square root
+GB_MATH_DEF float gb_quake_inv_sqrt(float a); // NOTE(bill): It's probably better to use 1.0f/gb_sqrt(a)
 
 GB_MATH_DEF float gb_sin(float radians);
 GB_MATH_DEF float gb_cos(float radians);
@@ -506,7 +508,7 @@ gbVec4 &operator/=(gbVec4 &a, float scalar) { return (a = a / scalar); }
 gbMat2 operator+(gbMat2 const &a, gbMat2 const &b)
 {
 	int i, j;
-	gbMat2 r = {};
+	gbMat2 r = {0};
 	for (j = 0; j < 2; j++) {
 		for (i = 0; i < 2; i++)
 			r.e[2*j+i] = a.e[2*j+i] + b.e[2*j+i];
@@ -517,7 +519,7 @@ gbMat2 operator+(gbMat2 const &a, gbMat2 const &b)
 gbMat2 operator-(gbMat2 const &a, gbMat2 const &b)
 {
 	int i, j;
-	gbMat2 r = {};
+	gbMat2 r = {0};
 	for (j = 0; j < 2; j++) {
 		for (i = 0; i < 2; i++)
 			r.e[2*j+i] = a.e[2*j+i] - b.e[2*j+i];
@@ -529,7 +531,7 @@ gbMat2 operator*(gbMat2 const &a, gbMat2 const &b) { gbMat2 r; gb_mat2_mul(&r, (
 gbVec2 operator*(gbMat2 const &a, gbVec2 v) { gbVec2 r; gb_mat2_mul_vec2(&r, (gbMat2 *)&a, v); return r; }
 gbMat2 operator*(gbMat2 const &a, float scalar)
 {
-	gbMat2 r = {};
+	gbMat2 r = {0};
 	int i;
 	for (i = 0; i < 2*2; i++) r.e[i] = a.e[i] * scalar;
 	return r;
@@ -546,7 +548,7 @@ gbMat2& operator*=(gbMat2& a, gbMat2 const &b) { return (a = a * b); }
 gbMat3 operator+(gbMat3 const &a, gbMat3 const &b)
 {
 	int i, j;
-	gbMat3 r = {};
+	gbMat3 r = {0};
 	for (j = 0; j < 3; j++) {
 		for (i = 0; i < 3; i++)
 			r.e[3*j+i] = a.e[3*j+i] + b.e[3*j+i];
@@ -557,7 +559,7 @@ gbMat3 operator+(gbMat3 const &a, gbMat3 const &b)
 gbMat3 operator-(gbMat3 const &a, gbMat3 const &b)
 {
 	int i, j;
-	gbMat3 r = {};
+	gbMat3 r = {0};
 	for (j = 0; j < 3; j++) {
 		for (i = 0; i < 3; i++)
 			r.e[3*j+i] = a.e[3*j+i] - b.e[3*j+i];
@@ -569,7 +571,7 @@ gbMat3 operator*(gbMat3 const &a, gbMat3 const &b) { gbMat3 r; gb_mat3_mul(&r, (
 gbVec3 operator*(gbMat3 const &a, gbVec3 v) { gbVec3 r; gb_mat3_mul_vec3(&r, (gbMat3 *)&a, v); return r; }
 gbMat3 operator*(gbMat3 const &a, float scalar)
 {
-	gbMat3 r = {};
+	gbMat3 r = {0};
 	int i;
 	for (i = 0; i < 3*3; i++) r.e[i] = a.e[i] * scalar;
 	return r;
@@ -586,7 +588,7 @@ gbMat3& operator*=(gbMat3& a, gbMat3 const &b) { return (a = a * b); }
 gbMat4 operator+(gbMat4 const &a, gbMat4 const &b)
 {
 	int i, j;
-	gbMat4 r = {};
+	gbMat4 r = {0};
 	for (j = 0; j < 4; j++) {
 		for (i = 0; i < 4; i++)
 			r.e[4*j+i] = a.e[4*j+i] + b.e[4*j+i];
@@ -597,7 +599,7 @@ gbMat4 operator+(gbMat4 const &a, gbMat4 const &b)
 gbMat4 operator-(gbMat4 const &a, gbMat4 const &b)
 {
 	int i, j;
-	gbMat4 r = {};
+	gbMat4 r = {0};
 	for (j = 0; j < 4; j++) {
 		for (i = 0; i < 4; i++)
 			r.e[4*j+i] = a.e[4*j+i] - b.e[4*j+i];
@@ -609,7 +611,7 @@ gbMat4 operator*(gbMat4 const &a, gbMat4 const &b) { gbMat4 r; gb_mat4_mul(&r, (
 gbVec4 operator*(gbMat4 const &a, gbVec4 v) { gbVec4 r; gb_mat4_mul_vec4(&r, (gbMat4 *)&a, v); return r; }
 gbMat4 operator*(gbMat4 const &a, float scalar)
 {
-	gbMat4 r = {};
+	gbMat4 r = {0};
 	int i;
 	for (i = 0; i < 4*4; i++) r.e[i] = a.e[i] * scalar;
 	return r;
@@ -688,6 +690,7 @@ gbVec3 operator*(gbQuat q, gbVec3 v) { gbVec3 r; gb_quat_rotate_vec3(&r, q, v); 
 //                //
 //                //
 //                //
+//                //
 ////////////////////
 
 #if defined(GB_MATH_IMPLEMENTATION)
@@ -697,8 +700,8 @@ float gb_clamp(float a, float lower, float upper) { return a < lower ? lower : a
 float gb_clamp01(float a) { return gb_clamp(a, 0.0f, 1.0f); }
 
 
-float gb_as_radians(float degrees) { return degrees * GB_MATH_TAU / 360.0f; }
-float gb_as_degrees(float radians) { return radians * 360.0f / GB_MATH_TAU; }
+float gb_to_radians(float degrees) { return degrees * GB_MATH_TAU / 360.0f; }
+float gb_to_degrees(float radians) { return radians * 360.0f / GB_MATH_TAU; }
 
 float
 gb_angle_diff(float radians_a, float radians_b)
@@ -711,8 +714,9 @@ gb_angle_diff(float radians_a, float radians_b)
 
 
 float gb_sqrt(float a) { return sqrtf(a); }
+
 float
-gb_inv_sqrt(float a)
+gb_quake_inv_sqrt(float a)
 {
 	int i;
 	float x2, y;
@@ -740,18 +744,19 @@ float gb_arctan2(float y, float x) { return atan2f(y, x); }
 
 
 float gb_exp(float x)  { return expf(x); }
-float gb_exp2(float x) { return gb_exp(0.69314718055994530941723212145818f * x); }
+float gb_exp2(float x) { return gb_exp(GB_MATH_LOG_TWO * x); }
 float gb_log(float x)  { return logf(x); }
-float gb_log2(float x) { return gb_log(x) / 0.69314718055994530941723212145818f; }
+float gb_log2(float x) { return gb_log(x) / GB_MATH_LOG_TWO; }
 
 float
 gb_fast_exp(float x)
 {
-	float e = 1.0f + x * (1.0f + x * 0.5f * (1.0f + x * 0.3333333333f * (1.0f + x * 0.25 * (1.0f + x * 0.2f))));
+	// NOTE(bill): Only works in the range -1 <= x <= +1
+	float e = 1.0f + x*(1.0f + x*0.5f*(1.0f + x*0.3333333333f*(1.0f + x*0.25*(1.0f + x*0.2f))));
 	return e;
 }
 
-float gb_fast_exp2(float x) { return gb_fast_exp(0.69314718055994530941723212145818f * x); }
+float gb_fast_exp2(float x) { return gb_fast_exp(GB_MATH_LOG_TWO * x); }
 
 // TODO(bill): Should this be gb_exp(y * gb_log(x)) ???
 float gb_pow(float x, float y) { return powf(x, y); }
@@ -773,7 +778,6 @@ gb_half_to_float(gb_half value)
 	if (e == 0) {
 		if(m == 0) {
 			// Plus or minus zero
-			gb_uif32 result;
 			result.i = (unsigned int)(s << 31);
 			return result.f;
 		} else {
@@ -789,25 +793,17 @@ gb_half_to_float(gb_half value)
 	} else if (e == 31) {
 		if (m == 0) {
 			// Positive or negative infinity
-			gb_uif32 result;
 			result.i = (unsigned int)((s << 31) | 0x7f800000);
 			return result.f;
 		} else {
 			// Nan
-			gb_uif32 result;
 			result.i = (unsigned int)((s << 31) | 0x7f800000 | (m << 13));
 			return result.f;
 		}
 	}
 
-	// Normalized number
-
 	e = e + (127 - 15);
 	m = m << 13;
-
-	//
-	// Assemble s, e and m.
-	//
 
 	result.i = (unsigned int)((s << 31) | (e << 23) | m);
 	return result.f;
@@ -828,9 +824,7 @@ gb_float_to_half(float value)
 
 
 	if (e <= 0) {
-		if (e < -10) {
-			return (gb_half)s;
-		}
+		if (e < -10) return (gb_half)s;
 		m = (m | 0x00800000) >> (1 - e);
 
 		if (m & 0x00001000)
@@ -839,10 +833,9 @@ gb_float_to_half(float value)
 		return (gb_half)(s | (m >> 13));
 	} else if (e == 0xff - (127 - 15)) {
 		if (m == 0) {
-			// infinity
-			return (gb_half)(s | 0x7c00);
+			return (gb_half)(s | 0x7c00); // NOTE(bill): infinity
 		} else {
-			// NAN
+			// NOTE(bill): NAN
 			m >>= 13;
 			return (gb_half)(s | 0x7c00 | m | (m == 0));
 		}
@@ -856,7 +849,7 @@ gb_float_to_half(float value)
 		}
 
 		if (e > 30) {
-			float volatile f = 1e10;
+			float volatile f = 1e12f;
 			for (unsigned int j = 0; j < 10; j++)
 				f *= f; // NOTE(bill): Cause overflow
 
@@ -947,6 +940,16 @@ void gb_vec4_addeq(gbVec4 *d, gbVec4 v)  { GB_VEC4_3OP(d,(*d),+,v,+0); }
 void gb_vec4_subeq(gbVec4 *d, gbVec4 v)  { GB_VEC4_3OP(d,(*d),-,v,+0); }
 void gb_vec4_muleq(gbVec4 *d, float s) { GB_VEC4_2OP(d,(*d),* s);    }
 void gb_vec4_diveq(gbVec4 *d, float s) { GB_VEC4_2OP(d,(*d),/ s);    }
+
+
+#undef GB_VEC2_2OP
+#undef GB_VEC2_3OP
+#undef GB_VEC3_3OP
+#undef GB_VEC3_2OP
+#undef GB_VEC4_2OP
+#undef GB_VEC4_3OP
+
+
 
 
 float gb_vec2_dot(gbVec2 v0, gbVec2 v1) { return v0.x*v1.x + v0.y*v1.y; }
@@ -1660,7 +1663,7 @@ void gb_vec2_lerp(gbVec2 *d, gbVec2 a, gbVec2 b, float t) { GB_VEC_LERPN(2, d, a
 void gb_vec3_lerp(gbVec3 *d, gbVec3 a, gbVec3 b, float t) { GB_VEC_LERPN(3, d, a, b, t); }
 void gb_vec4_lerp(gbVec4 *d, gbVec4 a, gbVec4 b, float t) { GB_VEC_LERPN(4, d, a, b, t); }
 
-
+#undef GB_VEC_LERPN
 
 void gb_quat_lerp(gbQuat *d, gbQuat a, gbQuat b, float t)  { gb_vec4_lerp(&d->xyzw, a.xyzw, b.xyzw, t); }
 void gb_quat_nlerp(gbQuat *d, gbQuat a, gbQuat b, float t) { gb_quat_lerp(d, a, b, t); gb_quat_norm(d, *d); }
@@ -1700,6 +1703,8 @@ void
 gb_quat_slerp_approx(gbQuat *d, gbQuat a, gbQuat b, float t)
 {
 	// NOTE(bill): Derived by taylor expanding the geometric interpolation equation
+	//             Even works okay for nearly anti-parallel versors!!!
+	// NOTE(bill): Extra interations cannot be used as they require angle^4 which is not worth it to approximate
 	float tp = t + (1.0f - gb_quat_dot(a, b))/3.0f * t*(-2.0f*t*t + 3.0f*t - 1.0f);
 	return gb_quat_nlerp(d, a, b, tp);
 }
@@ -1918,8 +1923,8 @@ gb_rect2_intersection_result(gbRect2 a, gbRect2 b, gbRect2 *intersection)
 float
 gb_random_range_float(float min_inc, float max_inc)
 {
-	int int_result = gb_random_range_int(0, INT_MAX);
-	float result = int_result/(float)INT_MAX;
+	int int_result = gb_random_range_int(0, INT_MAX-1); // Prevent integer overflow
+	float result = int_result/(float)(INT_MAX-1);
 	result *= max_inc - min_inc;
 	result += min_inc;
 	return result;
