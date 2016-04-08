@@ -421,7 +421,7 @@ GB_MATH_DEF int gb_rect2_intersection_result(gbRect2 a, gbRect2 b, gbRect2 *inte
 #define GB_MURMUR64_DEFAULT_SEED 0x9747b28c
 #endif
 // Hashing
-GB_MATH_DEF gb_math_u64 gb_hash_murmur64(void const *key, size_t num_bytes, u64 seed);
+GB_MATH_DEF gb_math_u64 gb_hash_murmur64(void const *key, size_t num_bytes, gb_math_u64 seed);
 
 // Random
 // TODO(bill): Use a generator for the random numbers
@@ -853,7 +853,8 @@ gb_float_to_half(float value)
 
 		if (e > 30) {
 			float volatile f = 1e12f;
-			for (unsigned int j = 0; j < 10; j++)
+			unsigned int j;
+			for (j = 0; j < 10; j++)
 				f *= f; // NOTE(bill): Cause overflow
 
 			return (gb_half)(s | 0x7c00);
@@ -1709,7 +1710,7 @@ gb_quat_slerp_approx(gbQuat *d, gbQuat a, gbQuat b, float t)
 	//             Even works okay for nearly anti-parallel versors!!!
 	// NOTE(bill): Extra interations cannot be used as they require angle^4 which is not worth it to approximate
 	float tp = t + (1.0f - gb_quat_dot(a, b))/3.0f * t*(-2.0f*t*t + 3.0f*t - 1.0f);
-	return gb_quat_nlerp(d, a, b, tp);
+	gb_quat_nlerp(d, a, b, tp);
 }
 
 void
@@ -1816,7 +1817,7 @@ gb_rect2_intersection_result(gbRect2 a, gbRect2 b, gbRect2 *intersection)
 #if defined(__x86_64__) || defined(__ppc64__)
 
 	gb_math_u64
-	gb_hash_murmur64(void const *key, size_t num_bytes, u64 seed)
+	gb_hash_murmur64(void const *key, size_t num_bytes, gb_math_u64 seed)
 	{
 		gb_math_u64 const m = 0xc6a4a7935bd1e995ULL;
 		gb_math_u64 const r = 47;
@@ -1857,7 +1858,7 @@ gb_rect2_intersection_result(gbRect2 a, gbRect2 b, gbRect2 *intersection)
 	}
 #else
 	gb_math_u64
-	gb_hash_murmur64(void const *key, size_t num_bytes, u64 seed)
+	gb_hash_murmur64(void const *key, size_t num_bytes, gb_math_u64 seed)
 	{
 		gb_math_u32 const m = 0x5bd1e995;
 		gb_math_u32 const r = 24;
