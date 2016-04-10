@@ -1,9 +1,10 @@
-// gb_math.h - v0.04c - public domain C math library - no warranty implied; use at your own risk
+// gb_math.h - v0.04d - public domain C math library - no warranty implied; use at your own risk
 // A C math library geared towards game development
 // use '#define GB_MATH_IMPLEMENTATION' before including to create the implementation in _ONE_ file
 
 /*
 Version History:
+	0.04d - License Update
 	0.04c - Use 64-bit murmur64 version on WIN64
 	0.04b - Fix strict aliasing in gb_quake_inv_sqrt
 	0.04a - Minor bug fixes
@@ -12,10 +13,9 @@ Version History:
 	0.01  - Initial Version
 
 LICENSE
-	This software is in the public domain. Where that dedication is not
-	recognized, you are granted a perpetual, irrevocable license to copy,
-	distribute, and modify this file as you see fit.
-
+	This software is dual-licensed to the public domain and under the following
+	license: you are granted a perpetual, irrevocable license to copy, modify,
+	publish, and distribute this file as you see fit.
 WARNING
 	- This library is _slightly_ experimental and features may not work as expected.
 	- This also means that many functions are not documented.
@@ -45,6 +45,7 @@ CONTENTS
 #include <math.h>
 #include <limits.h>
 #include <float.h>
+#include <string.h> // memcpy, memmove, etc.
 
 #ifndef GB_MATH_DEF
 	#ifdef GB_MATH_STATIC
@@ -152,8 +153,8 @@ typedef short gb_half;
 	#define GB_MATH_SQRT_THREE   1.73205080756887729352744634150587236f
 	#define GB_MATH_SQRT_FIVE    2.23606797749978969640917366873127623f
 
-	#define GB_MATH_LOG_TWO       0.693147180559945309417232121458176568f
-	#define GB_MATH_LOG_TEN       2.30258509299404568401799145468436421f
+	#define GB_MATH_LOG_TWO      0.693147180559945309417232121458176568f
+	#define GB_MATH_LOG_TEN      2.30258509299404568401799145468436421f
 #endif
 
 
@@ -171,8 +172,12 @@ GB_MATH_DEF float gb_to_degrees(float radians);
 // NOTE(bill): Because to interpolate angles
 GB_MATH_DEF float gb_angle_diff(float radians_a, float radians_b);
 
+#ifndef gb_min
 #define gb_min(a, b) ((a) < (b) ? (a) : (b))
+#endif
+#ifndef gb_max
 #define gb_max(a, b) ((a) > (b) ? (a) : (b))
+#endif
 
 GB_MATH_DEF float gb_sqrt(float a);
 GB_MATH_DEF float gb_quake_inv_sqrt(float a); // NOTE(bill): It's probably better to use 1.0f/gb_sqrt(a)
@@ -775,12 +780,12 @@ float
 gb_half_to_float(gb_half value)
 {
 	gb_uif32 result;
-	int s = (value >> 15) & 0x00000001;
-	int e = (value >> 10) & 0x0000001f;
-	int m =  value        & 0x000003ff;
+	int s = (value >> 15) & 0x001;
+	int e = (value >> 10) & 0x01f;
+	int m =  value        & 0x3ff;
 
 	if (e == 0) {
-		if(m == 0) {
+		if (m == 0) {
 			// Plus or minus zero
 			result.i = (unsigned int)(s << 31);
 			return result.f;
@@ -917,34 +922,34 @@ gbVec4 gb_vec4v(float x[4])                        { gbVec4 v = {x[0], x[1], x[2
 
 void gb_vec2_add(gbVec2 *d, gbVec2 v0, gbVec2 v1) { GB_VEC2_3OP(d,v0,+,v1,+0); }
 void gb_vec2_sub(gbVec2 *d, gbVec2 v0, gbVec2 v1) { GB_VEC2_3OP(d,v0,-,v1,+0); }
-void gb_vec2_mul(gbVec2 *d, gbVec2 v,  float s) { GB_VEC2_2OP(d,v,* s);      }
-void gb_vec2_div(gbVec2 *d, gbVec2 v,  float s) { GB_VEC2_2OP(d,v,/ s);      }
+void gb_vec2_mul(gbVec2 *d, gbVec2 v,  float s)   { GB_VEC2_2OP(d,v,* s);      }
+void gb_vec2_div(gbVec2 *d, gbVec2 v,  float s)   { GB_VEC2_2OP(d,v,/ s);      }
 
 void gb_vec3_add(gbVec3 *d, gbVec3 v0, gbVec3 v1) { GB_VEC3_3OP(d,v0,+,v1,+0); }
 void gb_vec3_sub(gbVec3 *d, gbVec3 v0, gbVec3 v1) { GB_VEC3_3OP(d,v0,-,v1,+0); }
-void gb_vec3_mul(gbVec3 *d, gbVec3 v,  float s) { GB_VEC3_2OP(d,v,* s);      }
-void gb_vec3_div(gbVec3 *d, gbVec3 v,  float s) { GB_VEC3_2OP(d,v,/ s);      }
+void gb_vec3_mul(gbVec3 *d, gbVec3 v,  float s)   { GB_VEC3_2OP(d,v,* s);      }
+void gb_vec3_div(gbVec3 *d, gbVec3 v,  float s)   { GB_VEC3_2OP(d,v,/ s);      }
 
 void gb_vec4_add(gbVec4 *d, gbVec4 v0, gbVec4 v1) { GB_VEC4_3OP(d,v0,+,v1,+0); }
 void gb_vec4_sub(gbVec4 *d, gbVec4 v0, gbVec4 v1) { GB_VEC4_3OP(d,v0,-,v1,+0); }
-void gb_vec4_mul(gbVec4 *d, gbVec4 v,  float s) { GB_VEC4_2OP(d,v,* s);      }
-void gb_vec4_div(gbVec4 *d, gbVec4 v,  float s) { GB_VEC4_2OP(d,v,/ s);      }
+void gb_vec4_mul(gbVec4 *d, gbVec4 v,  float s)   { GB_VEC4_2OP(d,v,* s);      }
+void gb_vec4_div(gbVec4 *d, gbVec4 v,  float s)   { GB_VEC4_2OP(d,v,/ s);      }
 
 
-void gb_vec2_addeq(gbVec2 *d, gbVec2 v)  { GB_VEC2_3OP(d,(*d),+,v,+0); }
-void gb_vec2_subeq(gbVec2 *d, gbVec2 v)  { GB_VEC2_3OP(d,(*d),-,v,+0); }
-void gb_vec2_muleq(gbVec2 *d, float s) { GB_VEC2_2OP(d,(*d),* s);    }
-void gb_vec2_diveq(gbVec2 *d, float s) { GB_VEC2_2OP(d,(*d),/ s);    }
+void gb_vec2_addeq(gbVec2 *d, gbVec2 v) { GB_VEC2_3OP(d,(*d),+,v,+0); }
+void gb_vec2_subeq(gbVec2 *d, gbVec2 v) { GB_VEC2_3OP(d,(*d),-,v,+0); }
+void gb_vec2_muleq(gbVec2 *d, float s)  { GB_VEC2_2OP(d,(*d),* s);    }
+void gb_vec2_diveq(gbVec2 *d, float s)  { GB_VEC2_2OP(d,(*d),/ s);    }
 
-void gb_vec3_addeq(gbVec3 *d, gbVec3 v)  { GB_VEC3_3OP(d,(*d),+,v,+0); }
-void gb_vec3_subeq(gbVec3 *d, gbVec3 v)  { GB_VEC3_3OP(d,(*d),-,v,+0); }
-void gb_vec3_muleq(gbVec3 *d, float s) { GB_VEC3_2OP(d,(*d),* s);    }
-void gb_vec3_diveq(gbVec3 *d, float s) { GB_VEC3_2OP(d,(*d),/ s);    }
+void gb_vec3_addeq(gbVec3 *d, gbVec3 v) { GB_VEC3_3OP(d,(*d),+,v,+0); }
+void gb_vec3_subeq(gbVec3 *d, gbVec3 v) { GB_VEC3_3OP(d,(*d),-,v,+0); }
+void gb_vec3_muleq(gbVec3 *d, float s)  { GB_VEC3_2OP(d,(*d),* s);    }
+void gb_vec3_diveq(gbVec3 *d, float s)  { GB_VEC3_2OP(d,(*d),/ s);    }
 
-void gb_vec4_addeq(gbVec4 *d, gbVec4 v)  { GB_VEC4_3OP(d,(*d),+,v,+0); }
-void gb_vec4_subeq(gbVec4 *d, gbVec4 v)  { GB_VEC4_3OP(d,(*d),-,v,+0); }
-void gb_vec4_muleq(gbVec4 *d, float s) { GB_VEC4_2OP(d,(*d),* s);    }
-void gb_vec4_diveq(gbVec4 *d, float s) { GB_VEC4_2OP(d,(*d),/ s);    }
+void gb_vec4_addeq(gbVec4 *d, gbVec4 v) { GB_VEC4_3OP(d,(*d),+,v,+0); }
+void gb_vec4_subeq(gbVec4 *d, gbVec4 v) { GB_VEC4_3OP(d,(*d),-,v,+0); }
+void gb_vec4_muleq(gbVec4 *d, float s)  { GB_VEC4_2OP(d,(*d),* s);    }
+void gb_vec4_diveq(gbVec4 *d, float s)  { GB_VEC4_2OP(d,(*d),/ s);    }
 
 
 #undef GB_VEC2_2OP
@@ -1072,13 +1077,7 @@ gb_vec3_refract(gbVec3 *d, gbVec3 i, gbVec3 n, float eta)
 
 
 
-float
-gb_vec2_aspect_ratio(gbVec2 v)
-{
-	if (v.y < 0.0001f)
-		return 0.0f;
-	return v.x/v.y;
-}
+float gb_vec2_aspect_ratio(gbVec2 v) { return (v.y < 0.0001f) ? 0.0f : v.x/v.y; }
 
 
 
@@ -1095,18 +1094,14 @@ gb_float22_identity(float m[2][2])
 	m[1][0] = 0; m[1][1] = 1;
 }
 
-void
-gb_mat2_mul_vec2(gbVec2 *out, gbMat2 *m, gbVec2 in)
-{
-	gb_float22_mul_vec2(out, gb_float22_m(m), in);
-}
+void gb_mat2_mul_vec2(gbVec2 *out, gbMat2 *m, gbVec2 in) { gb_float22_mul_vec2(out, gb_float22_m(m), in); }
 
-gbMat2 *gb_mat2_v(gbVec2 m[2])     { return (gbMat2 *)m; }
+gbMat2 *gb_mat2_v(gbVec2 m[2])   { return (gbMat2 *)m; }
 gbMat2 *gb_mat2_f(float m[2][2]) { return (gbMat2 *)m; }
 
-gbFloat2 *gb_float22_m(gbMat2 *m)    { return (gbFloat2 *)m; }
-gbFloat2 *gb_float22_v(gbVec2 m[2])  { return (gbFloat2 *)m; }
-gbFloat2 *gb_float22_4(float m[4]) { return (gbFloat2 *)m; }
+gbFloat2 *gb_float22_m(gbMat2 *m)   { return (gbFloat2 *)m; }
+gbFloat2 *gb_float22_v(gbVec2 m[2]) { return (gbFloat2 *)m; }
+gbFloat2 *gb_float22_4(float m[4])  { return (gbFloat2 *)m; }
 
 void
 gb_float22_transpose(float (*vec)[2])
