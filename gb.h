@@ -819,9 +819,9 @@ typedef gbArray(void) gbVoid_Array; // NOTE(bill): Used to generic stuff
 	}                                   \
 } while (0)
 
-#define gb_array_set_capacity(array, capacity) gbprivarray_set_capacity((array), (capacity), gb_size_of((array)->data[0]))
+#define gb_array_set_capacity(array, capacity) gbpriv_array_set_capacity((array), (capacity), gb_size_of((array)->data[0]))
 // NOTE(bill): Do not use directly the thing below, use the macro
-GB_DEF void gbprivarray_set_capacity(void *array, i64 capacity, isize element_size);
+GB_DEF void gbpriv_array_set_capacity(void *array, i64 capacity, isize element_size);
 
 // TODO(bill): Decide on a decent growing formula for gbArray
 // Is 2*c+8 good enough
@@ -1564,8 +1564,8 @@ gb_char_is_alphanumeric(char c)
 
 
 
-gb_inline void gbprivstring_set_length(gbString str, isize len) { GB_STRING_HEADER(str)->length = len; }
-gb_inline void gbprivstring_set_capacity(gbString str, isize cap) { GB_STRING_HEADER(str)->capacity = cap; }
+gb_inline void gbpriv_string_set_length(gbString str, isize len) { GB_STRING_HEADER(str)->length = len; }
+gb_inline void gbpriv_string_set_capacity(gbString str, isize cap) { GB_STRING_HEADER(str)->capacity = cap; }
 
 
 gb_inline gbString
@@ -1625,7 +1625,7 @@ gb_string_available_space(gbString const str)
 }
 
 
-gb_inline void gb_string_clear(gbString str) { gbprivstring_set_length(str, 0); str[0] = '\0'; }
+gb_inline void gb_string_clear(gbString str) { gbpriv_string_set_length(str, 0); str[0] = '\0'; }
 
 gb_inline gbString gb_string_append_string(gbString str, gbString const other) { return gb_string_append_string_length(str, other, gb_string_length(other)); }
 
@@ -1640,7 +1640,7 @@ gb_string_append_string_length(gbString str, void const *other, isize other_len)
 
 	gb_memcpy(str + curr_len, other, other_len);
 	str[curr_len + other_len] = '\0';
-	gbprivstring_set_length(str, curr_len + other_len);
+	gbpriv_string_set_length(str, curr_len + other_len);
 
 	return str;
 }
@@ -1664,7 +1664,7 @@ gb_string_set(gbString str, char const *cstr)
 
 	gb_memcpy(str, cstr, len);
 	str[len] = '\0';
-	gbprivstring_set_length(str, len);
+	gbpriv_string_set_length(str, len);
 
 	return str;
 }
@@ -1689,7 +1689,7 @@ gb_string_make_space_for(gbString str, isize add_len)
 		if (new_ptr == NULL) return NULL;
 
 		str = cast(char *)(GB_STRING_HEADER(new_ptr) + 1);
-		gbprivstring_set_capacity(str, new_len);
+		gbpriv_string_set_capacity(str, new_len);
 
 		return str;
 	}
@@ -1741,7 +1741,7 @@ gb_string_trim(gbString str, char const *cut_set)
 		gb_memmove(str, start_pos, len);
 	str[len] = '\0';
 
-	gbprivstring_set_length(str, len);
+	gbpriv_string_set_length(str, len);
 
 	return str;
 }
@@ -2022,7 +2022,7 @@ gb_read_entire_file_contents(gbAllocator a, char const *filepath, b32 zero_termi
 
 
 gb_no_inline void
-gbprivarray_set_capacity(void *array_, isize capacity, isize element_size)
+gbpriv_array_set_capacity(void *array_, isize capacity, isize element_size)
 {
 	// NOTE(bill): I know this is unsafe so don't call this function directly
 	gbVoid_Array *a = cast(gbVoid_Array *)array_;
@@ -2038,7 +2038,7 @@ gbprivarray_set_capacity(void *array_, isize capacity, isize element_size)
 			isize new_capacity = 2*a->capacity + 8;
 			if (new_capacity < capacity)
 				new_capacity = capacity;
-			gbprivarray_set_capacity(a, new_capacity, element_size);
+			gbpriv_array_set_capacity(a, new_capacity, element_size);
 		}
 		a->count = capacity;
 	}
