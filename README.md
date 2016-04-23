@@ -9,6 +9,7 @@ library         | latest version | category | languages | description
 **gb_string.h** | 0.93           | strings  | C, C++    | A better string library for C & C++ (this is built into gb.h too!)
 **gb_ini.h**    | 0.91a          | misc     | C, C++    | A simple ini file loader library for C & C++
 
+
 ## FAQ
 
 ### What's the license?
