@@ -1,12 +1,13 @@
-// gb_math.h - v0.04d - public domain C math library - no warranty implied; use at your own risk
+// gb_math.h - v0.05 - public domain C math library - no warranty implied; use at your own risk
 // A C math library geared towards game development
 // use '#define GB_MATH_IMPLEMENTATION' before including to create the implementation in _ONE_ file
 
 /*
 Version History:
+	0.05  - Less/no dependencies or CRT
 	0.04d - License Update
 	0.04c - Use 64-bit murmur64 version on WIN64
-	0.04b - Fix strict aliasing in gb_quake_inv_sqrt
+	0.04b - Fix strict aliasing in gb_quake_rsqrt
 	0.04a - Minor bug fixes
 	0.04  - Namespace everything with gb
 	0.03  - Complete Replacement
@@ -29,7 +30,7 @@ CONTENTS
 		- gbQuat
 		- gbRect(2,3)
 		- gbAabb(2,3)
-		- gb_half (16-bit floating point) (storage only)
+		- gbHalf (16-bit floating point) (storage only)
 	- Operations
 	- Functions
 	- Type Functions
@@ -40,12 +41,13 @@ CONTENTS
 #ifndef GB_MATH_INCLUDE_GB_MATH_H
 #define GB_MATH_INCLUDE_GB_MATH_H
 
-// TODO(bill): What of this do I actually need? And can include elsewhere (e.g. implementation)
 #include <stddef.h>
-#include <math.h>
-#include <limits.h>
-#include <float.h>
-#include <string.h> // memcpy, memmove, etc.
+
+#if !defined(GB_MATH_NO_MATH_H)
+	#include <math.h>
+#else
+	#include <intrin.h>
+#endif
 
 #ifndef GB_MATH_DEF
 	#ifdef GB_MATH_STATIC
@@ -132,7 +134,7 @@ typedef struct gbAabb3 { gbVec3 centre, half_size; } gbAabb3;
 	#endif
 #endif
 
-typedef short gb_half;
+typedef short gbHalf;
 
 
 // Constants
@@ -147,6 +149,10 @@ typedef short gb_half;
 	#define GB_MATH_PI           3.14159265358979323846264338327950288f
 	#define GB_MATH_ONE_OVER_TAU 0.636619772367581343075535053490057448f
 	#define GB_MATH_ONE_OVER_PI  0.159154943091895335768883763372514362f
+
+	#define GB_MATH_TAU_OVER_2   3.14159265358979323846264338327950288f
+	#define GB_MATH_TAU_OVER_4   1.570796326794896619231321691639751442f
+	#define GB_MATH_TAU_OVER_8   0.785398163397448309615660845819875721f
 
 	#define GB_MATH_E            2.71828182845904523536f
 	#define GB_MATH_SQRT_TWO     1.41421356237309504880168872420969808f
@@ -200,8 +206,10 @@ GB_MATH_DEF float gb_angle_diff(float radians_a, float radians_b);
 #define gb_max(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
+GB_MATH_DEF float gb_mod(float x, float y);
 GB_MATH_DEF float gb_sqrt(float a);
-GB_MATH_DEF float gb_quake_inv_sqrt(float a); // NOTE(bill): It's probably better to use 1.0f/gb_sqrt(a)
+GB_MATH_DEF float gb_rsqrt(float a);
+GB_MATH_DEF float gb_quake_rsqrt(float a); // NOTE(bill): It's probably better to use 1.0f/gb_sqrt(a)
                                               // And for simd, there is usually isqrt functions too!
 
 GB_MATH_DEF float gb_sin(float radians);
@@ -222,8 +230,8 @@ GB_MATH_DEF float gb_fast_exp2(float x); // NOTE(bill): Only valid from -1 <= x 
 GB_MATH_DEF float gb_pow(float x, float y); // x^y
 
 
-GB_MATH_DEF float   gb_half_to_float(gb_half value);
-GB_MATH_DEF gb_half gb_float_to_half(float value);
+GB_MATH_DEF float  gb_half_to_float(gbHalf value);
+GB_MATH_DEF gbHalf gb_float_to_half(float value);
 
 // Vec
 
@@ -727,23 +735,135 @@ gbVec3 operator*(gbQuat q, gbVec3 v) { gbVec3 r; gb_quat_rotate_vec3(&r, q, v); 
 #define GB_MATH_IMPLEMENTATION_DONE
 
 
+static void
+gb__memcpy_4byte(void *dest, void const *src, size_t size)
+{
+	size_t i;
+	unsigned int *d, *s;
+	d = (unsigned int *)dest;
+	s = (unsigned int *)src;
+	for (i = 0; i < size/4; i++) {
+		*d++ = *s++;
+	}
+}
+
+static void
+gb__memzero_byte4(void *dest, size_t size)
+{
+	int *d = (int *)dest;
+	int i;
+	for (i = 0; i < size/4; i++)
+		*d++ = 0;
+}
+
+
+
 float gb_to_radians(float degrees) { return degrees * GB_MATH_TAU / 360.0f; }
 float gb_to_degrees(float radians) { return radians * 360.0f / GB_MATH_TAU; }
 
 float
 gb_angle_diff(float radians_a, float radians_b)
 {
-	float delta = fmodf(radians_b-radians_a, GB_MATH_TAU);
-	delta = fmodf(delta + 1.5f*GB_MATH_TAU, GB_MATH_TAU);
+	float delta = gb_mod(radians_b-radians_a, GB_MATH_TAU);
+	delta = gb_mod(delta + 1.5f*GB_MATH_TAU, GB_MATH_TAU);
 	delta -= 0.5f*GB_MATH_TAU;
 	return delta;
 }
 
 
-float gb_sqrt(float a) { return sqrtf(a); }
+float
+gb_mod(float x, float y)
+{
+	static float const gb__zero[] = {0, -0};
+
+	int n, hx, hy, hz, ix, iy, sx, i;
+
+	hx = *(int *)&x;
+	hy = *(int *)&y;
+	sx = hx & 0x80000000;
+	hx ^= sx;
+	hy &= 0x7fffffff;
+
+	// Purge off exception values
+	if (hy == 0||(hx >= 0x7f800000)|| // Y=0,or x not finite
+	    (hy > 0x7f800000))            // Or y is NaN
+		return (x*y)/(x*y);
+	if (hx < hy)  return x; // |x|<|y| return x
+	if (hx == hy) return gb__zero[(unsigned int)sx>>31]; // |x|=|y| return x*0
+
+	// Determine ix = ilogb(x)
+	if (hx < 0x00800000) { // Subnormal x
+		for (ix = -126, i = (hx<<8); i > 0; i <<= 1)
+			ix -=1;
+	} else {
+		ix = (hx>>23)-127;
+	}
+
+	// Determine iy = ilogb(y)
+	if (hy < 0x00800000) { // Subnormal y
+		for (iy = -126, i = (hy<<8); i >= 0; i <<=1 )
+			iy -=1;
+	} else {
+		iy = (hy>>23)-127;
+	}
+
+	// Set up {hx,lx}, {hy,ly} and align y to x
+	if (ix >= -126) {
+		hx = 0x00800000|(0x007fffff&hx);
+	} else { // Subnormal x, shift x to normal
+		n = -126-ix;
+		hx = hx<<n;
+	}
+	if (iy >= -126) {
+		hy = 0x00800000|(0x007fffff&hy);
+	} else { // Subnormal y, shift y to normal
+		n = -126-iy;
+		hy = hy<<n;
+	}
+
+	// Fix point fmod
+	n = ix - iy;
+	while(n--) {
+		hz= hx-hy;
+		if (hz < 0) {
+			hx = hx+hx;
+		} else {
+			if (hz == 0) // Return sign(x)*0
+				return gb__zero[(unsigned int)sx>>31];
+			hx = hz+hz;
+		}
+	}
+	hz=hx-hy;
+	if (hz >= 0)
+		hx = hz;
+
+	// Convert back to floating value and restore the sign
+	if (hx == 0) // Return sign(x)*0
+		return gb__zero[(unsigned int)sx>>31];
+
+	while (hx < 0x00800000) {      // Normalize x
+		hx = hx+hx;
+		iy -= 1;
+	}
+	if (iy >= -126) {     // Normalize output
+		int t;
+		hx = ((hx-0x00800000) | ((iy + 127)<<23));
+		t = hx | sx;
+		x = *(float *)&t;
+	} else {        // Subnormal output
+		int t;
+		n = -126 - iy;
+		hx >>= n;
+		t = hx | sx;
+		x = *(float *)&t;
+		x *= 1.0f;       // Create necessary signal
+	}
+	return x;       // Exact output
+}
+
 
 float
-gb_quake_inv_sqrt(float a)
+gb_quake_rsqrt(float a)
 {
 	union {
 		int i;
@@ -761,20 +881,171 @@ gb_quake_inv_sqrt(float a)
 	return t.f;
 }
 
-float gb_sin(float radians)        { return sinf(radians); }
-float gb_cos(float radians)        { return cosf(radians); }
-float gb_tan(float radians)        { return tanf(radians); }
-float gb_arcsin(float a)           { return asinf(a); }
-float gb_arccos(float a)           { return acosf(a); }
-float gb_arctan(float a)           { return atanf(a); }
-float gb_arctan2(float y, float x) { return atan2f(y, x); }
+
+#if defined(GB_MATH_NO_MATH_H)
+#if defined(_MSC_VER)
+
+	float gb_rsqrt(float a) { return _mm_cvtss_f32(_mm_rsqrt_ss(_mm_set_ss(a))); }
+	float gb_sqrt(float a)  { return _mm_cvtss_f32(_mm_sqrt_ss(_mm_set_ss(a))); };
+	float
+	gb_sin(float a)
+	{
+		static float const a0 = +1.91059300966915117e-31f;
+		static float const a1 = +1.00086760103908896f;
+		static float const a2 = -1.21276126894734565e-2f;
+		static float const a3 = -1.38078780785773762e-1f;
+		static float const a4 = -2.67353392911981221e-2f;
+		static float const a5 = +2.08026600266304389e-2f;
+		static float const a6 = -3.03996055049204407e-3f;
+		static float const a7 = +1.38235642404333740e-4f;
+	    return a0 + a*(a1 + a*(a2 + a*(a3 + a*(a4 + a*(a5 + a*(a6 + a*a7))))));
+	}
+	float
+	gb_cos(float a)
+	{
+		static float const a0 = +1.00238601909309722f;
+		static float const a1 = -3.81919947353040024e-2f;
+		static float const a2 = -3.94382342128062756e-1f;
+		static float const a3 = -1.18134036025221444e-1f;
+		static float const a4 = +1.07123798512170878e-1f;
+		static float const a5 = -1.86637164165180873e-2f;
+		static float const a6 = +9.90140908664079833e-4f;
+		static float const a7 = -5.23022132118824778e-14f;
+	    return a0 + a*(a1 + a*(a2 + a*(a3 + a*(a4 + a*(a5 + a*(a6 + a*a7))))));
+	}
+
+	float
+	gb_tan(float radians)
+	{
+		float rr = radians*radians;
+		float a = 9.5168091e-03f;
+		a *= rr;
+		a += 2.900525e-03f;
+		a *= rr;
+		a += 2.45650893e-02f;
+		a *= rr;
+		a += 5.33740603e-02f;
+		a *= rr;
+		a += 1.333923995e-01f;
+		a *= rr;
+		a += 3.333314036e-01f;
+		a *= rr;
+		a += 1.0f;
+		a *= radians;
+		return a;
+	}
+
+	float gb_arcsin(float a) { return gb_arctan2(a, gb_sqrt((1.0f + a) * (1.0f - a))); }
+	float gb_arccos(float a) { return gb_arctan2(gb_sqrt((1.0f + a) * (1.0 - a)), a); }
+
+	float
+	gb_arctan(float a)
+	{
+		float u  = a*a;
+		float u2 = u*u;
+		float u3 = u2*u;
+		float u4 = u3*u;
+		float f  = 1.0f+0.33288950512027f*u-0.08467922817644f*u2+0.03252232640125f*u3-0.00749305860992f*u4;
+		return a/f;
+	}
+
+	float
+	gb_arctan2(float y, float x)
+	{
+		if (gb_abs(x) > gb_abs(y)) {
+			float a = gb_arctan(y/x);
+			if (x > 0.0f)
+				return a;
+			else
+				return y > 0.0f ? a+GB_MATH_TAU_OVER_2:a-GB_MATH_TAU_OVER_2;
+		} else {
+			float a = gb_arctan(x/y);
+			if (x > 0.0f)
+				return y > 0.0f ? GB_MATH_TAU_OVER_4-a:-GB_MATH_TAU_OVER_4-a;
+			else
+				return y > 0.0f ? GB_MATH_TAU_OVER_4+a:-GB_MATH_TAU_OVER_4+a;
+		}
+	}
+
+	float
+	gb_exp(float a)
+	{
+		union { float f; int i; } u, v;
+		u.i = (int)(6051102 * a + 1056478197);
+		v.i = (int)(1056478197 - 6051102 * a);
+		return u.f / v.f;
+	}
+
+	float
+	gb_log(float a)
+	{
+		union { float f; int i; } u = {a};
+		return (u.i - 1064866805) * 8.262958405176314e-8f; /* 1 / 12102203.0; */
+	}
+
+	float
+	gb_pow(float a, float b)
+	{
+		int flipped = 0, e;
+		float f, r = 1.0f;
+		if (b < 0) {
+			flipped = 1;
+			b = -b;
+		}
+
+		e = (int)b;
+		f = gb_exp(b - e);
+
+		while (e) {
+			if (e & 1) r *= a;
+			a *= a;
+			e >>= 1;
+		}
+
+		r *= f;
+		return flipped ? 1.0f/r : r;
+	}
+
+#else
+
+	float gb_rsqrt(float a)            { return 1.0f/__builtin_sqrt(a); }
+	float gb_sqrt(float a)             { return __builtin_sqrt(a); }
+	float gb_sin(float radians)        { return __builtin_sinf(radians); }
+	float gb_cos(float radians)        { return __builtin_cosf(radians); }
+	float gb_tan(float radians)        { return __builtin_tanf(radians); }
+	float gb_arcsin(float a)           { return __builtin_asinf(a); }
+	float gb_arccos(float a)           { return __builtin_acosf(a); }
+	float gb_arctan(float a)           { return __builtin_atanf(a); }
+	float gb_arctan2(float y, float x) { return __builtin_atan2f(y, x); }
 
 
+	float gb_exp(float x)  { return __builtin_expf(x); }
+	float gb_log(float x)  { return __builtin_logf(x); }
 
-float gb_exp(float x)  { return expf(x); }
+	// TODO(bill): Should this be gb_exp(y * gb_log(x)) ???
+	float gb_pow(float x, float y) { return __builtin_powf(x, y); }
+
+#endif
+
+#else
+	float gb_rsqrt(float a)            { return 1.0f/sqrtf(a); }
+	float gb_sqrt(float a)             { return sqrtf(a); };
+	float gb_sin(float radians)        { return sinf(radians); };
+	float gb_cos(float radians)        { return cosf(radians); };
+	float gb_tan(float radians)        { return tanf(radians); };
+	float gb_arcsin(float a)           { return asinf(a); };
+	float gb_arccos(float a)           { return acosf(a); };
+	float gb_arctan(float a)           { return atanf(a); };
+	float gb_arctan2(float y, float x) { return atan2f(y, x); };
+
+	float gb_exp(float x)          { return expf(x); }
+	float gb_log(float x)          { return logf(x); }
+	float gb_pow(float x, float y) { return powf(x, y); }
+#endif
+
 float gb_exp2(float x) { return gb_exp(GB_MATH_LOG_TWO * x); }
-float gb_log(float x)  { return logf(x); }
 float gb_log2(float x) { return gb_log(x) / GB_MATH_LOG_TWO; }
+
 
 float
 gb_fast_exp(float x)
@@ -786,8 +1057,6 @@ gb_fast_exp(float x)
 
 float gb_fast_exp2(float x) { return gb_fast_exp(GB_MATH_LOG_TWO * x); }
 
-// TODO(bill): Should this be gb_exp(y * gb_log(x)) ???
-float gb_pow(float x, float y) { return powf(x, y); }
 
 
 typedef union {
@@ -796,7 +1065,7 @@ typedef union {
 } gb_uif32;
 
 float
-gb_half_to_float(gb_half value)
+gb_half_to_float(gbHalf value)
 {
 	gb_uif32 result;
 	int s = (value >> 15) & 0x001;
@@ -837,7 +1106,7 @@ gb_half_to_float(gb_half value)
 	return result.f;
 }
 
-gb_half
+gbHalf
 gb_float_to_half(float value)
 {
 	gb_uif32 v;
@@ -852,20 +1121,20 @@ gb_float_to_half(float value)
 
 
 	if (e <= 0) {
-		if (e < -10) return (gb_half)s;
+		if (e < -10) return (gbHalf)s;
 		m = (m | 0x00800000) >> (1 - e);
 
 		if (m & 0x00001000)
 			m += 0x00002000;
 
-		return (gb_half)(s | (m >> 13));
+		return (gbHalf)(s | (m >> 13));
 	} else if (e == 0xff - (127 - 15)) {
 		if (m == 0) {
-			return (gb_half)(s | 0x7c00); // NOTE(bill): infinity
+			return (gbHalf)(s | 0x7c00); // NOTE(bill): infinity
 		} else {
 			// NOTE(bill): NAN
 			m >>= 13;
-			return (gb_half)(s | 0x7c00 | m | (m == 0));
+			return (gbHalf)(s | 0x7c00 | m | (m == 0));
 		}
 	} else {
 		if (m & 0x00001000) {
@@ -882,10 +1151,10 @@ gb_float_to_half(float value)
 			for (j = 0; j < 10; j++)
 				f *= f; // NOTE(bill): Cause overflow
 
-			return (gb_half)(s | 0x7c00);
+			return (gbHalf)(s | 0x7c00);
 		}
 
-		return (gb_half)(s | (e << 10) | (m >> 13));
+		return (gbHalf)(s | (e << 10) | (m >> 13));
 	}
 }
 
@@ -1135,13 +1404,15 @@ gb_float22_transpose(float (*vec)[2])
 	}
 }
 
+
+
 void
 gb_float22_mul(float (*out)[2], float (*mat1)[2], float (*mat2)[2])
 {
 	int i, j;
 	float temp1[2][2], temp2[2][2];
-	if (mat1 == out) { memcpy(temp1, mat1, sizeof(temp1)); mat1 = temp1; }
-	if (mat2 == out) { memcpy(temp2, mat2, sizeof(temp2)); mat2 = temp2; }
+	if (mat1 == out) { gb__memcpy_4byte(temp1, mat1, sizeof(temp1)); mat1 = temp1; }
+	if (mat2 == out) { gb__memcpy_4byte(temp2, mat2, sizeof(temp2)); mat2 = temp2; }
 	for (j = 0; j < 2; j++) {
 		for (i = 0; i < 2; i++) {
 			out[j][i] = mat1[0][i]*mat2[j][0]
@@ -1201,8 +1472,8 @@ gb_float33_mul(float (*out)[3], float (*mat1)[3], float (*mat2)[3])
 {
 	int i, j;
 	float temp1[3][3], temp2[3][3];
-	if (mat1 == out) { memcpy(temp1, mat1, sizeof(temp1)); mat1 = temp1; }
-	if (mat2 == out) { memcpy(temp2, mat2, sizeof(temp2)); mat2 = temp2; }
+	if (mat1 == out) { gb__memcpy_4byte(temp1, mat1, sizeof(temp1)); mat1 = temp1; }
+	if (mat2 == out) { gb__memcpy_4byte(temp2, mat2, sizeof(temp2)); mat2 = temp2; }
 	for (j = 0; j < 3; j++) {
 		for (i = 0; i < 3; i++) {
 			out[j][i] = mat1[0][i]*mat2[j][0]
@@ -1272,8 +1543,8 @@ gb_float44_mul(float (*out)[4], float (*mat1)[4], float (*mat2)[4])
 {
 	int i, j;
 	float temp1[4][4], temp2[4][4];
-	if (mat1 == out) { memcpy(temp1, mat1, sizeof(temp1)); mat1 = temp1; }
-	if (mat2 == out) { memcpy(temp2, mat2, sizeof(temp2)); mat2 = temp2; }
+	if (mat1 == out) { gb__memcpy_4byte(temp1, mat1, sizeof(temp1)); mat1 = temp1; }
+	if (mat2 == out) { gb__memcpy_4byte(temp2, mat2, sizeof(temp2)); mat2 = temp2; }
 	for (j = 0; j < 4; j++) {
 		for (i = 0; i < 4; i++) {
 			out[j][i] = mat1[0][i]*mat2[j][0]
@@ -1390,7 +1661,7 @@ gb_mat4_perspective(gbMat4 *out, float fovy, float aspect, float z_near, float z
 	float tan_half_fovy = gb_tan(0.5f * fovy);
 
 	gbFloat4 *m = gb_float44_m(out);
-	memset(m, 0, sizeof(gbMat4));
+	gb__memzero_byte4(m, sizeof(gbMat4));
 
 	m[0][0] = 1.0f / (aspect*tan_half_fovy);
 	m[1][1] = 1.0f / (tan_half_fovy);
@@ -1409,7 +1680,7 @@ gb_mat4_infinite_perspective(gbMat4 *out, float fovy, float aspect, float z_near
 	float top    =  range;
 
 	gbFloat4 *m = gb_float44_m(out);
-	memset(m, 0, sizeof(gbMat4));
+	gb__memzero_byte4(m, sizeof(gbMat4));
 
 	m[0][0] = (2.0f*z_near) / (right - left);
 	m[1][1] = (2.0f*z_near) / (top   - bottom);
@@ -1940,8 +2211,8 @@ gb_rect2_intersection_result(gbRect2 a, gbRect2 b, gbRect2 *intersection)
 float
 gb_random_range_float(float min_inc, float max_inc)
 {
-	int int_result = gb_random_range_int(0, INT_MAX-1); // Prevent integer overflow
-	float result = int_result/(float)(INT_MAX-1);
+	int int_result = gb_random_range_int(0, 2147483646); // Prevent integer overflow
+	float result = int_result/(float)2147483646;
 	result *= max_inc - min_inc;
 	result += min_inc;
 	return result;
