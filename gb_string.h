@@ -1,10 +1,11 @@
-// gb_string.h - v0.93 - public domain string library - no warranty implied; use at your own risk
+// gb_string.h - v0.94 - public domain string library - no warranty implied; use at your own risk
 // A Simple Dynamic Strings Library for C and C++
 //
 // Version History:
+//     0.94 - Remove "declare anywhere"
 //     0.93 - Fix typos and errors
 //     0.92 - Add extern "C" if compiling as C++
-//     0.91 - Remove `char* cstr` from String_Header
+//     0.91 - Remove `char * cstr` from String_Header
 //     0.90 - Initial Version
 //
 // LICENSE
@@ -58,7 +59,7 @@
 //         {
 //             size_t length;
 //             size_t capacity;
-//             char*  cstring;
+//             char *  cstring;
 //         };
 //
 //     This library tries to augment normal C strings in a better way that is still
@@ -119,10 +120,10 @@
 #define GB_STRING_IMPLEMENTATION
 #include "gb_string.h"
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
-	gb_String str = gb_make_string("Hello");
-	gb_String other_str = gb_make_string_length(", ", 2);
+	gbString str = gb_make_string("Hello");
+	gbString other_str = gb_make_string_length(", ", 2);
 	str = gb_append_string(str, other_str);
 	str = gb_append_cstring(str, "world!");
 
@@ -159,7 +160,7 @@ int main(int argc, char** argv)
 #define GB_STRING_IMPLEMENTATION
 #include "gb_string.h"
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
 	using namespace gb;
 
@@ -196,7 +197,7 @@ int main(int argc, char** argv)
 
 #ifndef GB_ALLOC
 #define GB_ALLOC(sz) malloc(sz)
-#define GB_FREE(sz)  free(sz)
+#define GB_FREE(ptr) free(ptr)
 #endif
 
 #ifndef _MSC_VER
@@ -215,9 +216,9 @@ int main(int argc, char** argv)
 extern "C" {
 #endif
 
-typedef char* gb_String;
+typedef char *gbString;
 
-typedef signed int gb_bool;
+typedef int gbBool;
 #if !defined(GB_TRUE) || !defined(GB_FALSE)
 #define GB_TRUE  1
 #define GB_FALSE 0
@@ -225,7 +226,7 @@ typedef signed int gb_bool;
 
 #ifndef GB_SIZE_TYPE
 #define GB_SIZE_TYPE
-typedef size_t gb_usize;
+typedef size_t gbUsize;
 #endif
 
 #ifndef GB_NULLPTR
@@ -240,38 +241,37 @@ typedef size_t gb_usize;
 	#endif
 #endif
 
-struct gb_String_Header
-{
-	gb_usize len;
-	gb_usize cap;
-};
+typedef struct gbStringHeader {
+	gbUsize len;
+	gbUsize cap;
+} gbStringHeader;
 
-#define GB_STRING_HEADER(s) ((struct gb_String_Header*)s - 1)
+#define GB_STRING_HEADER(s) ((gbStringHeader *)s - 1)
 
-gb_String gb_make_string(const char* str);
-gb_String gb_make_string_length(const void* str, gb_usize len);
-void gb_free_string(gb_String str);
+gbString gb_make_string(char const *str);
+gbString gb_make_string_length(void const *str, gbUsize len);
+void gb_free_string(gbString str);
 
-gb_String gb_duplicate_string(const gb_String str);
+gbString gb_duplicate_string(gbString const str);
 
-gb_usize gb_string_length(const gb_String str);
-gb_usize gb_string_capacity(const gb_String str);
-gb_usize gb_string_available_space(const gb_String str);
+gbUsize gb_string_length(gbString const str);
+gbUsize gb_string_capacity(gbString const str);
+gbUsize gb_string_available_space(gbString const str);
 
-void gb_clear_string(gb_String str);
+void gb_clear_string(gbString str);
 
-gb_String gb_append_string_length(gb_String str, const void* other, gb_usize len);
-gb_String gb_append_string(gb_String str, const gb_String other);
-gb_String gb_append_cstring(gb_String str, const char* other);
+gbString gb_append_string_length(gbString str, void const *other, gbUsize len);
+gbString gb_append_string(gbString str, gbString const other);
+gbString gb_append_cstring(gbString str, char const *other);
 
-gb_String gb_set_string(gb_String str, const char* cstr);
+gbString gb_set_string(gbString str, char const *cstr);
 
-gb_String gb_string_make_space_for(gb_String str, gb_usize add_len);
-gb_usize gb_string_allocation_size(const gb_String str);
+gbString gb_string_make_space_for(gbString str, gbUsize add_len);
+gbUsize gb_string_allocation_size(gbString const str);
 
-gb_bool gb_strings_are_equal(const gb_String lhs, const gb_String rhs);
+gbBool gb_strings_are_equal(gbString const lhs, gbString const rhs);
 
-gb_String gb_trim_string(gb_String str, const char* cut_set);
+gbString gb_trim_string(gbString str, char const *cut_set);
 
 
 #ifdef __cplusplus
@@ -286,117 +286,57 @@ gb_String gb_trim_string(gb_String str, const char* cut_set);
 
 namespace gb
 {
-typedef gb_String String;
-typedef gb_usize usize;
+typedef gbString String;
+typedef gbUsize usize;
 
-gb_inline String make_string(const char* str = "")
-{
-	return gb_make_string(str);
-}
-
-gb_inline String make_string(const void* str, usize len)
-{
-	return gb_make_string_length(str, len);
-}
-
-gb_inline void free_string(String& str)
-{
-	gb_free_string(str);
-	str = GB_NULLPTR;
-}
-
-gb_inline String duplicate_string(const String str)
-{
-	return gb_duplicate_string(str);
-}
-
-gb_inline usize string_length(const String str)
-{
-	return gb_string_length(str);
-}
-
-gb_inline usize string_capacity(const String str)
-{
-	return gb_string_capacity(str);
-}
-
-gb_inline usize string_available_space(const String str)
-{
-	return gb_string_available_space(str);
-}
-
-gb_inline void clear_string(String str)
-{
-	gb_clear_string(str);
-}
-
-gb_inline void append_string_length(String& str, const void* other, usize len)
-{
-	str = gb_append_string_length(str, other, len);
-}
-
-gb_inline void append_string(String& str, const String other)
-{
-	str = gb_append_string(str, other);
-}
-
-gb_inline void append_cstring(String& str, const char* other)
-{
-	str = gb_append_cstring(str, other);
-}
-
-gb_inline void set_string(String& str, const char* cstr)
-{
-	str = gb_set_string(str, cstr);
-}
-
-gb_inline void string_make_space_for(String& str, usize add_len)
-{
-	str = gb_string_make_space_for(str, add_len);
-}
-
-gb_inline usize string_allocation_size(const String str)
-{
-	return gb_string_allocation_size(str);
-}
-
-gb_inline bool strings_are_equal(const String lhs, const String rhs)
-{
-	return gb_strings_are_equal(lhs, rhs) == GB_TRUE;
-}
-
-gb_inline void trim_string(String& str, const char* cut_set)
-{
-	str = gb_trim_string(str, cut_set);
-}
-
+gb_inline String make_string(char const *str = "") { return gb_make_string(str); }
+gb_inline String make_string(void const *str, usize len) { return gb_make_string_length(str, len); }
+gb_inline void free_string(String& str) { gb_free_string(str); str = GB_NULLPTR; }
+gb_inline String duplicate_string(const String str) { return gb_duplicate_string(str); }
+gb_inline usize string_length(const String str) { return gb_string_length(str); }
+gb_inline usize string_capacity(const String str) { return gb_string_capacity(str); }
+gb_inline usize string_available_space(const String str) { return gb_string_available_space(str); }
+gb_inline void clear_string(String str) { gb_clear_string(str); }
+gb_inline void append_string_length(String& str, void const *other, usize len) { str = gb_append_string_length(str, other, len); }
+gb_inline void append_string(String& str, const String other) { str = gb_append_string(str, other); }
+gb_inline void append_cstring(String& str, char const *other) { str = gb_append_cstring(str, other); }
+gb_inline void set_string(String& str, char const *cstr) { str = gb_set_string(str, cstr); }
+gb_inline void string_make_space_for(String& str, usize add_len) { str = gb_string_make_space_for(str, add_len); }
+gb_inline usize string_allocation_size(const String str) { return gb_string_allocation_size(str); }
+gb_inline bool strings_are_equal(const String lhs, const String rhs) { return gb_strings_are_equal(lhs, rhs) == GB_TRUE; }
+gb_inline void trim_string(String& str, char const *cut_set) { str = gb_trim_string(str, cut_set); }
 } // namespace gb
 #endif // GB_STRING_CPP
 #endif // GB_STRING_H
 #ifdef GB_STRING_IMPLEMENTATION
-static void gb_set_string_length(gb_String str, gb_usize len)
+static void
+gb_set_string_length(gbString str, gbUsize len)
 {
 	GB_STRING_HEADER(str)->len = len;
 }
 
-static void gb_set_string_capacity(gb_String str, gb_usize cap)
+static void
+gb_set_string_capacity(gbString str, gbUsize cap)
 {
 	GB_STRING_HEADER(str)->cap = cap;
 }
 
 
-gb_String gb_make_string_length(const void* init_str, gb_usize len)
+gbString
+gb_make_string_length(void const *init_str, gbUsize len)
 {
-	gb_usize header_size = sizeof(struct gb_String_Header);
-	void* ptr = GB_ALLOC(header_size + len + 1);
+	gbString str;
+	gbStringHeader *header;
+	gbUsize header_size = sizeof(gbStringHeader);
+	void *ptr = GB_ALLOC(header_size + len + 1);
 	if (!init_str)
 		memset(ptr, 0, header_size + len + 1);
 
 	if (ptr == GB_NULLPTR)
 		return GB_NULLPTR;
 
-	gb_String str = (char*)ptr + header_size;
-	struct gb_String_Header* header = GB_STRING_HEADER(str);
+	str = (char *)ptr + header_size;
+	header = GB_STRING_HEADER(str);
 	header->len = len;
 	header->cap = len;
 	if (len && init_str)
@@ -406,52 +346,59 @@ gb_String gb_make_string_length(const void* init_str, gb_usize len)
 	return str;
 }
 
-gb_String gb_make_string(const char* str)
+gbString
+gb_make_string(char const *str)
 {
-	gb_usize len = str ? strlen(str) : 0;
+	gbUsize len = str ? strlen(str) : 0;
 	return gb_make_string_length(str, len);
 }
 
-void gb_free_string(gb_String str)
+void
+gb_free_string(gbString str)
 {
 	if (str == GB_NULLPTR)
 		return;
 
-	GB_FREE((struct gb_String_Header*)str - 1);
+	GB_FREE((gbStringHeader *)str - 1);
 }
 
-gb_String gb_duplicate_string(const gb_String str)
+gbString
+gb_duplicate_string(gbString const str)
 {
 	return gb_make_string_length(str, gb_string_length(str));
 }
 
-gb_usize gb_string_length(const gb_String str)
+gbUsize
+gb_string_length(gbString const str)
 {
 	return GB_STRING_HEADER(str)->len;
 }
 
-gb_usize gb_string_capacity(const gb_String str)
+gbUsize
+gb_string_capacity(gbString const str)
 {
 	return GB_STRING_HEADER(str)->cap;
 }
 
-gb_usize gb_string_available_space(const gb_String str)
+gbUsize
+gb_string_available_space(gbString const str)
 {
-	struct gb_String_Header* h = GB_STRING_HEADER(str);
+	gbStringHeader *h = GB_STRING_HEADER(str);
 	if (h->cap > h->len)
 		return h->cap - h->len;
 	return 0;
 }
 
-void gb_clear_string(gb_String str)
+void
+gb_clear_string(gbString str)
 {
 	gb_set_string_length(str, 0);
 	str[0] = '\0';
 }
 
-gb_String gb_append_string_length(gb_String str, const void* other, gb_usize other_len)
+gbString gb_append_string_length(gbString str, void const *other, gbUsize other_len)
 {
-	gb_usize curr_len = gb_string_length(str);
+	gbUsize curr_len = gb_string_length(str);
 
 	str = gb_string_make_space_for(str, other_len);
 	if (str == GB_NULLPTR)
@@ -464,21 +411,20 @@ gb_String gb_append_string_length(gb_String str, const void* other, gb_usize oth
 	return str;
 }
 
-gb_String gb_append_string(gb_String str, const gb_String other)
+gbString gb_append_string(gbString str, gbString const other)
 {
 	return gb_append_string_length(str, other, gb_string_length(other));
 }
 
-gb_String gb_append_cstring(gb_String str, const char* other)
+gbString gb_append_cstring(gbString str, char const *other)
 {
 	return gb_append_string_length(str, other, strlen(other));
 }
 
-gb_String gb_set_string(gb_String str, const char* cstr)
+gbString gb_set_string(gbString str, char const *cstr)
 {
-	gb_usize len = strlen(cstr);
-	if (gb_string_capacity(str) < len)
-	{
+	gbUsize len = strlen(cstr);
+	if (gb_string_capacity(str) < len) {
 		str = gb_string_make_space_for(str, len - gb_string_length(str));
 		if (str == GB_NULLPTR)
 			return GB_NULLPTR;
@@ -491,8 +437,9 @@ gb_String gb_set_string(gb_String str, const char* cstr)
 	return str;
 }
 
-static gb_inline void* gb__string_realloc(void* ptr, gb_usize old_size, gb_usize new_size)
+static gb_inline void *gb__string_realloc(void *ptr, gbUsize old_size, gbUsize new_size)
 {
+	void *new_ptr;
 	if (!ptr)
 		return GB_ALLOC(new_size);
 
@@ -502,7 +449,7 @@ static gb_inline void* gb__string_realloc(void* ptr, gb_usize old_size, gb_usize
 	if (old_size == new_size)
 		return ptr;
 
-	void* new_ptr = GB_ALLOC(new_size);
+	new_ptr = GB_ALLOC(new_size);
 	if (!new_ptr)
 		return GB_NULLPTR;
 
@@ -513,45 +460,47 @@ static gb_inline void* gb__string_realloc(void* ptr, gb_usize old_size, gb_usize
 	return new_ptr;
 }
 
-gb_String gb_string_make_space_for(gb_String str, gb_usize add_len)
+gbString gb_string_make_space_for(gbString str, gbUsize add_len)
 {
-	gb_usize len = gb_string_length(str);
-	gb_usize new_len = len + add_len;
+	gbUsize len = gb_string_length(str);
+	gbUsize new_len = len + add_len;
+	void *ptr, *new_ptr;
+	gbUsize available, old_size, new_size;
 
-	gb_usize available = gb_string_available_space(str);
+	available = gb_string_available_space(str);
 	if (available >= add_len) // Return if there is enough space left
 		return str;
 
 
-	void* ptr = (char*)str - sizeof(struct gb_String_Header);
-	gb_usize old_size = sizeof(struct gb_String_Header) + gb_string_length(str) + 1;
-	gb_usize new_size = sizeof(struct gb_String_Header) + new_len + 1;
+	ptr = (char *)str - sizeof(gbStringHeader);
+	old_size = sizeof(gbStringHeader) + gb_string_length(str) + 1;
+	new_size = sizeof(gbStringHeader) + new_len + 1;
 
-	void* new_ptr = gb__string_realloc(ptr, old_size, new_size);
+	new_ptr = gb__string_realloc(ptr, old_size, new_size);
 	if (new_ptr == GB_NULLPTR)
 		return GB_NULLPTR;
-	str = (char*)new_ptr + sizeof(struct gb_String_Header);
+	str = (char *)new_ptr + sizeof(gbStringHeader);
 
 	gb_set_string_capacity(str, new_len);
 
 	return str;
 }
 
-gb_usize gb_string_allocation_size(const gb_String s)
+gbUsize gb_string_allocation_size(gbString const s)
 {
-	gb_usize cap = gb_string_capacity(s);
-	return sizeof(struct gb_String_Header) + cap;
+	gbUsize cap = gb_string_capacity(s);
+	return sizeof(gbStringHeader) + cap;
 }
 
-gb_bool gb_strings_are_equal(const gb_String lhs, const gb_String rhs)
+gbBool gb_strings_are_equal(gbString const lhs, gbString const rhs)
 {
-	gb_usize lhs_len = gb_string_length(lhs);
-	gb_usize rhs_len = gb_string_length(rhs);
+	gbUsize lhs_len, rhs_len, i;
+	lhs_len = gb_string_length(lhs);
+	rhs_len = gb_string_length(rhs);
 	if (lhs_len != rhs_len)
 		return GB_FALSE;
 
-	for (gb_usize i = 0; i < lhs_len; i++)
-	{
+	for (i = 0; i < lhs_len; i++) {
 		if (lhs[i] != rhs[i])
 			return GB_FALSE;
 	}
@@ -559,12 +508,10 @@ gb_bool gb_strings_are_equal(const gb_String lhs, const gb_String rhs)
 	return GB_TRUE;
 }
 
-gb_String gb_trim_string(gb_String str, const char* cut_set)
+gbString gb_trim_string(gbString str, char const *cut_set)
 {
-	char* start;
-	char* end;
-	char* start_pos;
-	char* end_pos;
+	char *start, *end, *start_pos, *end_pos;
+	gbUsize len;
 
 	start_pos = start = str;
 	end_pos   = end   = str + gb_string_length(str) - 1;
@@ -574,7 +521,7 @@ gb_String gb_trim_string(gb_String str, const char* cut_set)
 	while (end_pos > start_pos && strchr(cut_set, *end_pos))
 		end_pos--;
 
-	gb_usize len = (start_pos > end_pos) ? 0 : ((end_pos - start_pos)+1);
+	len = (start_pos > end_pos) ? 0 : ((end_pos - start_pos)+1);
 
 	if (str != start_pos)
 		memmove(str, start_pos, len);

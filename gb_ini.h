@@ -1,7 +1,8 @@
-// gb_ini.h - v0.91a - public domain ini file loader library - no warranty implied; use at your own risk
+// gb_ini.h - v0.92 - public domain ini file loader library - no warranty implied; use at your own risk
 // A Simple Ini File Loader Library for C and C++
 //
 // Version History:
+//     0.91  - New styling
 //     0.91a - Error handling fix
 //     0.91  - Add extern "C" if compiling as C++
 //     0.90  - Initial Version
@@ -59,17 +60,17 @@ name = Ginger Bill
 #include <stdlib.h>
 struct Library
 {
-	const char* name;
+	char const *name;
 	int         version;
-	const char* license;
-	const char* author;
+	char const *license;
+	char const *author;
 };
 
 // The below macro expands to this:
-// static test_ini_handler(void* data, const char* section, const char* name, const char* value)
+// static test_ini_handlerchar const *data, char const *section, char const *name, char const *value)
 static GB_INI_HANDLER(test_ini_handler)
 {
-	struct Library* lib = (struct Library*)data;
+	struct Library *lib = (struct Library *)data;
 
 	#define TEST(s, n) (strcmp(section, s) == 0 && strcmp(name, n) == 0)
 
@@ -89,10 +90,10 @@ static GB_INI_HANDLER(test_ini_handler)
 	return 1;
 }
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
 	struct Library lib = {0};
-	struct gb_Ini_Error err = gb_ini_parse("test.ini", &test_ini_handler, &lib);
+	gbIniError err = gb_ini_parse("test.ini", &test_ini_handler, &lib);
 	if (err.type != GB_INI_ERROR_NONE)
 	{
 		if (err.line_num > 0)
@@ -122,14 +123,14 @@ int main(int argc, char** argv)
 
 struct Library
 {
-	const char* name;
+	char const *name;
 	int         version;
-	const char* license;
-	const char* author;
+	char const *license;
+	char const *author;
 };
 
 // The below macro expands to this:
-// static test_ini_handler(void* data, const char* section, const char* name, const char* value)
+// static test_ini_handler(void *data, char const *section, char const *name, char const *value)
 static GB_INI_HANDLER(test_ini_handler)
 {
 	Library* lib = (Library*)data;
@@ -213,8 +214,7 @@ int main(int argc, char** argv)
 extern "C" {
 #endif
 
-enum
-{
+enum {
 	GB_INI_ERROR_NONE = 0,
 
 	GB_INI_ERROR_FILE_ERROR,
@@ -225,33 +225,27 @@ enum
 	GB_INI_ERROR_COUNT,
 };
 
-typedef struct gb_Ini_Error gb_Ini_Error;
-struct gb_Ini_Error
-{
+typedef struct gbIniError {
 	int    type;
 	size_t line_num;
-};
+} gbIniError;
 
 #ifndef GB_INI_HANDLER_RETURN_TYPE
 #define GB_INI_HANDLER_RETURN_TYPE
-typedef int gb_Ini_HRT;
+typedef int gbIniHRT;
 #endif
 
 // This macro can be use to declare this type of function without
 // needing to define all the of the parameters
-#define GB_INI_HANDLER(func_name) gb_Ini_HRT func_name(void* data, const char* section, const char* name, const char* value)
-typedef GB_INI_HANDLER(gb_Ini_Handler);
+#define GB_INI_HANDLER(func_name) gbIniHRT func_name(void *data, char const *section, char const *name, char const *value)
+typedef GB_INI_HANDLER(gbIniHandler);
 
-extern const char* GB_ERROR_STRINGS[GB_INI_ERROR_COUNT];
+extern char const *GB_ERROR_STRINGS[GB_INI_ERROR_COUNT];
 
-gb_Ini_Error gb_ini_parse(const char* filename, gb_Ini_Handler* handler_func, void* data);
-gb_Ini_Error gb_ini_parse_file(FILE* file, gb_Ini_Handler* handler_func, void* data);
+gbIniError gb_ini_parse(char const *filename, gbIniHandler* handler_func, void *data);
+gbIniError gb_ini_parse_file(FILE *file, gbIniHandler* handler_func, void *data);
 
-gb_inline const char*
-gb_ini_error_string(const struct gb_Ini_Error err)
-{
-	return GB_ERROR_STRINGS[err.type];
-}
+gb_inline char const *gb_ini_error_string(gbIniError const err) { return GB_ERROR_STRINGS[err.type]; }
 
 #ifdef __cplusplus
 }
@@ -264,12 +258,11 @@ gb_ini_error_string(const struct gb_Ini_Error err)
 
 namespace gb
 {
-typedef gb_Ini_Error   Ini_Error;
-typedef gb_Ini_Handler Ini_Handler;
+typedef gbIniError   IniError;
+typedef gbIniHandler IniHandler;
 
 // Just a copy but with the GB_ prefix stripped
-enum
-{
+enum {
 	INI_ERROR_NONE = 0,
 
 	INI_ERROR_FILE_ERROR,
@@ -280,23 +273,9 @@ enum
 	// No need for enum count
 };
 
-Ini_Error
-ini_parse(const char* filename, Ini_Handler* handler_func, void* data)
-{
-	return gb_ini_parse(filename, handler_func, data);
-}
-
-Ini_Error
-ini_parse(FILE* file, Ini_Handler* handler_func, void* data)
-{
-	return gb_ini_parse_file(file, handler_func, data);
-}
-
-const char*
-ini_error_string(const Ini_Error err)
-{
-	return GB_ERROR_STRINGS[err.type];
-}
+inline Ini_Error ini_parse(char const *filename, Ini_Handler *handler_func, void *data) { return gb_ini_parse(filename, handler_func, data); }
+inline Ini_Error ini_parse(FILE *file, Ini_Handler *handler_func, void *data) { return gb_ini_parse_file(file, handler_func, data); }
+inline char const *ini_error_string(const Ini_Error err) { return GB_ERROR_STRINGS[err.type]; }
 
 } // namespace gb
 #endif // GB_INI_CPP
@@ -306,7 +285,7 @@ ini_error_string(const Ini_Error err)
 #include <ctype.h>
 #include <string.h>
 
-const char* GB_ERROR_STRINGS[GB_INI_ERROR_COUNT] = {
+char const *GB_ERROR_STRINGS[GB_INI_ERROR_COUNT] = {
 	"",
 
 	"Error in opening file",
@@ -316,7 +295,7 @@ const char* GB_ERROR_STRINGS[GB_INI_ERROR_COUNT] = {
 };
 
 static gb_inline char*
-gb__left_whitespace_skip(const char* str)
+gb__left_whitespace_skip(char const *str)
 {
 	while (*str && isspace((unsigned char)(*str)))
 		str++;
@@ -333,12 +312,10 @@ gb__right_whitespace_strip(char* str)
 }
 
 static gb_inline char*
-gb__find_char_or_comment_in_string(const char* str, char c)
+gb__find_char_or_comment_in_string(char const *str, char c)
 {
 	int was_whitespace = 0;
-	while (*str && *str != c &&
-	       !(was_whitespace && *str == ';'))
-	{
+	while (*str && *str != c && !(was_whitespace && *str == ';')) {
 		was_whitespace = isspace((unsigned char)(*str));
 		str++;
 	}
@@ -347,7 +324,7 @@ gb__find_char_or_comment_in_string(const char* str, char c)
 }
 
 static gb_inline char*
-gb__string_copy(char* dst, const char* src, size_t size)
+gb__string_copy(char* dst, char const *src, size_t size)
 {
 	strncpy(dst, src, size);
 	dst[size - 1] = '\0';
@@ -355,12 +332,12 @@ gb__string_copy(char* dst, const char* src, size_t size)
 }
 
 
-struct gb_Ini_Error
-gb_ini_parse(const char* filename, gb_Ini_Handler* handler_func, void* data)
+gbIniError
+gb_ini_parse(char const *filename, gbIniHandler *handler_func, void *data)
 {
-	struct gb_Ini_Error err = {GB_INI_ERROR_FILE_ERROR, 0};
+	gbIniError err = {GB_INI_ERROR_FILE_ERROR, 0};
 
-	FILE* file = fopen(filename, "r");
+	FILE *file = fopen(filename, "r");
 	if (!file)
 		return err;
 
@@ -369,8 +346,8 @@ gb_ini_parse(const char* filename, gb_Ini_Handler* handler_func, void* data)
 	return err;
 }
 
-struct gb_Ini_Error
-gb_ini_parse_file(FILE* file, gb_Ini_Handler* handler_func, void* data)
+gbIniError
+gb_ini_parse_file(FILE *file, gbIniHandler *handler_func, void *data)
 {
 	char line[GB_INI_MAX_LINE_LENGTH] = "";
 	size_t line_num = 0;
@@ -378,13 +355,12 @@ gb_ini_parse_file(FILE* file, gb_Ini_Handler* handler_func, void* data)
 	char section[GB_INI_MAX_SECTION_LENGTH] = "";
 	char prev_name[GB_INI_MAX_NAME_LENGTH]  = "";
 
-	char* start;
-	char* end;
+	char *start;
+	char *end;
 
-	struct gb_Ini_Error err = {GB_INI_ERROR_NONE, 0};
+	struct gbIniError err = {GB_INI_ERROR_NONE, 0};
 
-	while (fgets(line, GB_INI_MAX_LINE_LENGTH, file) != 0)
-	{
+	while (fgets(line, GB_INI_MAX_LINE_LENGTH, file) != 0) {
 		line_num++;
 
 		start = line;
@@ -394,8 +370,7 @@ gb_ini_parse_file(FILE* file, gb_Ini_Handler* handler_func, void* data)
 		if (line_num == 1 &&
 		    (unsigned char)start[0] == 0xef &&
 		    (unsigned char)start[1] == 0xbb &&
-		    (unsigned char)start[2] == 0xbf)
-		{
+		    (unsigned char)start[2] == 0xbf) {
 			start += 3;
 		}
 #endif
@@ -405,46 +380,37 @@ gb_ini_parse_file(FILE* file, gb_Ini_Handler* handler_func, void* data)
 		if (start[0] == ';' || start[0] == '#')
 			continue; // Allow '#' and ';' comments at start of line
 
-		if (start[0] == '[') // [section]
-		{
+		if (start[0] == '[') { // [section]
 			end = gb__find_char_or_comment_in_string(start+1, ']');
-			if (*end == ']')
-			{
+			if (*end == ']') {
+				char *sect = start + 1;
 				*end = '\0';
-				char* sect = start + 1;
 				sect = gb__left_whitespace_skip(gb__right_whitespace_strip(sect));
 
 				gb__string_copy(section, sect, sizeof(section));
 				*prev_name = '\0';
-			}
-			else if (!err.type)
-			{
+			} else if (!err.type) {
 				err.type = GB_INI_ERROR_MISSING_SECTION_BRACKET;
 				err.line_num = line_num;
 			}
-		}
-		else if (start[0] && start[0] != ';')
-		{
+		} else if (start[0] && start[0] != ';') {
 			end = gb__find_char_or_comment_in_string(start, '=');
-			if (*end == '=')
-			{
+			if (*end == '=') {
+				char *name, *value;
 				*end = '\0';
-				char* name = gb__right_whitespace_strip(start);
-				char* value = gb__left_whitespace_skip(end + 1);
+				name = gb__right_whitespace_strip(start);
+				value = gb__left_whitespace_skip(end + 1);
 				end = gb__find_char_or_comment_in_string(value, '\0');
 				if (*end == ';')
 					*end = '\0';
 				gb__right_whitespace_strip(value);
 
 				gb__string_copy(prev_name, name, sizeof(prev_name));
-				if (!handler_func(data, section, name, value) && !err.type)
-				{
+				if (!handler_func(data, section, name, value) && !err.type) {
 					err.type = GB_INI_ERROR_HANDLER_ERROR;
 					err.line_num = line_num;
 				}
-			}
-			else if (!err.type)
-			{
+			} else if (!err.type) {
 				// No '=' found on name=value line
 				err.type = GB_INI_ERROR_ASSIGNMENT_MISSING;
 				err.line_num = line_num;
