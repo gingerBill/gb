@@ -1,4 +1,4 @@
-/* gb.h - v0.03  - OpenGL Helper Library - public domain
+/* gb.h - v0.03a - OpenGL Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -34,6 +34,7 @@ Conventions used:
 
 
 Version History:
+	0.03a - Better Rounded Rect
 	0.03  - Basic State Rendering
 	0.02  - Font Caching and Rendering
 	0.01  - Initial Version
@@ -170,7 +171,7 @@ extern "C" {
 #endif
 
 
-GBGL_DEF u32 gbgl_generate_sampler(u32 min_filter, u32 max_filter, u32 s_wrap, u32 t_wrap);
+GBGL_DEF u32 gbgl_make_sampler(u32 min_filter, u32 max_filter, u32 s_wrap, u32 t_wrap);
 
 
 
@@ -635,6 +636,9 @@ GBGL_DEF void gbgl_bs_draw_circle_outline(gbglBasicState *bs, gbVec2 p, f32 radi
 GBGL_DEF void gbgl_bs_draw_rounded_rect_corners(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f32 roundness, gbColour col, u32 corners);
 GBGL_DEF void gbgl_bs_draw_rounded_rect(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f32 roundness, gbColour col);
 
+GBGL_DEF void gbgl_bs_draw_rounded_rect_corners_outline(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f32 roundness, gbColour col, f32 thickness, u32 corners);
+GBGL_DEF void gbgl_bs_draw_rounded_rect_outline(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f32 roundness, gbColour col, f32 thickness);
+
 
 GBGL_DEF isize gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColour col, char const *str, isize len);
 GBGL_DEF isize gbgl_bs_draw_string   (gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColour col, char const *fmt, ...);
@@ -701,7 +705,7 @@ GBGL_DEF isize gbgl_bs_draw_string_va(gbglBasicState *bs, gbglFont *font, i32 x,
 
 
 u32
-gbgl_generate_sampler(u32 min_filter, u32 max_filter, u32 s_wrap, u32 t_wrap)
+gbgl_make_sampler(u32 min_filter, u32 max_filter, u32 s_wrap, u32 t_wrap)
 {
 	u32 samp;
 	glGenSamplers(1, &samp);
@@ -1138,61 +1142,6 @@ gbgl_set_uniform_colour(gbglShader *s, char const *name, gbColour col)
 //
 //
 
-#if 0
-b32
-gbgl_render_buffer_init(gbglRenderBuffer *in_out_rb)
-{
-	i32 i;
-	if (in_out_rb->colour_buffer_count >= GBGL_MAX_RENDER_COLOUR_BUFFERS) {
-		return false;
-	}
-	glGenFramebuffers(1, &in_out_rb->gl_frame_buffer_handle);
-	glBindFramebuffer(GL_FRAMEBUFFER, in_out_rb->gl_frame_buffer_handle);
-
-	glGenTextures(in_out_rb->colour_buffer_count, in_out_rb->handles);
-	for (i = 0; i < in_out_rb->colour_buffer_count; i++) {
-		i32 channel_count = in_out_rb->channel_count[i];
-		glBindTexture(GL_TEXTURE_2D, in_out_rb->handles[i]);
-		glTexImage2D(GL_TEXTURE_2D, 0,
-		             GBGL_INTERNAL_TEXTURE_FORMAT_8[channel_count-1],
-		             in_out_rb->width, in_out_rb->height, 0,
-		             GBGL_TEXTURE_FORMAT[channel_count-1],
-		             in_out_rb->data_type[0], 0);
-		glBindTexture(GL_TEXTURE_2D, 0);
-		glFramebufferTexture2D(GL_FRAMEBUFFER,
-		                       GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D,
-		                       in_out_rb->handles[0], 0);
-	}
-	glDrawBuffers(in_out_rb->colour_buffer_count, GBGL_COLOUR_BUFFER_ATTACHMENTS);
-	//@TODO: not every valid permutation has been tested, it's likely that there's a format/internal format mismatch somewhere
-	if (in_out_rb->has_depth || in_out_rb->has_stencil) {
-		if (in_out_rb->has_depth && in_out_rb->has_stencil) {
-			glGenRenderbuffers(1, &in_out_rb->gl_depth_stencil_buffer_handle);
-			glBindRenderbuffer(GL_RENDERBUFFER, in_out_rb->gl_depth_stencil_buffer_handle);
-			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, in_out_rb->width, in_out_rb->height);
-			glBindRenderbuffer(GL_RENDERBUFFER, 0);
-			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, in_out_rb->gl_depth_stencil_buffer_handle);
-		} else if (in_out_rb->has_depth) {
-			glGenRenderbuffers(1, &in_out_rb->gl_depth_stencil_buffer_handle);
-			glBindRenderbuffer(GL_RENDERBUFFER, in_out_rb->gl_depth_stencil_buffer_handle);
-			glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, in_out_rb->width, in_out_rb->height);
-			glBindRenderbuffer(GL_RENDERBUFFER, 0);
-			glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, in_out_rb->gl_depth_stencil_buffer_handle);
-		} else if (in_out_rb->has_stencil) {
-			GB_PANIC("A framebuffer cannot have a stencil without depth"); // NOTE(bill): no stencil w/o depth
-		}
-	}
-
-	in_out_rb->gl_frame_buffer_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-
-	if (in_out_rb->gl_frame_buffer_status != GL_FRAMEBUFFER_COMPLETE) {
-		gb_fprintf(stderr, "Unable to create OpenGL Frame buffer. Frame buffer incomplete: %d\n", in_out_rb->gl_frame_buffer_status);
-	}
-
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	return in_out_rb->gl_frame_buffer_status == GL_FRAMEBUFFER_COMPLETE;
-}
-#endif
 
 b32
 gbgl_init_render_buffer(gbglRenderBuffer *rb, i32 width, i32 height, i32 channel_count)
@@ -1891,8 +1840,8 @@ gbgl_bs_init(gbglBasicState *bs, i32 window_width, i32 window_height)
 	}
 	bs->ebo = gbgl_make_ebo(bs->indices, gb_size_of(u16) * GBGL_BS_MAX_INDEX_COUNT, GL_STATIC_DRAW);
 
-	bs->nearest_sampler = gbgl_generate_sampler(GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
-	bs->linear_sampler  = gbgl_generate_sampler(GL_LINEAR,  GL_LINEAR,  GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+	bs->nearest_sampler = gbgl_make_sampler(GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+	bs->linear_sampler  = gbgl_make_sampler(GL_LINEAR,  GL_LINEAR,  GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 
 	gbgl_load_shader_vf_from_source(&bs->ortho_tex_shader,
 		"#version 410 core\n"
@@ -1968,8 +1917,8 @@ gbgl_bs_init(gbglBasicState *bs, i32 window_width, i32 window_height)
 	}
 	bs->font_ebo = gbgl_make_ebo(bs->font_indices, gb_size_of(u16) * GBGL_MAX_RENDER_STRING_LENGTH * 6, GL_STATIC_DRAW);
 
-	bs->font_samplers[0] = gbgl_generate_sampler(GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
-	bs->font_samplers[1] = gbgl_generate_sampler(GL_LINEAR,  GL_LINEAR,  GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+	bs->font_samplers[0] = gbgl_make_sampler(GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+	bs->font_samplers[1] = gbgl_make_sampler(GL_LINEAR,  GL_LINEAR,  GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 
 	bs->text_params[GBGL_TEXT_PARAM_MAX_WIDTH].val_i32      = 0;
 	bs->text_params[GBGL_TEXT_PARAM_JUSTIFY].val_i32        = GBGL_JUSTIFY_LEFT;
@@ -2150,9 +2099,9 @@ gbgl_bs_draw_elliptical_arc(gbglBasicState *bs, gbVec2 p, f32 radius_a, f32 radi
 
 	for (i = 0; i < 31; i++) {
 		f32 t = cast(f32)i / 30.0f;
-		f32 theta = gb_lerp(min_angle, max_angle, t);
-		f32 c = gb_cos(theta);
-		f32 s = gb_sin(theta);
+		f32 a = gb_lerp(min_angle, max_angle, t);
+		f32 c = gb_cos(a);
+		f32 s = gb_sin(a);
 		bs->vertices[i+1].x = p.x + c*radius_a;
 		bs->vertices[i+1].y = p.y + s*radius_b;
 	}
@@ -2169,16 +2118,16 @@ gbgl_bs_draw_elliptical_arc_outline(gbglBasicState *bs, gbVec2 p, f32 radius_a, 
 
 	for (i = 0; i < 32; i++) {
 		f32 t = cast(f32)i / 31.0f;
-		f32 theta = gb_lerp(min_angle, max_angle, t);
-		f32 c = gb_cos(theta);
-		f32 s = gb_sin(theta);
+		f32 a = gb_lerp(min_angle, max_angle, t);
+		f32 c = gb_cos(a);
+		f32 s = gb_sin(a);
 		bs->vertices[i+1].x = p.x + c*radius_a;
 		bs->vertices[i+1].y = p.y + s*radius_b;
 	}
 
 	gbgl__bs_setup_ortho_colour_state(bs, 32, col);
 	glLineWidth(thickness);
-	glDrawArrays(GL_LINE_LOOP, 0, 32);
+	glDrawArrays(GL_LINES, 0, 32);
 }
 
 
@@ -2208,93 +2157,83 @@ gbgl_bs_draw_rounded_rect_corners(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f3
 	} else {
 		isize i, vc = 0;
 
-		bs->vertices[0].x = pos.x + 0.5f*dim.x;
-		bs->vertices[0].y = pos.y + 0.5f*dim.y;
+		bs->vertices[vc].x = pos.x + 0.5f*dim.x;
+		bs->vertices[vc].y = pos.y + 0.5f*dim.y;
 		vc++;
 
 		if (corners & 1) {
 			for (i = 0; i < 6; i++) {
 				f32 t = cast(f32)i / 5.0f;
-				f32 theta = gb_lerp(0.5f*GB_MATH_TAU, 0.75f*GB_MATH_TAU, t);
-				f32 c = gb_cos(theta);
-				f32 s = gb_sin(theta);
+				f32 a = gb_lerp(0.5f*GB_MATH_TAU, 0.75f*GB_MATH_TAU, t);
+				f32 c = gb_cos(a);
+				f32 s = gb_sin(a);
 				bs->vertices[vc].x = pos.x + roundness + c*roundness;
 				bs->vertices[vc].y = pos.y + roundness + s*roundness;
 				vc++;
 			}
 		} else {
 			bs->vertices[vc].x = pos.x;
-			bs->vertices[vc].y = pos.y + roundness;
-			bs->vertices[vc+1].x = pos.x;
-			bs->vertices[vc+1].y = pos.y;
-			bs->vertices[vc+2].x = pos.x + roundness;
-			bs->vertices[vc+2].y = pos.y;
-			vc += 3;
+			bs->vertices[vc].y = pos.y;
+			vc++;
 		}
 
 		if (corners & 2) {
 			for (i = 0; i < 6; i++) {
 				f32 t = cast(f32)i / 5.0f;
-				f32 theta = gb_lerp(0.75f*GB_MATH_TAU, 1.00f*GB_MATH_TAU, t);
-				f32 c = gb_cos(theta);
-				f32 s = gb_sin(theta);
+				f32 a = gb_lerp(0.75f*GB_MATH_TAU, 1.00f*GB_MATH_TAU, t);
+				f32 c = gb_cos(a);
+				f32 s = gb_sin(a);
 				bs->vertices[vc].x = pos.x + dim.x - roundness + c*roundness;
 				bs->vertices[vc].y = pos.y + roundness + s*roundness;
 				vc++;
 			}
 		} else {
-			bs->vertices[vc].x = pos.x + dim.x - roundness;
+			bs->vertices[vc].x = pos.x + dim.x;
 			bs->vertices[vc].y = pos.y;
-			bs->vertices[vc+1].x = pos.x + dim.x;
-			bs->vertices[vc+1].y = pos.y;
-			bs->vertices[vc+2].x = pos.x + dim.x;
-			bs->vertices[vc+2].y = pos.y + roundness;
-			vc += 3;
+			vc++;
 		}
 
 
 		if (corners & 4) {
 			for (i = 0; i < 6; i++) {
 				f32 t = cast(f32)i / 5.0f;
-				f32 theta = gb_lerp(0.00f*GB_MATH_TAU, 0.25f*GB_MATH_TAU, t);
-				f32 c = gb_cos(theta);
-				f32 s = gb_sin(theta);
+				f32 a = gb_lerp(0.00f*GB_MATH_TAU, 0.25f*GB_MATH_TAU, t);
+				f32 c = gb_cos(a);
+				f32 s = gb_sin(a);
 				bs->vertices[vc].x = pos.x + dim.x - roundness + c*roundness;
 				bs->vertices[vc].y = pos.y + dim.y - roundness + s*roundness;
 				vc++;
 			}
 		} else {
 			bs->vertices[vc].x = pos.x + dim.x;
-			bs->vertices[vc].y = pos.y + dim.y - roundness;
-			bs->vertices[vc+1].x = pos.x + dim.x;
-			bs->vertices[vc+1].y = pos.y + dim.y;
-			bs->vertices[vc+2].x = pos.x + dim.x - roundness;
-			bs->vertices[vc+2].y = pos.y + dim.y;
-			vc += 3;
+			bs->vertices[vc].y = pos.y + dim.y;
+			vc++;
 		}
 
 		if (corners & 8) {
 			for (i = 0; i < 6; i++) {
 				f32 t = cast(f32)i / 5.0f;
-				f32 theta = gb_lerp(0.25f*GB_MATH_TAU, 0.50f*GB_MATH_TAU, t);
-				f32 c = gb_cos(theta);
-				f32 s = gb_sin(theta);
+				f32 a = gb_lerp(0.25f*GB_MATH_TAU, 0.50f*GB_MATH_TAU, t);
+				f32 c = gb_cos(a);
+				f32 s = gb_sin(a);
 				bs->vertices[vc].x = pos.x + roundness + c*roundness;
 				bs->vertices[vc].y = pos.y + dim.y - roundness + s*roundness;
 				vc++;
 			}
 		} else {
-			bs->vertices[vc].x = pos.x + roundness;
+			bs->vertices[vc].x = pos.x;
 			bs->vertices[vc].y = pos.y + dim.y;
-			bs->vertices[vc+1].x = pos.x;
-			bs->vertices[vc+1].y = pos.y + dim.y;
-			bs->vertices[vc+2].x = pos.x;
-			bs->vertices[vc+2].y = pos.y + dim.y - roundness;
-			vc += 3;
+			vc++;
 		}
 
-		bs->vertices[vc-1].x = pos.x;
-		bs->vertices[vc-1].y = pos.y + roundness;
+		if (corners & 1) {
+			bs->vertices[vc].x = pos.x;
+			bs->vertices[vc].y = pos.y + roundness;
+		} else {
+			bs->vertices[vc].x = pos.x;
+			bs->vertices[vc].y = pos.y;
+		}
+		vc++;
 
 		gbgl__bs_setup_ortho_colour_state(bs, vc, col);
 		glDrawArrays(GL_TRIANGLE_FAN, 0, vc);
@@ -2306,6 +2245,99 @@ gbgl_bs_draw_rounded_rect(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f32 roundn
 {
 	gbgl_bs_draw_rounded_rect_corners(bs, pos, dim, roundness, col, 1|2|4|8);
 }
+
+
+void
+gbgl_bs_draw_rounded_rect_corners_outline(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f32 roundness, gbColour col, f32 thickness, u32 corners)
+{
+	if ((2.0f*roundness > gb_abs(dim.x)) ||
+	    (2.0f*roundness > gb_abs(dim.y))) {
+		roundness = 0.5f*gb_min(gb_abs(dim.x), gb_abs(dim.y));
+	}
+
+	if (roundness == 0 || corners == 0) {
+		gbgl_bs_draw_rect_outline(bs, pos, dim, col, thickness);
+	} else {
+		isize i, vc = 0;
+
+		if (corners & 1) {
+			for (i = 0; i < 6; i++) {
+				f32 t = cast(f32)i / 5.0f;
+				f32 a = gb_lerp(0.5f*GB_MATH_TAU, 0.75f*GB_MATH_TAU, t);
+				f32 c = gb_cos(a);
+				f32 s = gb_sin(a);
+				bs->vertices[vc].x = pos.x + roundness + c*roundness;
+				bs->vertices[vc].y = pos.y + roundness + s*roundness;
+				vc++;
+			}
+		} else {
+			bs->vertices[vc].x = pos.x;
+			bs->vertices[vc].y = pos.y;
+			vc++;
+		}
+
+		if (corners & 2) {
+			for (i = 0; i < 6; i++) {
+				f32 t = cast(f32)i / 5.0f;
+				f32 a = gb_lerp(0.75f*GB_MATH_TAU, 1.00f*GB_MATH_TAU, t);
+				f32 c = gb_cos(a);
+				f32 s = gb_sin(a);
+				bs->vertices[vc].x = pos.x + dim.x - roundness + c*roundness;
+				bs->vertices[vc].y = pos.y + roundness + s*roundness;
+				vc++;
+			}
+		} else {
+			bs->vertices[vc].x = pos.x + dim.x;
+			bs->vertices[vc].y = pos.y;
+			vc++;
+		}
+
+
+		if (corners & 4) {
+			for (i = 0; i < 6; i++) {
+				f32 t = cast(f32)i / 5.0f;
+				f32 a = gb_lerp(0.00f*GB_MATH_TAU, 0.25f*GB_MATH_TAU, t);
+				f32 c = gb_cos(a);
+				f32 s = gb_sin(a);
+				bs->vertices[vc].x = pos.x + dim.x - roundness + c*roundness;
+				bs->vertices[vc].y = pos.y + dim.y - roundness + s*roundness;
+				vc++;
+			}
+		} else {
+			bs->vertices[vc].x = pos.x + dim.x;
+			bs->vertices[vc].y = pos.y + dim.y;
+			vc++;
+		}
+
+		if (corners & 8) {
+			for (i = 0; i < 6; i++) {
+				f32 t = cast(f32)i / 5.0f;
+				f32 a = gb_lerp(0.25f*GB_MATH_TAU, 0.50f*GB_MATH_TAU, t);
+				f32 c = gb_cos(a);
+				f32 s = gb_sin(a);
+				bs->vertices[vc].x = pos.x + roundness + c*roundness;
+				bs->vertices[vc].y = pos.y + dim.y - roundness + s*roundness;
+				vc++;
+			}
+		} else {
+			bs->vertices[vc].x = pos.x;
+			bs->vertices[vc].y = pos.y + dim.y;
+			vc++;
+		}
+
+		gbgl__bs_setup_ortho_colour_state(bs, vc, col);
+		glLineWidth(thickness);
+		glDrawArrays(GL_LINE_LOOP, 0, vc);
+	}
+}
+
+gb_inline void
+gbgl_bs_draw_rounded_rect_outline(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f32 roundness, gbColour col, f32 thickness)
+{
+	gbgl_bs_draw_rounded_rect_corners_outline(bs, pos, dim, roundness, col, thickness, 1|2|4|8);
+}
+
+
 
 
 
@@ -2327,7 +2359,6 @@ gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColou
 		isize glyph_count = 0, i;
 		f32 font_height = font->size;
 		i32 max_width = bs->text_params[GBGL_TEXT_PARAM_MAX_WIDTH].val_i32;
-		f32 max_width32 = cast(f32)max_width;
 
 		gbglJustifyType justify = cast(gbglJustifyType)bs->text_params[GBGL_TEXT_PARAM_JUSTIFY].val_i32;
 		if (justify == GBGL_JUSTIFY_CENTRE) {
@@ -2376,7 +2407,7 @@ gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColou
 
 
 					if (cp == '\r' || cp == '\n' ||
-					    (max_width > 0 && px - ox + gi->xadv >= max_width32)) {
+					    (max_width > 0 && px - ox + gi->xadv >= cast(f32)max_width)) {
 						px = ox;
 
 						py -= font_height;
