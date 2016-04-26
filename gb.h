@@ -2135,7 +2135,7 @@ GB_ALLOCATOR_PROC(gb_pool_allocator_proc)
 }
 
 
-void
+gb_inline void
 gb_qsort(void *base, isize count, isize size, gbCompareProc compare_proc)
 {
 	qsort(base, count, size, compare_proc);
@@ -2143,16 +2143,15 @@ gb_qsort(void *base, isize count, isize size, gbCompareProc compare_proc)
 
 
 
-isize
+gb_inline isize
 gb_binary_search(void const *base, isize count, isize size, void const *key, gbCompareProc compare_proc)
 {
-	isize start = 0, end = count;
-	isize result;
+	isize start = 0;
+	isize end = count;
 
 	while (start < end) {
 		isize mid = start + (end-start)/2;
-
-		result = compare_proc(key, cast(u8 *)base + mid*size);
+		isize result = compare_proc(key, cast(u8 *)base + mid*size);
 		if (result < 0)
 			end = mid;
 		else if (result > 0)
@@ -2161,7 +2160,7 @@ gb_binary_search(void const *base, isize count, isize size, void const *key, gbC
 			return mid;
 	}
 
-	return 0; // TODO(bill): Should this be -1?
+	return -1;
 }
 
 

@@ -229,6 +229,9 @@ GB_MATH_DEF float gb_fast_exp(float x);  // NOTE(bill): Only valid from -1 <= x 
 GB_MATH_DEF float gb_fast_exp2(float x); // NOTE(bill): Only valid from -1 <= x <= +1
 GB_MATH_DEF float gb_pow(float x, float y); // x^y
 
+GB_MATH_DEF float gb_round(float x);
+GB_MATH_DEF float gb_floor(float x);
+GB_MATH_DEF float gb_ceil(float x);
 
 GB_MATH_DEF float  gb_half_to_float(gbHalf value);
 GB_MATH_DEF gbHalf gb_float_to_half(float value);
@@ -1056,6 +1059,15 @@ gb_fast_exp(float x)
 }
 
 float gb_fast_exp2(float x) { return gb_fast_exp(GB_MATH_LOG_TWO * x); }
+
+
+
+float gb_round(float x) { return (x >= 0.0f) ? gb_floor(x + 0.5f) : gb_ceil(x - 0.5f); }
+float gb_floor(float x) { return (x >= 0.0f) ? (int)x : (int)(x-0.9999999999999999f); }
+float gb_ceil(float x)  { return (x < 0) ? (int)x : ((int)x)+1; }
+
+
+
 
 
 
