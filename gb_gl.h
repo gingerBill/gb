@@ -1,4 +1,4 @@
-/* gb.h - v0.01  - OpenGL Helper Library - public domain
+/* gb.h - v0.02  - OpenGL Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -34,6 +34,7 @@ Conventions used:
 
 
 Version History:
+	0.02  - Font Caching and Rendering
 	0.01  - Initial Version
 
 LICENSE
@@ -552,6 +553,7 @@ GBGL_DEF f32            gbgl_get_string_width                    (gbglFont *font
 
 #ifndef GBGL_FONT_CHAR_LIST
 #define GBGL_FONT_CHAR_LIST \
+	"チーズ"\
 	"ĀāăĄąĆćĈĉĊċČčĎďĐđĒēĔĕĖėĘęĚěĜĝĞğĠġĢģĤĥĨĩĪīĬĭĮįİıĲĳĴĵĶķĸĹĺĻļĽľŁłŃńŅņņŇňŉŊŋ"\
 	"ŌōōŎŏŐőŒœŕŖŗŘřŚśŜŝŞşŠšŢţŤťŨũŪūŬŭŮůŰűŲųŴŵŶŷŸŹźŻżŽža!ö"\
 	"\"#$%%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"\

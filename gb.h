@@ -1,4 +1,4 @@
-/* gb.h - v0.03 - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.04 - Ginger Bill's C Helper Library - public domain
                 - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -26,6 +26,7 @@ Conventions used:
 
 
 Version History:
+	0.04  - Better UTF support and search/sort procs
 	0.03  - Completely change procedure naming convention
 	0.02a - Bug fixes
 	0.02  - Change naming convention and gbArray(Type)
