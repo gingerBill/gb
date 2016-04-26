@@ -551,7 +551,12 @@ GBGL_DEF f32            gbgl_get_string_width                    (gbglFont *font
 #endif
 
 #ifndef GBGL_FONT_CHAR_LIST
-#define GBGL_FONT_CHAR_LIST "ĀāăĄąĆćĈĉĊċČčĎďĐđĒēĔĕĖėĘęĚěĜĝĞğĠġĢģĤĥĨĩĪīĬĭĮįİıĲĳĴĵĶķĸĹĺĻļĽľŁłŃńŅņņŇňŉŊŋŌōōŎŏŐőŒœŕŖŗŘřŚśŜŝŞşŠšŢţŤťŨũŪūŬŭŮůŰűŲųŴŵŶŷŸŹźŻżŽža!ö\"#$%%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~Šš?ŒœŸÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõøùúûüýþÿ®™"
+#define GBGL_FONT_CHAR_LIST \
+	"ĀāăĄąĆćĈĉĊċČčĎďĐđĒēĔĕĖėĘęĚěĜĝĞğĠġĢģĤĥĨĩĪīĬĭĮįİıĲĳĴĵĶķĸĹĺĻļĽľŁłŃńŅņņŇňŉŊŋ"\
+	"ŌōōŎŏŐőŒœŕŖŗŘřŚśŜŝŞşŠšŢţŤťŨũŪūŬŭŮůŰűŲųŴŵŶŷŸŹźŻżŽža!ö"\
+	"\"#$%%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"\
+	"Šš?ŒœŸÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõøùúûüýþÿ®™"\
+	" \t\r\n"
 #endif
 
 #ifndef GBGL_PT_TO_PX_SCALE
@@ -2203,19 +2208,23 @@ gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColou
 			if (ptr - str > len)
 				break;
 
+			if (cp == '\t') {
+				draw_this_glyph_count = GBGL_TAB_CHARACTER_WIDTH;
+				cp = ' '; // TODO(bill): Set tab to be space
+			}
+
+
 			gi = gbgl_get_glyph_info(font, cp, &curr_index);
 			if (!gi) {
 				gi = gbgl_get_glyph_info(font, ' ', &curr_index);
 			}
-
-			if (cp == '\t')
-				draw_this_glyph_count = GBGL_TAB_CHARACTER_WIDTH;
 
 			if (gi) {
 				for (j = 0; j < draw_this_glyph_count; j++) {
 					f32 s0, t0, s1, t1;
 					f32 x0, y0, x1, y1;
 					f32 kern = 0.0f;
+
 
 					if (cp == '\r' || cp == '\n' ||
 					    (max_width > 0 && px - ox + gi->xadv >= max_width32)) {
