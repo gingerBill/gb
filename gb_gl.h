@@ -1,4 +1,4 @@
-/* gb.h - v0.02  - OpenGL Helper Library - public domain
+/* gb.h - v0.03  - OpenGL Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -34,6 +34,7 @@ Conventions used:
 
 
 Version History:
+	0.03  - Basic State Rendering
 	0.02  - Font Caching and Rendering
 	0.01  - Initial Version
 
@@ -553,11 +554,10 @@ GBGL_DEF f32            gbgl_get_string_width                    (gbglFont *font
 
 #ifndef GBGL_FONT_CHAR_LIST
 #define GBGL_FONT_CHAR_LIST \
-	"チーズ"\
-	"ĀāăĄąĆćĈĉĊċČčĎďĐđĒēĔĕĖėĘęĚěĜĝĞğĠġĢģĤĥĨĩĪīĬĭĮįİıĲĳĴĵĶķĸĹĺĻļĽľŁłŃńŅņņŇňŉŊŋ"\
-	"ŌōōŎŏŐőŒœŕŖŗŘřŚśŜŝŞşŠšŢţŤťŨũŪūŬŭŮůŰűŲųŴŵŶŷŸŹźŻżŽža!ö"\
+	"ĀāăĄąĆćĈĉĊċČčĎďĐđĒēĔĕĖėĘęĚěĜĝĞğĠġĢģĤĥĨĩĪīĬĭĮįİıĲĳĴĵĶķĸĹĺĻļĽľŁł"\
+	"ŃńŅņņŇňŉŊŋŌōōŎŏŐőŒœŕŖŗŘřŚśŜŝŞşŠšŢţŤťŨũŪūŬŭŮůŰűŲųŴŵŶŷŸŹźŻżŽža!ö"\
 	"\"#$%%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"\
-	"Šš?ŒœŸÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõøùúûüýþÿ®™"\
+	"ŠšŒœŸÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõøùúûüýþÿ®™£"\
 	" \t\r\n"
 #endif
 
@@ -617,8 +617,23 @@ GBGL_DEF void gbgl_bs_draw_quad_outline(gbglBasicState *bs,
                                         gbColour col, f32 thickness);
 
 GBGL_DEF void gbgl_bs_draw_line(gbglBasicState *bs, gbVec2 p0, gbVec2 p1, gbColour col, f32 thickness);
+
+GBGL_DEF void gbgl_bs_draw_elliptical_arc(gbglBasicState *bs, gbVec2 p, f32 radius_a, f32 radius_b, f32 min_angle, f32 max_angle, gbColour col);
+GBGL_DEF void gbgl_bs_draw_elliptical_arc_outline(gbglBasicState *bs, gbVec2 p, f32 radius_a, f32 radius_b,
+                                                  f32 min_angle, f32 max_angle, gbColour col, f32 thickness);
+
 GBGL_DEF void gbgl_bs_draw_circle(gbglBasicState *bs, gbVec2 p, f32 radius, gbColour col);
 GBGL_DEF void gbgl_bs_draw_circle_outline(gbglBasicState *bs, gbVec2 p, f32 radius, gbColour col, f32 thickness);
+
+
+// Corners Flags:
+// 1 - Bottom Left
+// 2 - Bottom Right
+// 4 - Top    Right
+// 8 - Top    Left
+// NOTE(bill): Apple, please don't sue me!
+GBGL_DEF void gbgl_bs_draw_rounded_rect_corners(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f32 roundness, gbColour col, u32 corners);
+GBGL_DEF void gbgl_bs_draw_rounded_rect(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f32 roundness, gbColour col);
 
 
 GBGL_DEF isize gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColour col, char const *str, isize len);
@@ -2125,7 +2140,8 @@ gbgl_bs_draw_line(gbglBasicState *bs, gbVec2 p0, gbVec2 p1, gbColour col, f32 th
 }
 
 void
-gbgl_bs_draw_circle(gbglBasicState *bs, gbVec2 p, f32 radius, gbColour col)
+gbgl_bs_draw_elliptical_arc(gbglBasicState *bs, gbVec2 p, f32 radius_a, f32 radius_b,
+                            f32 min_angle, f32 max_angle, gbColour col)
 {
 	isize i;
 
@@ -2134,11 +2150,11 @@ gbgl_bs_draw_circle(gbglBasicState *bs, gbVec2 p, f32 radius, gbColour col)
 
 	for (i = 0; i < 31; i++) {
 		f32 t = cast(f32)i / 30.0f;
-		f32 theta = t * GB_MATH_TAU;
+		f32 theta = gb_lerp(min_angle, max_angle, t);
 		f32 c = gb_cos(theta);
 		f32 s = gb_sin(theta);
-		bs->vertices[i+1].x = p.x + c*radius;
-		bs->vertices[i+1].y = p.y + s*radius;
+		bs->vertices[i+1].x = p.x + c*radius_a;
+		bs->vertices[i+1].y = p.y + s*radius_b;
 	}
 
 	gbgl__bs_setup_ortho_colour_state(bs, 32, col);
@@ -2146,17 +2162,18 @@ gbgl_bs_draw_circle(gbglBasicState *bs, gbVec2 p, f32 radius, gbColour col)
 }
 
 void
-gbgl_bs_draw_circle_outline(gbglBasicState *bs, gbVec2 p, f32 radius, gbColour col, f32 thickness)
+gbgl_bs_draw_elliptical_arc_outline(gbglBasicState *bs, gbVec2 p, f32 radius_a, f32 radius_b,
+                                    f32 min_angle, f32 max_angle, gbColour col, f32 thickness)
 {
 	isize i;
 
 	for (i = 0; i < 32; i++) {
 		f32 t = cast(f32)i / 31.0f;
-		f32 theta = t * GB_MATH_TAU;
+		f32 theta = gb_lerp(min_angle, max_angle, t);
 		f32 c = gb_cos(theta);
 		f32 s = gb_sin(theta);
-		bs->vertices[i].x = p.x + c*radius;
-		bs->vertices[i].y = p.y + s*radius;
+		bs->vertices[i+1].x = p.x + c*radius_a;
+		bs->vertices[i+1].y = p.y + s*radius_b;
 	}
 
 	gbgl__bs_setup_ortho_colour_state(bs, 32, col);
@@ -2164,13 +2181,141 @@ gbgl_bs_draw_circle_outline(gbglBasicState *bs, gbVec2 p, f32 radius, gbColour c
 	glDrawArrays(GL_LINE_LOOP, 0, 32);
 }
 
+
+
+gb_inline void
+gbgl_bs_draw_circle(gbglBasicState *bs, gbVec2 p, f32 radius, gbColour col)
+{
+	gbgl_bs_draw_elliptical_arc(bs, p, radius, radius, 0, GB_MATH_TAU, col);
+}
+
+gb_inline void
+gbgl_bs_draw_circle_outline(gbglBasicState *bs, gbVec2 p, f32 radius, gbColour col, f32 thickness)
+{
+	gbgl_bs_draw_elliptical_arc_outline(bs, p, radius, radius, 0, GB_MATH_TAU, col, thickness);
+}
+
+void
+gbgl_bs_draw_rounded_rect_corners(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f32 roundness, gbColour col, u32 corners)
+{
+	if ((2.0f*roundness > gb_abs(dim.x)) ||
+	    (2.0f*roundness > gb_abs(dim.y))) {
+		roundness = 0.5f*gb_min(gb_abs(dim.x), gb_abs(dim.y));
+	}
+
+	if (roundness == 0 || corners == 0) {
+		gbgl_bs_draw_rect(bs, pos, dim, col);
+	} else {
+		isize i, vc = 0;
+
+		bs->vertices[0].x = pos.x + 0.5f*dim.x;
+		bs->vertices[0].y = pos.y + 0.5f*dim.y;
+		vc++;
+
+		if (corners & 1) {
+			for (i = 0; i < 6; i++) {
+				f32 t = cast(f32)i / 5.0f;
+				f32 theta = gb_lerp(0.5f*GB_MATH_TAU, 0.75f*GB_MATH_TAU, t);
+				f32 c = gb_cos(theta);
+				f32 s = gb_sin(theta);
+				bs->vertices[vc].x = pos.x + roundness + c*roundness;
+				bs->vertices[vc].y = pos.y + roundness + s*roundness;
+				vc++;
+			}
+		} else {
+			bs->vertices[vc].x = pos.x;
+			bs->vertices[vc].y = pos.y + roundness;
+			bs->vertices[vc+1].x = pos.x;
+			bs->vertices[vc+1].y = pos.y;
+			bs->vertices[vc+2].x = pos.x + roundness;
+			bs->vertices[vc+2].y = pos.y;
+			vc += 3;
+		}
+
+		if (corners & 2) {
+			for (i = 0; i < 6; i++) {
+				f32 t = cast(f32)i / 5.0f;
+				f32 theta = gb_lerp(0.75f*GB_MATH_TAU, 1.00f*GB_MATH_TAU, t);
+				f32 c = gb_cos(theta);
+				f32 s = gb_sin(theta);
+				bs->vertices[vc].x = pos.x + dim.x - roundness + c*roundness;
+				bs->vertices[vc].y = pos.y + roundness + s*roundness;
+				vc++;
+			}
+		} else {
+			bs->vertices[vc].x = pos.x + dim.x - roundness;
+			bs->vertices[vc].y = pos.y;
+			bs->vertices[vc+1].x = pos.x + dim.x;
+			bs->vertices[vc+1].y = pos.y;
+			bs->vertices[vc+2].x = pos.x + dim.x;
+			bs->vertices[vc+2].y = pos.y + roundness;
+			vc += 3;
+		}
+
+
+		if (corners & 4) {
+			for (i = 0; i < 6; i++) {
+				f32 t = cast(f32)i / 5.0f;
+				f32 theta = gb_lerp(0.00f*GB_MATH_TAU, 0.25f*GB_MATH_TAU, t);
+				f32 c = gb_cos(theta);
+				f32 s = gb_sin(theta);
+				bs->vertices[vc].x = pos.x + dim.x - roundness + c*roundness;
+				bs->vertices[vc].y = pos.y + dim.y - roundness + s*roundness;
+				vc++;
+			}
+		} else {
+			bs->vertices[vc].x = pos.x + dim.x;
+			bs->vertices[vc].y = pos.y + dim.y - roundness;
+			bs->vertices[vc+1].x = pos.x + dim.x;
+			bs->vertices[vc+1].y = pos.y + dim.y;
+			bs->vertices[vc+2].x = pos.x + dim.x - roundness;
+			bs->vertices[vc+2].y = pos.y + dim.y;
+			vc += 3;
+		}
+
+		if (corners & 8) {
+			for (i = 0; i < 6; i++) {
+				f32 t = cast(f32)i / 5.0f;
+				f32 theta = gb_lerp(0.25f*GB_MATH_TAU, 0.50f*GB_MATH_TAU, t);
+				f32 c = gb_cos(theta);
+				f32 s = gb_sin(theta);
+				bs->vertices[vc].x = pos.x + roundness + c*roundness;
+				bs->vertices[vc].y = pos.y + dim.y - roundness + s*roundness;
+				vc++;
+			}
+		} else {
+			bs->vertices[vc].x = pos.x + roundness;
+			bs->vertices[vc].y = pos.y + dim.y;
+			bs->vertices[vc+1].x = pos.x;
+			bs->vertices[vc+1].y = pos.y + dim.y;
+			bs->vertices[vc+2].x = pos.x;
+			bs->vertices[vc+2].y = pos.y + dim.y - roundness;
+			vc += 3;
+		}
+
+		bs->vertices[vc-1].x = pos.x;
+		bs->vertices[vc-1].y = pos.y + roundness;
+
+		gbgl__bs_setup_ortho_colour_state(bs, vc, col);
+		glDrawArrays(GL_TRIANGLE_FAN, 0, vc);
+	}
+}
+
+gb_inline void
+gbgl_bs_draw_rounded_rect(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f32 roundness, gbColour col)
+{
+	gbgl_bs_draw_rounded_rect_corners(bs, pos, dim, roundness, col, 1|2|4|8);
+}
+
+
+
+
 isize
 gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColour col, char const *str, isize len)
 {
 	isize char_count = gb_utf8_strnlen(str, len);
-	if (char_count <= 0) {
-		return 0;
-	} else {
+	isize line_count = 0;
+	if (char_count > 0) {
 		char const *ptr = str;
 
 		f32 sf = 1.0f / cast(f32)font->bitmap_width;
@@ -2179,7 +2324,7 @@ gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColou
 		f32 ox, oy;
 		f32 px, py;
 
-		isize line_count = 1, glyph_count = 0, i;
+		isize glyph_count = 0, i;
 		f32 font_height = font->size;
 		i32 max_width = bs->text_params[GBGL_TEXT_PARAM_MAX_WIDTH].val_i32;
 		f32 max_width32 = cast(f32)max_width;
@@ -2194,6 +2339,8 @@ gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColou
 			gbgl_get_string_dimensions(font, ptr, &width, NULL);
 			x = cast(i32)gb_round(cast(f32)x - width);
 		}
+
+		line_count = 1;
 
 		ox = x;
 		oy = y;
@@ -2292,17 +2439,17 @@ gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColou
 		}
 
 
-		{
-			isize sampler_handle = 0;
+		if (glyph_count > 0) {
+			isize sampler_index = 0;
 
 			gbgl_use_shader(&bs->font_shader);
 			gbgl_set_uniform_mat4(&bs->font_shader, "u_ortho_mat", &bs->ortho_mat);
 			gbgl_set_uniform_colour(&bs->font_shader, "u_colour", col);
 			GB_ASSERT(bs->text_params[GBGL_TEXT_PARAM_TEXTURE_FILTER].val_i32 < gb_count_of(bs->font_samplers));
 			if (bs->text_params[GBGL_TEXT_PARAM_TEXTURE_FILTER].val_i32 < gb_count_of(bs->font_samplers))
-				sampler_handle = bs->text_params[GBGL_TEXT_PARAM_TEXTURE_FILTER].val_i32;
+				sampler_index = bs->text_params[GBGL_TEXT_PARAM_TEXTURE_FILTER].val_i32;
 
-			gbgl_bind_texture2d(&font->texture, 0, bs->font_samplers[sampler_handle]);
+			gbgl_bind_texture2d(&font->texture, 0, bs->font_samplers[sampler_index]);
 			gbgl_vbo_copy(bs->font_vbo, bs->font_vertices, gb_size_of(bs->font_vertices[0]) * glyph_count * 4, 0);
 
 			gbgl_vert_ptr_aa(0, 2, gbglBasicVertex, x);
@@ -2316,9 +2463,8 @@ gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColou
 			glDrawElements(GL_TRIANGLES, glyph_count*6, GL_UNSIGNED_SHORT, NULL);
 
 		}
-
-		return line_count;
 	}
+	return line_count;
 }
 
 isize

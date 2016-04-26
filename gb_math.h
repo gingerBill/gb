@@ -787,81 +787,81 @@ gb_mod(float x, float y)
 	hx ^= sx;
 	hy &= 0x7fffffff;
 
-	// Purge off exception values
-	if (hy == 0||(hx >= 0x7f800000)|| // Y=0,or x not finite
-	    (hy > 0x7f800000))            // Or y is NaN
+	// NOTE(bill): Purge off exception values
+	if (hy == 0||(hx >= 0x7f800000)|| // NOTE(bill): Y=0,or x not finite
+	    (hy > 0x7f800000))            // NOTE(bill): Or y is NaN
 		return (x*y)/(x*y);
-	if (hx < hy)  return x; // |x|<|y| return x
-	if (hx == hy) return gb__zero[(unsigned int)sx>>31]; // |x|=|y| return x*0
+	if (hx < hy)  return x; // NOTE(bill): |x|<|y| return x
+	if (hx == hy) return gb__zero[(unsigned int)sx>>31]; // NOTE(bill): |x|=|y| return x*0
 
-	// Determine ix = ilogb(x)
-	if (hx < 0x00800000) { // Subnormal x
+	// NOTE(bill): Determine ix = ilogb(x)
+	if (hx < 0x00800000) { // NOTE(bill): Subnormal x
 		for (ix = -126, i = (hx<<8); i > 0; i <<= 1)
 			ix -=1;
 	} else {
 		ix = (hx>>23)-127;
 	}
 
-	// Determine iy = ilogb(y)
-	if (hy < 0x00800000) { // Subnormal y
+	// NOTE(bill): Determine iy = ilogb(y)
+	if (hy < 0x00800000) { // NOTE(bill): Subnormal y
 		for (iy = -126, i = (hy<<8); i >= 0; i <<=1 )
 			iy -=1;
 	} else {
 		iy = (hy>>23)-127;
 	}
 
-	// Set up {hx,lx}, {hy,ly} and align y to x
+	// NOTE(bill): Set up {hx, lx}, {hy, ly} and align y to x
 	if (ix >= -126) {
 		hx = 0x00800000|(0x007fffff&hx);
-	} else { // Subnormal x, shift x to normal
+	} else { // NOTE(bill): Subnormal x, shift x to normal
 		n = -126-ix;
 		hx = hx<<n;
 	}
 	if (iy >= -126) {
 		hy = 0x00800000|(0x007fffff&hy);
-	} else { // Subnormal y, shift y to normal
+	} else { // NOTE(bill): Subnormal y, shift y to normal
 		n = -126-iy;
 		hy = hy<<n;
 	}
 
-	// Fix point fmod
+	// NOTE(bill): Fix point fmod
 	n = ix - iy;
 	while(n--) {
 		hz= hx-hy;
 		if (hz < 0) {
 			hx = hx+hx;
 		} else {
-			if (hz == 0) // Return sign(x)*0
+			if (hz == 0) // NOTE(bill): Return gb_sign(x)*0
 				return gb__zero[(unsigned int)sx>>31];
 			hx = hz+hz;
 		}
 	}
-	hz=hx-hy;
+	hz = hx-hy;
 	if (hz >= 0)
 		hx = hz;
 
-	// Convert back to floating value and restore the sign
-	if (hx == 0) // Return sign(x)*0
+	// NOTE(bill): Convert back to floating value and restore the sign
+	if (hx == 0) // NOTE(bill): Return sign(x)*0
 		return gb__zero[(unsigned int)sx>>31];
 
-	while (hx < 0x00800000) {      // Normalize x
+	while (hx < 0x00800000) { // NOTE(bill): Normalize x
 		hx = hx+hx;
 		iy -= 1;
 	}
-	if (iy >= -126) {     // Normalize output
+	if (iy >= -126) { // NOTE(bill): Normalize output
 		int t;
 		hx = ((hx-0x00800000) | ((iy + 127)<<23));
 		t = hx | sx;
 		x = *(float *)&t;
-	} else {        // Subnormal output
+	} else {
 		int t;
 		n = -126 - iy;
 		hx >>= n;
 		t = hx | sx;
 		x = *(float *)&t;
-		x *= 1.0f;       // Create necessary signal
+		x *= 1.0f;
 	}
-	return x;       // Exact output
+	return x;
 }
 
 
