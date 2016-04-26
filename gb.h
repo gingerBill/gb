@@ -1,5 +1,5 @@
 /* gb.h - v0.03 - Ginger Bill's C Helper Library - public domain
-                 - no warranty implied; use at your own risk
+                - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
 	to replace the C/C++ standard library
@@ -506,6 +506,9 @@ namespace gb {
 #define gb_clamp01(x) gb_clamp((x), 0, 1)
 #endif
 
+#define gb_is_between(x, lower, upper) (((x) >= (lower)) && ((x) <= (upper)))
+
+
 
 ////////////////////////////////
 //
@@ -879,7 +882,20 @@ GB_DEF GB_ALLOCATOR_PROC(gb_pool_allocator_proc);
 
 
 
+////////////////////////////////////////////////////////////////
+//
+// Sort & Search
+//
+//
 
+#define GB_COMPARE_PROC(name) int name(void const *a, void const *b)
+typedef GB_COMPARE_PROC(gbCompareProc);
+
+
+GB_DEF void gb_qsort(void *base, isize count, isize size, gbCompareProc compare_proc);
+
+// NOTE(bill): Returns index
+GB_DEF isize gb_binary_search(void const *base, isize count, isize size, void const *key, gbCompareProc compare_proc);
 
 
 
@@ -904,9 +920,13 @@ GB_DEF void gb_to_lower(char *str);
 GB_DEF void gb_to_upper(char *str);
 
 GB_DEF isize  gb_strlen(char const *str);
+GB_DEF isize  gb_strnlen(char const *str, isize max_len);
 GB_DEF i32    gb_strcmp(char const *s1, char const *s2);
 GB_DEF char * gb_strncpy(char *dest, char const *source, isize len);
 GB_DEF i32    gb_strncmp(char const *s1, char const *s2, isize len);
+
+GB_DEF isize gb_utf8_strlen(char const *str);
+GB_DEF isize gb_utf8_strnlen(char const *str, isize max_len);
 
 GB_DEF char const *gb_first_occurence_of_char(char const *s1, char c);
 GB_DEF char const *gb_last_occurence_of_char(char const *s1, char c);
@@ -925,6 +945,10 @@ GB_DEF void gb_cstr_concat(char *dest, isize dest_len,
 
 GB_DEF char16 *gb_utf8_to_utf16(char16 *buffer, char *str, isize len);
 GB_DEF char *  gb_utf16_to_utf8(char *buffer, char16 *str, isize len);
+
+// NOTE(bill): Returns size of codepoint in bytes
+GB_DEF isize gb_utf8_decode(char const *str, char32 *codepoint);
+GB_DEF isize gb_utf8_decode_len(char const *str, isize str_len, char32 *codepoint);
 
 
 ////////////////////////////////////////////////////////////////
@@ -1733,7 +1757,7 @@ gb_destory_thread(gbThread *t)
 }
 
 
-gb_internal void
+gb_inline void
 gb__run_thread(gbThread *t)
 {
 	gb_post_semaphore(&t->semaphore, 1);
@@ -1741,9 +1765,9 @@ gb__run_thread(gbThread *t)
 }
 
 #if defined(GB_SYSTEM_WINDOWS)
-	gb_internal DWORD WINAPI gb__thread_proc(void *arg) { gb__run_thread(cast(gbThread *)arg); return 0; }
+	gb_inline DWORD WINAPI gb__thread_proc(void *arg) { gb__run_thread(cast(gbThread *)arg); return 0; }
 #else
-	gb_internal void *gb__thread_proc(void *arg) { gb__run_thread(cast(gbThread *)arg); return NULL; }
+	gb_inline void *gb__thread_proc(void *arg) { gb__run_thread(cast(gbThread *)arg); return NULL; }
 #endif
 
 gb_inline void gb_start_thread(gbThread *t, gbThreadProc *proc, void *data) { gb_start_thread_with_stack(t, proc, data, 0); }
@@ -2111,7 +2135,43 @@ GB_ALLOCATOR_PROC(gb_pool_allocator_proc)
 }
 
 
+void
+gb_qsort(void *base, isize count, isize size, gbCompareProc compare_proc)
+{
+	qsort(base, count, size, compare_proc);
+}
 
+
+
+isize
+gb_binary_search(void const *base, isize count, isize size, void const *key, gbCompareProc compare_proc)
+{
+	isize start = 0, end = count;
+	isize result;
+
+	while (start < end) {
+		isize mid = start + (end-start)/2;
+
+		result = compare_proc(key, cast(u8 *)base + mid*size);
+		if (result < 0)
+			end = mid;
+		else if (result > 0)
+			start = mid+1;
+		else
+			return mid;
+	}
+
+	return 0; // TODO(bill): Should this be -1?
+}
+
+
+
+
+////////////////////////////////////////////////////////////////
+//
+// Char things
+//
+//
 
 
 
@@ -2213,6 +2273,42 @@ gb_strlen(char const *str)
 	}
 	return result;
 }
+
+gb_inline isize
+gb_strnlen(char const *str, isize max_len)
+{
+	isize result = 0;
+	if (str) {
+		char const *end = str;
+		while (*end && result < max_len) end++;
+		result = end - str;
+	}
+	return result;
+}
+
+
+gb_inline isize
+gb_utf8_strlen(char const *str)
+{
+	isize result = 0;
+	for (; *str; str++) {
+		if ((*str & 0xc0) != 0x80)
+			result++;
+	}
+	return result;
+}
+
+gb_inline isize
+gb_utf8_strnlen(char const *str, isize max_len)
+{
+	isize result = 0;
+	for (; *str && result < max_len; str++) {
+		if ((*str & 0xc0) != 0x80)
+			result++;
+	}
+	return result;
+}
+
 
 gb_inline i32
 gb_strcmp(char const *s1, char const *s2)
@@ -2605,6 +2701,77 @@ gb_utf16_to_utf8(char *buffer, char16 *str, isize len)
 }
 
 
+#define GB_UTF_SIZE 4
+#define GB_UTF_INVALID 0xfffd
+
+gb_global u8     const gb_utfbyte[GB_UTF_SIZE+1] = {0x80, 0, 0xc0, 0xe0, 0xf0};
+gb_global u8     const gb_utfmask[GB_UTF_SIZE+1] = {0xc0, 0x80, 0xe0, 0xf0, 0xf8};
+gb_global char32 const gb_utfmin[GB_UTF_SIZE+1]  = {0, 0, 0x80, 0x800, 0x10000};
+gb_global char32 const gb_utfmax[GB_UTF_SIZE+1]  = {0x10ffff, 0x7f, 0x7ff, 0xffff, 0x10ffff};
+
+gb_internal isize
+gb__utf_validate(char32 *c, isize i)
+{
+	GB_ASSERT_NOT_NULL(c);
+	if (!c) return 0;
+	if (!gb_is_between(*c, gb_utfmin[i], gb_utfmax[i]) ||
+	     gb_is_between(*c, 0xd800, 0xdfff)) {
+		*c = GB_UTF_INVALID;
+	}
+	i = 1;
+	while (*c > gb_utfmax[i]) {
+		i++;
+	}
+	return i;
+}
+
+gb_internal char32
+gb__utf_decode_byte(char c, isize *i)
+{
+	GB_ASSERT_NOT_NULL(i);
+	if (!i) return 0;
+	for (*i = 0; *i < gb_count_of(gb_utfmask); (*i)++) {
+		if ((cast(u8)c & gb_utfmask[*i]) == gb_utfbyte[*i])
+			return cast(u8)(c & ~gb_utfmask[*i]);
+	}
+	return 0;
+}
+
+gb_inline isize gb_utf8_decode(char const *str, char32 *codepoint) { return gb_utf8_decode_len(str, gb_strlen(str), codepoint); }
+
+isize
+gb_utf8_decode_len(char const *s, isize str_len, char32 *c)
+{
+	isize i, j, len, type = 0;
+	char32 cd;
+
+	GB_ASSERT_NOT_NULL(s);
+	GB_ASSERT_NOT_NULL(c);
+
+	if (!s || !c) return 0;
+	if (!str_len) return 0;
+	*c = GB_UTF_INVALID;
+
+	cd = gb__utf_decode_byte(s[0], &len);
+	if (!gb_is_between(len, 1, GB_UTF_SIZE))
+		return 1;
+
+	for (i = 1, j = 1; i < str_len && j < len; i++, j++) {
+		cd = (cd << 6) | gb__utf_decode_byte(s[i], &type);
+		if (type != 0)
+			return j;
+	}
+	if (j < len)
+		return 0;
+	*c = cd;
+	gb__utf_validate(c, len);
+	return len;
+}
+
+
+
+
+
 
 
 gb_no_inline void
@@ -2935,20 +3102,19 @@ gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) 
 
 gb_inline u64 gb_rdtsc(void) { return __rdtsc(); }
 
-gb_global LARGE_INTEGER gb__win32_perf_count_freq = {0};
-
 gb_inline f64
 gb_time_now(void)
 {
+	gb_local_persist LARGE_INTEGER win32_perf_count_freq = {0};
 	f64 result;
 	LARGE_INTEGER counter;
-	if (!gb__win32_perf_count_freq.QuadPart)
-		QueryPerformanceFrequency(&gb__win32_perf_count_freq);
-	GB_ASSERT(gb__win32_perf_count_freq.QuadPart != 0);
+	if (!win32_perf_count_freq.QuadPart)
+		QueryPerformanceFrequency(&win32_perf_count_freq);
+	GB_ASSERT(win32_perf_count_freq.QuadPart != 0);
 
 	QueryPerformanceCounter(&counter);
 
-	result = counter.QuadPart / cast(f64)(gb__win32_perf_count_freq.QuadPart);
+	result = counter.QuadPart / cast(f64)(win32_perf_count_freq.QuadPart);
 	return result;
 }
 

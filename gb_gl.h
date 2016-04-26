@@ -61,9 +61,16 @@ CREDITS
 #include "gb_math.h"
 #endif
 
-
 #ifndef STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+#endif
+
+#ifndef STB_RECT_PACK_IMPLEMENTATION
+#include "stb_rect_pack.h"
+#endif
+
+#ifndef STB_TRUETYPE_IMPLEMENTATION
+#include "stb_truetype.h"
 #endif
 
 
@@ -329,13 +336,13 @@ GBGL_DEF i32 gbgl_get_uniform(gbglShader *shader, char const *name);
 #ifndef GBGL_UNIFORM_SET
 #define GBGL_UNIFORM_SET
 
-#define gbgl_set_uniform_int(loc, i)                 glUniform1i(loc, i)
-#define gbgl_set_uniform_float(loc, f)               glUniform1f(loc, f)
-#define gbgl_set_uniform_vec2(loc, v)                glUniform2fv(loc, 1, &v.x)
-#define gbgl_set_uniform_vec3(loc, v)                glUniform3fv(loc, 1, &v.x)
-#define gbgl_set_uniform_vec4(loc, v)                glUniform4fv(loc, 1, &v.x)
-#define gbgl_set_uniform_mat4(loc, mat)              glUniformMatrix4fv(loc, 1, false, mat)
-#define gbgl_set_uniform_mat4_count(loc, mat, count) glUniformMatrix4fv(loc, count, false, mat)
+#define gbgl_set_uniform_int(shdr, name, i)                 glUniform1i       (gbgl_get_uniform(shdr, name), i)
+#define gbgl_set_uniform_float(shdr, name, f)               glUniform1f       (gbgl_get_uniform(shdr, name), f)
+#define gbgl_set_uniform_vec2(shdr, name, v)                glUniform2fv      (gbgl_get_uniform(shdr, name), 1, &v.x)
+#define gbgl_set_uniform_vec3(shdr, name, v)                glUniform3fv      (gbgl_get_uniform(shdr, name), 1, &v.x)
+#define gbgl_set_uniform_vec4(shdr, name, v)                glUniform4fv      (gbgl_get_uniform(shdr, name), 1, &v.x)
+#define gbgl_set_uniform_mat4(shdr, name, mat)              glUniformMatrix4fv(gbgl_get_uniform(shdr, name), 1,     false, mat)
+#define gbgl_set_uniform_mat4_count(shdr, name, mat, count) glUniformMatrix4fv(gbgl_get_uniform(shdr, name), count, false, mat)
 
 #endif
 
@@ -419,6 +426,110 @@ GBGL_DEF void gbgl_destroy_render_buffer(gbglRenderBuffer *rb);
 GBGL_DEF void gbgl_render_to_buffer(gbglRenderBuffer const *rb);
 GBGL_DEF void gbgl_render_to_screen(i32 width, i32 height);
 
+
+////////////////////////////////////////////////////////////////
+//
+// Font Stuff
+//
+//
+
+
+typedef struct gbglGlyphMapKVPair {
+	char32 codepoint;
+	u16    index;
+} gbglGlyphMapKVPair;
+
+typedef struct gbglGlyphInfo {
+	f32 s0, t0, s1, t1;
+	i16 xoff, yoff;
+	f32 xadv;
+} gbglGlyphInfo;
+
+typedef struct gbglKernPair {
+	union {
+		i32 packed;
+		struct { u16 i0, i1; };
+	};
+	f32 kern;
+} gbglKernPair;
+
+typedef enum gbglJustifyType {
+	GBGL_JUSTIFY_LEFT,
+	GBGL_JUSTIFY_CENTRE,
+	GBGL_JUSTIFY_RIGHT,
+} gbglJustifyType;
+
+typedef enum gbglTextParamType {
+	GBGL_TEXT_PARAM_INVALID,
+	GBGL_TEXT_PARAM_MAX_WIDTH,
+	GBGL_TEXT_PARAM_JUSTIFY,
+	GBGL_TEXT_PARAM_TEXTURE_FILTER,
+
+	GBGL_TEXT_PARAM_COUNT,
+} gbglTextParamType;
+
+typedef struct gbglTextParam {
+	gbglTextParamType type;
+	union {
+		f32    val_f32;
+		i32    val_i32;
+		gbVec2 val_vec2;
+	};
+} gbglTextParam;
+
+typedef struct gbglFont {
+	isize glyph_count;
+	isize kern_pair_count;
+	i32 bitmap_width, bitmap_height;
+	f32 size;
+	i32 ascent, descent, line_gap;
+	char *ttf_filename;
+	gbglTexture texture;
+
+	gbglGlyphMapKVPair *glyph_map;
+	gbglGlyphInfo *glyphs;
+	gbglKernPair *kern_table;
+	struct gbglFont *next;
+} gbglFont;
+
+typedef struct gbglFontCachedTTF {
+	char *                    name;
+	u8 *                      ttf;
+	stbtt_fontinfo            finfo;
+	struct gbglFontCachedTTF *next;
+} gbglFontCachedTTF;
+
+typedef struct gbglFontCache {
+	isize font_char_list_count;
+	char *font_char_list;
+
+	isize   codepoint_count;
+	char32 *codepoints;
+
+	stbtt_pack_range *ranges;
+	stbtt_packedchar *packed_char_data;
+	stbrp_rect *      rect_cache;
+
+	gbglFontCachedTTF *ttf_buffer;
+	gbglFont *         fonts;
+} gbglFontCache;
+
+
+GBGL_DEF gbglFont *gbgl_get_font     (gbglFontCache *fc, char const *ttf_filename, f32 font_size);
+GBGL_DEF gbglFont *gbgl_get_font_only(gbglFontCache *fc, char const *ttf_filename, f32 font_size);
+GBGL_DEF gbglFont *gbgl_cache_font   (gbglFontCache *fc, char const *ttf_filename, f32 font_size);
+
+GBGL_DEF i32 gbgl_font_glyph_map_search_proc(void const *a, void const *b);
+
+GBGL_DEF b32            gbgl_get_packed_font_dim                 (gbglFontCache *cache, gbglFontCachedTTF *ttf, i32 *width, i32 *height);
+GBGL_DEF gbglGlyphInfo *gbgl_get_glyph_info                      (gbglFont *font, char32 codepoint, isize *out_index);
+GBGL_DEF f32            gbgl_get_font_kern_amt_from_glyph_indices(gbglFont *font, isize left_index, isize right_index);
+GBGL_DEF void           gbgl_get_string_dimenstions              (gbglFont *font, char const *str, f32 *out_width, f32 *out_height);
+GBGL_DEF f32            gbgl_get_sub_string_width                (gbglFont *font, char const *str, isize char_count);
+GBGL_DEF i32            gbgl_get_wrapped_line_count              (gbglFont *font, char const *str, isize max_len, isize max_width);
+GBGL_DEF f32            gbgl_get_string_width                    (gbglFont *font, char const *str, isize max_len);
+
+
 ////////////////////////////////////////////////////////////////
 //
 // Basic State
@@ -426,20 +537,34 @@ GBGL_DEF void gbgl_render_to_screen(i32 width, i32 height);
 //
 
 
-typedef struct gbglBasicVertex {
-	f32 x, y;
-	f32 u, v;
-} gbglBasicVertex;
-
-
 #ifndef GBGL_BS_MAX_VERTEX_COUNT
 #define GBGL_BS_MAX_VERTEX_COUNT 32
 #endif
 
-
 #ifndef GBGL_BS_MAX_INDEX_COUNT
 #define GBGL_BS_MAX_INDEX_COUNT 6
 #endif
+
+#ifndef GBGL_MAX_RENDER_STRING_LENGTH
+#define GBGL_MAX_RENDER_STRING_LENGTH 4096
+#endif
+
+#ifndef GBGL_TEXT_PARAM_STACK_SIZE
+#define GBGL_TEXT_PARAM_STACK_SIZE 128
+#endif
+
+#ifndef GBGL_FONT_CHAR_LIST
+#define GBGL_FONT_CHAR_LIST "ĀāăĄąĆćĈĉĊċČčĎďĐđĒēĔĕĖėĘęĚěĜĝĞğĠġĢģĤĥĨĩĪīĬĭĮįİıĲĳĴĵĶķĸĹĺĻļĽľŁłŃńŅņņŇňŉŊŋŌōōŎŏŐőŒœŕŖŗŘřŚśŜŝŞşŠšŢţŤťŨũŪūŬŭŮůŰűŲųŴŵŶŷŸŹźŻżŽža!ö\"#$%%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~Šš?ŒœŸÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõøùúûüýþÿ®™"
+#endif
+
+#ifndef GBGL_PT_TO_PX_SCALE
+#define GBGL_PT_TO_PX_SCALE (96.0f / 72.0f)
+#endif
+
+typedef struct gbglBasicVertex {
+	f32 x, y;
+	f32 u, v;
+} gbglBasicVertex;
 
 typedef struct gbglBasicState {
 	gbglBasicVertex vertices[GBGL_BS_MAX_VERTEX_COUNT];
@@ -454,8 +579,19 @@ typedef struct gbglBasicState {
 	gbMat4 ortho_mat;
 	i32 width, height;
 
-} gbglBasicState;
+	gbglFontCache   font_cache;
+	gbglShader      font_shader;
+	gbglBasicVertex font_vertices[GBGL_MAX_RENDER_STRING_LENGTH * 4];
+	u16             font_indices[GBGL_MAX_RENDER_STRING_LENGTH * 6];
+	u32             font_vao, font_vbo, font_ebo;
+	char            font_text_buffer[GBGL_MAX_RENDER_STRING_LENGTH * 4]; // NOTE(bill): Maximum of 4 bytes per char for utf-8
+	u32             font_samplers[2];
 
+	gbglTextParam text_param_stack[GBGL_TEXT_PARAM_STACK_SIZE];
+	isize         text_param_stack_count;
+	gbglTextParam text_params[GBGL_TEXT_PARAM_COUNT];
+
+} gbglBasicState;
 
 GBGL_DEF void gbgl_bs_init(gbglBasicState *bs, i32 window_width, i32 window_height);
 GBGL_DEF void gbgl_bs_set_resolution(gbglBasicState *bs, i32 window_width, i32 window_height);
@@ -464,17 +600,18 @@ GBGL_DEF void gbgl_bs_end(gbglBasicState *bs);
 
 GBGL_DEF void gbgl_bs_draw_textured_rect(gbglBasicState *bs, gbglTexture *tex, gbVec2 pos, gbVec2 dim, b32 v_up);
 GBGL_DEF void gbgl_bs_draw_rect(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, gbColour col);
-GBGL_DEF void gbgl_bs_draw_outlined_rect(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, gbColour col, f32 thickness);
+GBGL_DEF void gbgl_bs_draw_rect_outline(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, gbColour col, f32 thickness);
 GBGL_DEF void gbgl_bs_draw_quad(gbglBasicState *bs,
-                                   gbVec2 p0, gbVec2 p1, gbVec2 p2, gbVec2 p3,
-                                   gbColour col);
-GBGL_DEF void gbgl_bs_draw_outlined_quad(gbglBasicState *bs,
-                                            gbVec2 p0, gbVec2 p1, gbVec2 p2, gbVec2 p3,
-                                            gbColour col, f32 thickness);
+                                gbVec2 p0, gbVec2 p1, gbVec2 p2, gbVec2 p3,
+                                gbColour col);
+GBGL_DEF void gbgl_bs_draw_quad_outline(gbglBasicState *bs,
+                                        gbVec2 p0, gbVec2 p1, gbVec2 p2, gbVec2 p3,
+                                        gbColour col, f32 thickness);
 
 GBGL_DEF void gbgl_bs_draw_line(gbglBasicState *bs, gbVec2 p0, gbVec2 p1, gbColour col, f32 thickness);
 GBGL_DEF void gbgl_bs_draw_circle(gbglBasicState *bs, gbVec2 p, f32 radius, gbColour col);
-GBGL_DEF void gbgl_bs_draw_outlined_circle(gbglBasicState *bs, gbVec2 p, f32 radius, gbColour col, f32 thickness);
+GBGL_DEF void gbgl_bs_draw_circle_outline(gbglBasicState *bs, gbVec2 p, f32 radius, gbColour col, f32 thickness);
+
 
 
 #if defined(__cplusplus)
@@ -1132,6 +1269,514 @@ gbgl_destroy_texture(gbglTexture *t)
 
 
 
+////////////////////////////////////////////////////////////////
+//
+// Font
+//
+//
+
+gb_inline i32
+gbgl__sort_kern_pair(void const *a, void const *b)
+{
+	gbglKernPair *kp0 = cast(gbglKernPair *)a;
+	gbglKernPair *kp1 = cast(gbglKernPair *)b;
+	return kp0->packed - kp1->packed;
+}
+
+
+gb_inline i32
+gbgl__glypth_map_sort(void const *a, void const *b)
+{
+	gbglGlyphMapKVPair g0 = *cast(gbglGlyphMapKVPair *)a;
+	gbglGlyphMapKVPair g1 = *cast(gbglGlyphMapKVPair *)b;
+	return g0.codepoint - g1.codepoint;
+}
+
+
+b32
+gbgl_get_packed_font_dim(gbglFontCache *cache, gbglFontCachedTTF *ttf, i32 *width, i32 *height)
+{
+	b32 result = true;
+	stbtt_pack_context spc;
+	b32 ext_w = true;
+	isize sanity_counter = 0, i, j;
+	*width = *height = (1<<5);
+	for (j = 0; j < cache->codepoint_count; j++) {
+		cache->rect_cache[j].x = cache->rect_cache[j].y = 0;
+	}
+
+	for (;;) {
+		i32 res = stbtt_PackBegin(&spc, 0, *width, *height, 0, 1, 0);
+		GB_ASSERT(res == 1);
+		if (res != 1) {
+			return false;
+		} else {
+			stbrp_context *rp_ctx;
+			b32 fit = true;
+
+			gb_zero_array(cache->rect_cache, cache->codepoint_count);
+			rp_ctx = cast(stbrp_context *)spc.pack_info;
+			stbtt_PackFontRangesGatherRects(&spc, &ttf->finfo, cache->ranges, cache->codepoint_count, cache->rect_cache);
+			STBRP_SORT(cache->rect_cache, cache->codepoint_count, gb_size_of(cache->rect_cache[0]), rect_height_compare);
+
+			for (i = 0; i < cache->codepoint_count; i++) {
+				stbrp__findresult fr = stbrp__skyline_pack_rectangle(rp_ctx, cache->rect_cache[i].w, cache->rect_cache[i].h);
+				if (fr.prev_link) {
+					cache->rect_cache[i].x = cast(stbrp_coord)fr.x;
+					cache->rect_cache[i].y = cast(stbrp_coord)fr.y;
+				} else {
+					int res;
+					if (ext_w) {
+						ext_w = false;
+						*width <<= 1;
+					} else {
+						ext_w = true;
+						*height <<= 1;
+					}
+					fit = false;
+					for (j = 0; j < cache->codepoint_count; j++) {
+						cache->rect_cache[j].x = cache->rect_cache[j].y = 0;
+					}
+					stbtt_PackEnd(&spc);
+					res = stbtt_PackBegin(&spc, 0, *width, *height, 0, 1, 0);
+					GB_ASSERT(res == 1);
+					if (res != 1) {
+						result = false;
+						goto done;
+					}
+					break;
+				}
+			}
+			if (fit) {
+				result = true;
+				goto done;
+			}
+			if (++sanity_counter > 32) {
+				result = false;
+				goto done;
+			}
+		}
+	}
+
+done:
+	stbtt_PackEnd(&spc);
+
+	return result;
+}
+
+
+gb_inline gbglFont *
+gbgl_get_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
+{
+	gbglFont *f = gbgl_get_font_only(fc, ttf_filename, font_size);
+	if (f) {
+		return f;
+	} else {
+		return gbgl_cache_font(fc, ttf_filename, font_size);
+	}
+}
+
+
+gb_inline gbglFont *
+gbgl_get_font_only(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
+{
+	gbglFont *f = fc->fonts;
+	while (f) {
+		if (f->size == font_size && gb_strcmp(ttf_filename, f->ttf_filename) == 0) {
+			return f;
+		}
+		f = f->next;
+	}
+	return NULL;
+}
+
+gbglFont *
+gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
+{
+	gbglFontCache *font_cache = fc;
+	gbglFont *f = gbgl_get_font_only(fc, ttf_filename, font_size);
+	gbglFontCachedTTF *ttf = NULL;
+	isize i;
+
+	if (f)
+		return f;
+
+	if (!font_cache->fonts) {
+		font_cache->fonts = cast(gbglFont *)gbgl_malloc(gb_size_of(gbglFont));
+		f = font_cache->fonts;
+	} else {
+		f = font_cache->fonts;
+		while (f && f->next)
+			f = f->next;
+		f->next = cast(gbglFont *)gbgl_malloc(gb_size_of(gbglFont));
+		f = f->next;
+	}
+	GB_ASSERT_NOT_NULL(f);
+	if (!f)
+		return NULL;
+
+	gb_zero_struct(f);
+
+	// NOTE(bill): Make sure the character list file has been loaded
+	if (!font_cache->font_char_list) {
+		isize codepoint_count = 0, cpi = 0;
+		font_cache->font_char_list = GBGL_FONT_CHAR_LIST;
+		font_cache->font_char_list_count = gb_strlen(GBGL_FONT_CHAR_LIST);
+
+		for (i = 0; i < font_cache->font_char_list_count; i++) {
+			char32 c;
+			isize utf8_len = gb_utf8_decode_len(font_cache->font_char_list + i, font_cache->font_char_list_count, &c);
+			i += utf8_len-1;
+			codepoint_count++;
+		}
+
+		font_cache->codepoint_count = codepoint_count;
+		font_cache->ranges           = cast(stbtt_pack_range *)gbgl_malloc(gb_size_of(stbtt_pack_range) * codepoint_count);
+		font_cache->codepoints       = cast(char32 *)          gbgl_malloc(gb_size_of(char32)           * codepoint_count);
+		font_cache->packed_char_data = cast(stbtt_packedchar *)gbgl_malloc(gb_size_of(stbtt_packedchar) * codepoint_count);
+		font_cache->rect_cache       = cast(stbrp_rect *)      gbgl_malloc(gb_size_of(stbrp_rect)       * codepoint_count);
+
+		if (!font_cache->ranges || !font_cache->codepoints || !font_cache->packed_char_data) {
+			gb_fprintf(stderr, "Unable to get memory for fonts");
+		}
+
+		for (i = 0; i < font_cache->font_char_list_count; i++) {
+			isize utf8_len = gb_utf8_decode_len(font_cache->font_char_list+i, font_cache->font_char_list_count, font_cache->codepoints+cpi);
+			i += utf8_len-1;
+			cpi++;
+		}
+		GB_ASSERT(cpi == font_cache->codepoint_count);
+		for (i = 0; i < font_cache->codepoint_count; i++) {
+			font_cache->ranges[i].first_unicode_codepoint_in_range = font_cache->codepoints[i];
+			font_cache->ranges[i].array_of_unicode_codepoints = 0;
+			font_cache->ranges[i].num_chars = 1;
+			font_cache->ranges[i].chardata_for_range = font_cache->packed_char_data + i;
+		}
+	}
+
+	{
+		gbglFontCachedTTF **ttf_cache = &font_cache->ttf_buffer;
+
+		while (*ttf_cache) {
+			if (gb_strcmp((*ttf_cache)->name, ttf_filename) == 0)
+				break;
+			ttf_cache = &(*ttf_cache)->next;
+		}
+		if (!*ttf_cache) {
+			isize name_len;
+
+			*ttf_cache = cast(gbglFontCachedTTF *)gbgl_malloc(gb_size_of(gbglFontCachedTTF));
+			GB_ASSERT_NOT_NULL(*ttf_cache);
+			(*ttf_cache)->name = NULL;
+			(*ttf_cache)->ttf  = NULL;
+			gb_zero_struct(&(*ttf_cache)->finfo);
+			(*ttf_cache)->next = NULL;
+
+
+			name_len = gb_strlen(ttf_filename);
+			(*ttf_cache)->name = cast(char *)gbgl_malloc(name_len+1);
+			gb_strncpy((*ttf_cache)->name, ttf_filename, name_len);
+			(*ttf_cache)->name[name_len] = '\0';
+
+			{
+				gbFile file;
+
+				if (gb_open_file(&file, ttf_filename)) {
+					i64 len = gb_file_size(&file);
+					(*ttf_cache)->ttf = cast(u8 *)gbgl_malloc(len);
+					GB_ASSERT_NOT_NULL((*ttf_cache)->ttf);
+
+					gb_file_read_at(&file, (*ttf_cache)->ttf, len, 0);
+
+					gb_close_file(&file);
+				} else {
+					GB_PANIC("Could not open ttf file: %s", ttf_filename);
+				}
+
+				stbtt_InitFont(&(*ttf_cache)->finfo, (*ttf_cache)->ttf, stbtt_GetFontOffsetForIndex((*ttf_cache)->ttf, 0));
+			}
+		}
+		ttf = *ttf_cache;
+		GB_ASSERT_NOT_NULL(ttf);
+	}
+
+	// NOTE(bill): Set the range for the this look up
+	for (i = 0; i < font_cache->codepoint_count; i++)
+		font_cache->ranges[i].font_size = font_size;
+
+	{ // NOTE(bill): Figure out smallest non-square power of 2 texture size
+		i32 w, h;
+		if (gbgl_get_packed_font_dim(font_cache, ttf, &w, &h)) {
+			isize str_len, i, j;
+
+			// NOTE(bill): Setup the font data
+			f->glyph_count   = font_cache->codepoint_count;
+			f->bitmap_width  = w;
+			f->bitmap_height = h;
+			f->size          = font_size;
+
+			str_len = gb_strlen(ttf_filename);
+			f->ttf_filename = cast(char *)gbgl_malloc(str_len+1);
+			gb_strncpy(f->ttf_filename, ttf_filename, str_len);
+
+			f->glyph_map = cast(gbglGlyphMapKVPair *)gbgl_malloc(gb_size_of(*f->glyph_map) * f->glyph_count);
+			f->glyphs    = cast(gbglGlyphInfo *)     gbgl_malloc(gb_size_of(*f->glyphs)    * f->glyph_count);
+			if (!f->glyph_map || !f->glyphs) {
+				f = NULL;
+				return f;
+			} else {
+				stbtt_pack_context spc;
+				u8 *px;
+				i32 res;
+				f32 scale;
+
+				px = cast(u8 *)gbgl_malloc(w * h);
+				res = stbtt_PackBegin(&spc, px, w, h, 0, 1, 0);
+				GB_ASSERT(res == 1);
+				res = stbtt_PackFontRanges(&spc, ttf->ttf, 0, font_cache->ranges, font_cache->codepoint_count);
+				GB_ASSERT(res == 1);
+				stbtt_PackEnd(&spc);
+
+				gbgl_load_texture2d_from_memory(&f->texture, px, w, h, 1);
+
+				gbgl_free(px);
+
+				scale = stbtt_ScaleForPixelHeight(&ttf->finfo, font_size);
+				stbtt_GetFontVMetrics(&ttf->finfo, &f->ascent, &f->descent, &f->line_gap);
+				f->ascent   = cast(i32)(cast(f32)f->ascent   * scale);
+				f->descent  = cast(i32)(cast(f32)f->descent  * scale);
+				f->line_gap = cast(i32)(cast(f32)f->line_gap * scale);
+
+				for (i = 0; i < f->glyph_count; i++) {
+					gbglGlyphInfo *gi = f->glyphs + i;
+					gi->s0 = cast(f32)font_cache->packed_char_data[i].x0;
+					gi->t0 = cast(f32)font_cache->packed_char_data[i].y0;
+					gi->s1 = cast(f32)font_cache->packed_char_data[i].x1;
+					gi->t1 = cast(f32)font_cache->packed_char_data[i].y1;
+
+					gi->xoff = cast(i16)font_cache->packed_char_data[i].xoff;
+					gi->yoff = cast(i16)font_cache->packed_char_data[i].yoff;
+					gi->xadv = font_cache->packed_char_data[i].xadvance;
+				}
+
+				for (i = 0; i < f->glyph_count; i++) {
+					f->glyph_map[i].codepoint = font_cache->codepoints[i];
+					f->glyph_map[i].index = i;
+				}
+
+				gb_qsort(f->glyph_map, f->glyph_count, gb_size_of(*f->glyph_map), gbgl__glypth_map_sort);
+
+				{ // Kerning Table
+					isize kps_count = 0;
+					for (i = 0; i < f->glyph_count; i++) {
+						for (j = 0; j < f->glyph_count; j++) {
+							i32 kern = stbtt_GetCodepointKernAdvance(&ttf->finfo, font_cache->codepoints[i], font_cache->codepoints[j]);
+							if (kern != 0)
+								kps_count++;
+						}
+					}
+					f->kern_pair_count = kps_count;
+					if (kps_count > 0) {
+						int ikp = 0;
+						f->kern_table = cast(gbglKernPair *)gbgl_malloc(gb_size_of(*f->kern_table) * kps_count);
+						for (i = 0; i < f->glyph_count; i++) {
+							for (j = 0; j < f->glyph_count; j++) {
+								isize kern = stbtt_GetCodepointKernAdvance(&ttf->finfo, font_cache->codepoints[i], font_cache->codepoints[j]);
+								if (kern != 0) {
+									gbglKernPair *kp = f->kern_table + ikp++;
+									kp->i0 = cast(u16)i;
+									kp->i1 = cast(u16)j;
+									kp->kern = cast(f32)kern * scale;
+								}
+							}
+						}
+						gb_qsort(f->kern_table, f->kern_pair_count, gb_size_of(f->kern_table[0]), gbgl__sort_kern_pair);
+					}
+				}
+			}
+		} else {
+			GB_PANIC("Failure loading font");
+			gb_zero_struct(&f);
+		}
+	}
+	return f;
+}
+
+
+gb_inline i32
+gbgl_font_glyph_map_search_proc(void const *a, void const *b)
+{
+	gbglGlyphMapKVPair const *gm = cast(gbglGlyphMapKVPair const *)a;
+	char32 ucp = *cast(char32 const *)b;
+	return cast(i32)(cast(i64)gm->codepoint - cast(i64)ucp);
+}
+
+gbglGlyphInfo *
+gbgl_get_glyph_info(gbglFont *font, char32 codepoint, isize *out_index)
+{
+	isize index = gb_binary_search(font->glyph_map, font->glyph_count, gb_size_of(*font->glyph_map), &codepoint, gbgl_font_glyph_map_search_proc);
+	if (index >= 0) {
+		GB_ASSERT(codepoint == font->glyph_map[index].codepoint);
+		if (out_index)
+			*out_index = font->glyph_map[index].index;
+		return font->glyphs + font->glyph_map[index].index;
+	}
+	return NULL;
+}
+
+f32
+gbgl_get_font_kern_amt_from_glyph_indices(gbglFont *font, isize left_index, isize right_index)
+{
+	isize needle = (right_index << 16) | (left_index & 0xff);
+
+	isize f = 0;
+	isize l = font->kern_pair_count - 1;
+	isize m = (f + l) >> 1;
+
+	while (f <= l) {
+		isize cmp = font->kern_table[m].packed - needle;
+		if (cmp < 0)
+			f = m + 1;
+		else if (cmp > 0)
+			l = m - 1;
+		else
+			return font->kern_table[m].kern;
+		m = (f + l) >> 1;
+	}
+	return 0.0f;
+}
+
+void
+gbgl_get_string_dimenstions(gbglFont *font, char const *str, f32 *out_width, f32 *out_height)
+{
+	isize len, char_count, i;
+
+	f32 w = 0.0f;
+	f32 h = 0.0f;
+	char const *ptr = str;
+
+	len = gb_strlen(str);
+	char_count = gb_utf8_strnlen(str, len);
+
+	for (i = 0; i < char_count; i++) {
+		char32 cp;
+		isize byte_len, curr_index;
+		gbglGlyphInfo *gi;
+
+		byte_len = gb_utf8_decode_len(ptr, len-(ptr-str), &cp);
+		ptr += byte_len;
+		gi = gbgl_get_glyph_info(font, cp, &curr_index);
+		if (gi) {
+			f32 kern = 0;
+			if (i < char_count-1) {
+				isize next_index;
+				char32 next_cp = 0;
+				gbglGlyphInfo *ngi;
+				gb_utf8_decode_len(ptr, len-(ptr-str), &next_cp);
+				ngi = gbgl_get_glyph_info(font, next_cp, &next_index);
+				if (ngi) kern = gbgl_get_font_kern_amt_from_glyph_indices(font, curr_index, next_index);
+			}
+			w += gi->xadv + kern;
+		}
+	}
+
+	if (out_width)  *out_width  = w;
+	if (out_height) *out_height = h;
+}
+
+f32
+gbgl_get_sub_string_width(gbglFont *font, char const *str, isize char_count)
+{
+	isize i, len;
+	f32 w = 0;
+	char const *ptr = str;
+	len = gb_strlen(str);
+	for (i = 0; i < char_count; i++) {
+		if (*ptr == 0) {
+			break;
+		} else {
+			char32 cp;
+			isize byte_len, curr_index;
+			f32 kern = 0;
+			gbglGlyphInfo *gi;
+
+			byte_len = gb_utf8_decode_len(ptr, len-(ptr-str), &cp);
+			ptr += byte_len;
+			if (ptr - str > char_count)
+				break;
+
+			gi = gbgl_get_glyph_info(font, cp, &curr_index);
+			if (i < char_count-1) {
+				isize next_index;
+				char32 next_cp = 0;
+				gb_utf8_decode_len(ptr, len-(ptr-str), &next_cp);
+				gbgl_get_glyph_info(font, next_cp, &next_index);
+				kern = gbgl_get_font_kern_amt_from_glyph_indices(font, curr_index, next_index);
+			}
+			w += gi->xadv + kern;
+		}
+
+	}
+	return w;
+}
+
+i32
+gbgl_get_wrapped_line_count(gbglFont *font, char const *str, isize max_len, isize max_width)
+{
+	isize i, str_len, char_count, line_count = 1;
+	f32 w = 0;
+	char const *ptr = str;
+
+	str_len = gb_strnlen(str, max_len);
+	char_count = gb_utf8_strnlen(str, str_len);
+
+	for (i = 0; i < char_count; i++) {
+		char32 cp;
+		isize byte_len, curr_index;
+		gbglGlyphInfo *gi;
+		f32 kern = 0;
+
+		byte_len = gb_utf8_decode_len(ptr, str_len-(ptr-str), &cp);
+		ptr += byte_len;
+		// NOTE(bill): Check calculation here
+		if (ptr-str >= max_len-6)
+			break;
+
+		gi = gbgl_get_glyph_info(font, cp, &curr_index);
+		if (gi) {
+			if (w + gi->xadv >= cast(f32)max_width) {
+				line_count++;
+				w = 0.0f;
+			}
+		}
+
+		if (i < char_count-1) {
+			char32 next_cp;
+			isize next_index;
+			gb_utf8_decode_len(ptr, str_len-(ptr-str), &next_cp);
+
+			gbgl_get_glyph_info(font, next_cp, &next_index);
+			kern = gbgl_get_font_kern_amt_from_glyph_indices(font, curr_index, next_index);
+		}
+
+		if (gi) {
+			w += gi->xadv + kern;
+		}
+	}
+
+	return line_count;
+}
+
+gb_inline f32
+gbgl_get_string_width(gbglFont *font, char const *str, isize max_len)
+{
+	isize len = gb_strnlen(str, max_len);
+	isize char_count = gb_utf8_strnlen(str, len);
+	return gbgl_get_sub_string_width(font, str, char_count);
+}
+
+
+
 
 ////////////////////////////////////////////////////////////////
 //
@@ -1166,7 +1811,7 @@ gbgl_bs_init(gbglBasicState *bs, i32 window_width, i32 window_height)
 	bs->linear_sampler  = gbgl_generate_sampler(GL_LINEAR,  GL_LINEAR,  GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 
 	gbgl_load_shader_vf_from_source(&bs->ortho_tex_shader,
-		"#version 410 core\n"
+		"#version 330 core\n"
 		"layout (location = 0) in vec4 a_position;\n"
 		"layout (location = 1) in vec2 a_tex_coord;\n"
 		"uniform mat4 u_ortho_mat;\n"
@@ -1176,7 +1821,7 @@ gbgl_bs_init(gbglBasicState *bs, i32 window_width, i32 window_height)
 		"	v_tex_coord = a_tex_coord;\n"
 		"}\n",
 
-		"#version 410 core\n"
+		"#version 330 core\n"
 		"precision mediump float;"
 		"in vec2 v_tex_coord;\n"
 		"layout (binding = 0) uniform sampler2D u_tex;\n"
@@ -1186,7 +1831,7 @@ gbgl_bs_init(gbglBasicState *bs, i32 window_width, i32 window_height)
 		"}\n");
 
 	gbgl_load_shader_vf_from_source(&bs->ortho_col_shader,
-		"#version 410 core\n"
+		"#version 330 core\n"
 		"precision mediump float;"
 		"layout (location = 0) in vec4 a_position;\n"
 		"uniform mat4 u_ortho_mat;\n"
@@ -1194,12 +1839,57 @@ gbgl_bs_init(gbglBasicState *bs, i32 window_width, i32 window_height)
 		"	gl_Position = u_ortho_mat * a_position;\n"
 		"}\n",
 
-		"#version 410 core\n"
+		"#version 330 core\n"
 		"uniform vec4 u_colour;\n"
 		"out vec4 o_colour;\n"
 		"void main(void) {\n"
 		"	o_colour = u_colour;\n"
 		"}\n");
+
+
+	gbgl_load_shader_vf_from_source(&bs->font_shader,
+		"#version 330 core\n"
+		"layout (location = 0) in vec4 a_position;\n"
+		"layout (location = 1) in vec2 a_tex_coord;\n"
+		"uniform mat4 u_ortho_mat;\n"
+		"out vec2 v_tex_coord;\n"
+		"void main(void) {\n"
+		"	gl_Position = u_ortho_mat * a_position;\n"
+		"	v_tex_coord = a_tex_coord;\n"
+		"}\n",
+
+		"#version 330 core\n"
+		"in vec2 v_tex_coord;\n"
+		"layout (location = 0) uniform vec4 u_colour;\n"
+		"layout (binding  = 0) uniform sampler2D u_tex;\n"
+		"out vec4 o_colour;\n"
+		"void main(void {\n"
+		"	float alpha = texture2D(u_tex, v_tex_coord).r;\n"
+		"	o_colour = u_colour * alpha;\n"
+		"\n"
+		);
+
+	glGenVertexArrays(1, &bs->font_vao);
+	glBindVertexArray(bs->font_vao);
+
+	bs->font_vbo = gbgl_make_vbo(NULL, gb_size_of(gbglBasicVertex) * GBGL_MAX_RENDER_STRING_LENGTH * 4, GL_DYNAMIC_DRAW);
+
+	for (i = 0; i < GBGL_MAX_RENDER_STRING_LENGTH; i++) {
+		bs->font_indices[i*6 + 0] = i*4 + 0;
+		bs->font_indices[i*6 + 1] = i*4 + 1;
+		bs->font_indices[i*6 + 2] = i*4 + 2;
+		bs->font_indices[i*6 + 3] = i*4 + 2;
+		bs->font_indices[i*6 + 4] = i*4 + 3;
+		bs->font_indices[i*6 + 5] = i*4 + 0;
+	}
+	bs->font_ebo = gbgl_make_ebo(bs->font_indices, gb_size_of(u16) * GBGL_MAX_RENDER_STRING_LENGTH * 6, GL_STATIC_DRAW);
+
+	bs->font_samplers[0] = gbgl_generate_sampler(GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+	bs->font_samplers[1] = gbgl_generate_sampler(GL_LINEAR,  GL_LINEAR,  GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+
+	bs->text_params[GBGL_TEXT_PARAM_MAX_WIDTH].val_i32      = 0;
+	bs->text_params[GBGL_TEXT_PARAM_JUSTIFY].val_i32        = GBGL_JUSTIFY_LEFT;
+	bs->text_params[GBGL_TEXT_PARAM_TEXTURE_FILTER].val_i32 = 0;
 }
 
 void
@@ -1252,7 +1942,7 @@ gbgl_bs_draw_textured_rect(gbglBasicState *bs, gbglTexture *tex, gbVec2 pos, gbV
 	bs->vertices[3].v = v_up ? 1.0f : 0.0f;
 
 	gbgl_use_shader(&bs->ortho_tex_shader);
-	gbgl_set_uniform_mat4(gbgl_get_uniform(&bs->ortho_tex_shader, "u_ortho_mat"), bs->ortho_mat.e);
+	gbgl_set_uniform_mat4(&bs->ortho_tex_shader, "u_ortho_mat", bs->ortho_mat.e);
 	gbgl_bind_texture2d(tex, 0, bs->nearest_sampler);
 
 	gbgl_vbo_copy(bs->vbo, bs->vertices, 4*gb_size_of(bs->vertices[0]), 0);
@@ -1280,15 +1970,15 @@ gbgl_bs_draw_rect(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, gbColour col)
 }
 
 void
-gbgl_bs_draw_outlined_rect(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, gbColour col, f32 thickness)
+gbgl_bs_draw_rect_outline(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, gbColour col, f32 thickness)
 {
-	gbgl_bs_draw_outlined_quad(bs,
-	                           gb_vec2(pos.x,       pos.y),
-	                           gb_vec2(pos.x+dim.x, pos.y),
-	                           gb_vec2(pos.x+dim.x, pos.y+dim.y),
-	                           gb_vec2(pos.x,       pos.y+dim.y),
-	                           col,
-	                           thickness);
+	gbgl_bs_draw_quad_outline(bs,
+	                          gb_vec2(pos.x,       pos.y),
+	                          gb_vec2(pos.x+dim.x, pos.y),
+	                          gb_vec2(pos.x+dim.x, pos.y+dim.y),
+	                          gb_vec2(pos.x,       pos.y+dim.y),
+	                          col,
+	                          thickness);
 }
 
 
@@ -1298,8 +1988,8 @@ gbgl__bs_setup_ortho_colour_state(gbglBasicState *bs, isize vertex_count, gbColo
 	gbVec4 vcol = gb_vec4(col.r/255.0f, col.g/255.0f, col.b/255.0f, col.a/255.0f);
 
 	gbgl_use_shader(&bs->ortho_col_shader);
-	gbgl_set_uniform_mat4(gbgl_get_uniform(&bs->ortho_col_shader, "u_ortho_mat"), bs->ortho_mat.e);
-	gbgl_set_uniform_vec4(gbgl_get_uniform(&bs->ortho_col_shader, "u_colour"), vcol);
+	gbgl_set_uniform_mat4(&bs->ortho_col_shader, "u_ortho_mat", bs->ortho_mat.e);
+	gbgl_set_uniform_vec4(&bs->ortho_col_shader, "u_colour", vcol);
 
 	gbgl_vbo_copy(bs->vbo, bs->vertices, vertex_count*gb_size_of(bs->vertices[0]), 0);
 	gbgl_vert_ptr_aa(0, 2, gbglBasicVertex, x);
@@ -1332,8 +2022,7 @@ gbgl_bs_draw_quad(gbglBasicState *bs,
 }
 
 void
-gbgl_bs_draw_outlined_quad(gbglBasicState *bs,
-                           gbVec2 p0, gbVec2 p1, gbVec2 p2, gbVec2 p3, gbColour col, f32 thickness)
+gbgl_bs_draw_quad_outline(gbglBasicState *bs, gbVec2 p0, gbVec2 p1, gbVec2 p2, gbVec2 p3, gbColour col, f32 thickness)
 {
 	bs->vertices[0].x = p0.x;
 	bs->vertices[0].y = p0.y;
@@ -1388,7 +2077,7 @@ gbgl_bs_draw_circle(gbglBasicState *bs, gbVec2 p, f32 radius, gbColour col)
 }
 
 void
-gbgl_bs_draw_outlined_circle(gbglBasicState *bs, gbVec2 p, f32 radius, gbColour col, f32 thickness)
+gbgl_bs_draw_circle_outline(gbglBasicState *bs, gbVec2 p, f32 radius, gbColour col, f32 thickness)
 {
 	isize i;
 
