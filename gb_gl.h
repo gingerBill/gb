@@ -384,11 +384,11 @@ GBGL_DEF gbglShaderError gbgl_load_shader_from_file      (gbglShader *s, u32 typ
 GBGL_DEF gbglShaderError gbgl_load_shader_from_memory_vf (gbglShader *s, char const *vert_source, char const *frag_source);
 GBGL_DEF gbglShaderError gbgl_load_shader_from_memory_vfg(gbglShader *s, char const *vert_source, char const *frag_source, char const *geom_source);
 
-GBGL_DEF void gbgl_destroy_shader(gbglShader *shader);
+GBGL_DEF void gbgl_destroy_shader    (gbglShader *shader);
 GBGL_DEF b32  gbgl_has_shader_changed(gbglShader *shader);
-GBGL_DEF b32  gbgl_reload_shader(gbglShader *shader); // TODO(bill): Return an error code?
-GBGL_DEF void gbgl_use_shader(gbglShader *shader);
-GBGL_DEF b32  gbgl_is_shader_in_use(gbglShader *shader);
+GBGL_DEF b32  gbgl_reload_shader     (gbglShader *shader); // TODO(bill): Return an error code?
+GBGL_DEF void gbgl_use_shader        (gbglShader *shader);
+GBGL_DEF b32  gbgl_is_shader_in_use  (gbglShader *shader);
 
 GBGL_DEF i32 gbgl_get_uniform(gbglShader *shader, char const *name);
 
