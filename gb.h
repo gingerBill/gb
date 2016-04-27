@@ -1,4 +1,4 @@
-/* gb.h - v0.04 - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.05 - Ginger Bill's C Helper Library - public domain
                 - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -26,6 +26,7 @@ Conventions used:
 
 
 Version History:
+	0.05  - Radix Sort for unsigned integers (TODO: Other primitives)
 	0.04  - Better UTF support and search/sort procs
 	0.03  - Completely change procedure naming convention
 	0.02a - Bug fixes
@@ -895,7 +896,16 @@ typedef GB_COMPARE_PROC(gbCompareProc);
 
 GB_DEF void gb_qsort(void *base, isize count, isize size, gbCompareProc compare_proc);
 
-// NOTE(bill): Returns index
+// NOTE(bill): the count of temp == count of items
+GB_DEF void gb_radix_sort_u8 (u8  *items, isize count, u8  *temp);
+GB_DEF void gb_radix_sort_u16(u16 *items, isize count, u16 *temp);
+GB_DEF void gb_radix_sort_u32(u32 *items, isize count, u32 *temp);
+GB_DEF void gb_radix_sort_u64(u64 *items, isize count, u64 *temp);
+
+
+
+
+// NOTE(bill): Returns index or -1 if not found
 GB_DEF isize gb_binary_search(void const *base, isize count, isize size, void const *key, gbCompareProc compare_proc);
 
 
@@ -2141,6 +2151,145 @@ gb_qsort(void *base, isize count, isize size, gbCompareProc compare_proc)
 {
 	qsort(base, count, size, compare_proc);
 }
+
+void
+gb_radix_sort_u8(u8 *items, isize count, u8 *temp)
+{
+	u8 *source = items;
+	u8 *dest = temp;
+	isize i;
+	isize offsets[256] = {0};
+	i64 total = 0;
+
+	// NOTE(bill): First pass - count how many of each key
+	for (i = 0; i < count; i++) {
+		u8 radix_value = source[i];
+		u8 radix_piece = radix_value & 0xff;
+		offsets[radix_piece]++;
+	}
+
+	// NOTE(bill): Change counts to offsets
+	for (i = 0; i < gb_count_of(offsets); i++) {
+		u8 skcount = offsets[i];
+		offsets[i] = total;
+		total += skcount;
+	}
+
+	// NOTE(bill): Second pass - place elements into the right location
+	for (i = 0; i < count; i++) {
+		u8 radix_value = source[i];
+		u8 radix_piece = radix_value & 0xff;
+		dest[offsets[radix_piece]++] = source[i];
+	}
+
+	gb_swap(u8 *, source, dest);
+}
+
+void
+gb_radix_sort_u16(u16 *items, isize count, u16 *temp)
+{
+	u16 *source = items;
+	u16 *dest   = temp;
+	isize byte_index, i;
+	for (byte_index = 0; byte_index < 16; byte_index += 8) {
+		isize offsets[256] = {0};
+		i64 total = 0;
+
+		// NOTE(bill): First pass - count how many of each key
+		for (i = 0; i < count; i++) {
+			u16 radix_value = source[i];
+			u16 radix_piece = (radix_value >> byte_index) & 0xff;
+			offsets[radix_piece]++;
+		}
+
+		// NOTE(bill): Change counts to offsets
+		for (i = 0; i < gb_count_of(offsets); i++) {
+			u16 skcount = offsets[i];
+			offsets[i] = total;
+			total += skcount;
+		}
+
+		// NOTE(bill): Second pass - place elements into the right location
+		for (i = 0; i < count; i++) {
+			u16 radix_value = source[i];
+			u16 radix_piece = (radix_value >> byte_index) & 0xff;
+			dest[offsets[radix_piece]++] = source[i];
+		}
+
+		gb_swap(u16 *, source, dest);
+	}
+}
+
+void
+gb_radix_sort_u32(u32 *items, isize count, u32 *temp)
+{
+	u32 *source = items;
+	u32 *dest   = temp;
+	isize byte_index, i;
+	for (byte_index = 0; byte_index < 32; byte_index += 8) {
+		isize offsets[256] = {0};
+		i64 total = 0;
+
+		// NOTE(bill): First pass - count how many of each key
+		for (i = 0; i < count; i++) {
+			u32 radix_value = source[i];
+			u32 radix_piece = (radix_value >> byte_index) & 0xff;
+			offsets[radix_piece]++;
+		}
+
+		// NOTE(bill): Change counts to offsets
+		for (i = 0; i < gb_count_of(offsets); i++) {
+			u32 skcount = offsets[i];
+			offsets[i] = total;
+			total += skcount;
+		}
+
+		// NOTE(bill): Second pass - place elements into the right location
+		for (i = 0; i < count; i++) {
+			u32 radix_value = source[i];
+			u32 radix_piece = (radix_value >> byte_index) & 0xff;
+			dest[offsets[radix_piece]++] = source[i];
+		}
+
+		gb_swap(u32 *, source, dest);
+	}
+}
+
+void
+gb_radix_sort_u64(u64 *items, isize count, u64 *temp)
+{
+	u64 *source = items;
+	u64 *dest   = temp;
+	isize byte_index, i;
+	for (byte_index = 0; byte_index < 32; byte_index += 8) {
+		isize offsets[256] = {0};
+		i64 total = 0;
+
+		// NOTE(bill): First pass - count how many of each key
+		for (i = 0; i < count; i++) {
+			u64 radix_value = source[i];
+			u64 radix_piece = (radix_value >> byte_index) & 0xff;
+			offsets[radix_piece]++;
+		}
+
+		// NOTE(bill): Change counts to offsets
+		for (i = 0; i < gb_count_of(offsets); i++) {
+			u64 skcount = offsets[i];
+			offsets[i] = total;
+			total += skcount;
+		}
+
+		// NOTE(bill): Second pass - place elements into the right location
+		for (i = 0; i < count; i++) {
+			u64 radix_value = source[i];
+			u64 radix_piece = (radix_value >> byte_index) & 0xff;
+			dest[offsets[radix_piece]++] = source[i];
+		}
+
+		gb_swap(u64 *, source, dest);
+	}
+}
+
 
 
 

@@ -1,4 +1,4 @@
-/* gb.h - v0.03a - OpenGL Helper Library - public domain
+/* gb.h - v0.04  - OpenGL Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -17,12 +17,32 @@
 
 	All other files should just #include "gb_gl.h" without #define
 
-	NOTE
 
-	This library REQUIRES "stb_image.h" for loading images from file
-		- You may need change the path
-	This library REQUIRES "gb.h" at this moment in time.
-	This library REQUIRES "gb_math.h" at this moment in time.
+	Dependencies
+		NOTE: You may need change the path
+
+		This library REQUIRES "stb_image.h" for loading images from file
+		This library REQUIRES "gb.h" at this moment in time.
+		If you are using the font library (e.g. GBGL_NO_FONTS is _not_ defined):
+			This library then REQUIRES "stb_truetype.h" for ttf handling
+			This library then REQUIRES "stb_rect_pack.h"
+
+			NOTE(bill): I may remove these dependencies for the font handling by
+			embedding the needed types and procedures.
+
+	Optional Dependencies
+		"gb_math.h" as a lot of useful things in it over <math.h>.
+		Why not have a look at it?
+
+
+
+	Steps for supporting dynamic reload:
+		You _MUST_ defined you own malloc and free that use whatever
+		permanent memory systen you are using:
+
+			#define gbgl_malloc
+			#define gbgl_free
+
 
 ===========================================================================
 
@@ -34,6 +54,7 @@ Conventions used:
 
 
 Version History:
+	0.04  - Remove gb_math.h dependency
 	0.03a - Better Rounded Rect
 	0.03  - Basic State Rendering
 	0.02  - Font Caching and Rendering
@@ -60,20 +81,48 @@ CREDITS
 #include "gb.h"
 #endif
 
-#ifndef GB_MATH_IMPLEMENTATION
-#include "gb_math.h"
-#endif
-
 #ifndef STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #endif
 
-#ifndef STB_RECT_PACK_IMPLEMENTATION
-#include "stb_rect_pack.h"
+
+#if !defined(GBGL_NO_FONTS)
+	#ifndef STB_RECT_PACK_IMPLEMENTATION
+	#include "stb_rect_pack.h"
+	#endif
+
+	#ifndef STB_TRUETYPE_IMPLEMENTATION
+	#include "stb_truetype.h"
+	#endif
 #endif
 
-#ifndef STB_TRUETYPE_IMPLEMENTATION
-#include "stb_truetype.h"
+
+#if defined(GBGL_USE_GB_MATH)
+	#ifndef GB_MATH_IMPLEMENTATION
+	#include "gb_math.h"
+	#endif
+
+	#define gbgl_lerp(x, y, t) gb_lerp(x, y, t)
+	#define gbgl_sin(x)        gb_sin(x)
+	#define gbgl_cos(x)        gb_cos(x)
+	#define gbgl_abs(x)        gb_abs(x)
+	#define gbgl_min(x, y)     gb_min(x, y)
+	#define gbgl_max(x, y)     gb_max(x, y)
+	#define gbgl_round(x)      gb_round(x)
+
+#else
+	#if !defined(GBGL_USE_CUSTOM_MATH)
+	#include <math.h>
+
+	#define gbgl_lerp(x, y, t) ((x)*(1.0f-(t)) + (y)*(t))
+	#define gbgl_sin(x)        sinf(x)
+	#define gbgl_cos(x)        cosf(x)
+	#define gbgl_abs(x)        ((x) >= 0 ? (x) : -(x))
+	#define gbgl_min(x, y)     ((x) < (y) ? (x) : (y))
+	#define gbgl_max(x, y)     ((x) > (y) ? (x) : (y))
+	#define gbgl_round(x)      (((x) >= 0.0f) ? floorf((x) + 0.5f) : ceilf((x) - 0.5f))
+
+	#endif
 #endif
 
 
@@ -86,7 +135,6 @@ extern "C" {
 #define GBGL_DEF extern
 #endif
 
-
 #ifndef gbgl_malloc
 #define gbgl_malloc(sz) malloc(sz)
 #endif
@@ -94,6 +142,12 @@ extern "C" {
 #ifndef gbgl_free
 #define gbgl_free(ptr) free(ptr)
 #endif
+
+#ifndef GBGL_TAU
+#define GBGL_TAU 6.28318530717958647692528676655900576f
+#endif
+
+
 
 
 
@@ -338,11 +392,11 @@ GBGL_DEF i32 gbgl_get_uniform(gbglShader *shader, char const *name);
 
 GBGL_DEF void gbgl_set_uniform_int       (gbglShader *s, char const *name, i32 i);
 GBGL_DEF void gbgl_set_uniform_float     (gbglShader *s, char const *name, f32 f);
-GBGL_DEF void gbgl_set_uniform_vec2      (gbglShader *s, char const *name, gbVec2 v);
-GBGL_DEF void gbgl_set_uniform_vec3      (gbglShader *s, char const *name, gbVec3 v);
-GBGL_DEF void gbgl_set_uniform_vec4      (gbglShader *s, char const *name, gbVec4 v);
-GBGL_DEF void gbgl_set_uniform_mat4      (gbglShader *s, char const *name, gbMat4 const *m);
-GBGL_DEF void gbgl_set_uniform_mat4_count(gbglShader *s, char const *name, gbMat4 const *m, isize count);
+GBGL_DEF void gbgl_set_uniform_vec2      (gbglShader *s, char const *name, f32 const *v);
+GBGL_DEF void gbgl_set_uniform_vec3      (gbglShader *s, char const *name, f32 const *v);
+GBGL_DEF void gbgl_set_uniform_vec4      (gbglShader *s, char const *name, f32 const *v);
+GBGL_DEF void gbgl_set_uniform_mat4      (gbglShader *s, char const *name, f32 const *m);
+GBGL_DEF void gbgl_set_uniform_mat4_count(gbglShader *s, char const *name, f32 const *m, isize count);
 GBGL_DEF void gbgl_set_uniform_colour    (gbglShader *s, char const *name, gbColour col);
 
 
@@ -433,6 +487,7 @@ GBGL_DEF void gbgl_render_to_screen(i32 width, i32 height);
 //
 //
 
+#if !defined(GBGL_NO_FONTS)
 
 typedef struct gbglGlyphMapKVPair {
 	char32 codepoint;
@@ -473,9 +528,9 @@ typedef struct gbglTextParam {
 	union {
 		f32    val_f32;
 		i32    val_i32;
-		gbVec2 val_vec2;
 	};
 } gbglTextParam;
+
 
 typedef struct gbglFont {
 	isize glyph_count;
@@ -515,20 +570,26 @@ typedef struct gbglFontCache {
 } gbglFontCache;
 
 
-GBGL_DEF gbglFont *gbgl_get_font     (gbglFontCache *fc, char const *ttf_filename, f32 font_size);
-GBGL_DEF gbglFont *gbgl_get_font_only(gbglFontCache *fc, char const *ttf_filename, f32 font_size);
-GBGL_DEF gbglFont *gbgl_cache_font   (gbglFontCache *fc, char const *ttf_filename, f32 font_size);
+#if 0
+GBGL_DEF void gbgl_destroy_font_cache(gbglFontCache *fc);
+#endif
 
-GBGL_DEF GB_COMPARE_PROC(gbgl_font_glyph_map_search_proc);
+// NOTE(bill): gbgl_load_font_from_file will load from file if it is not found
+GBGL_DEF gbglFont *gbgl_load_font_from_file     (gbglFontCache *fc, char const *ttf_filename, f32 font_size);
+GBGL_DEF gbglFont *gbgl_get_font_only_from_cache(gbglFontCache *fc, char const *ttf_filename, f32 font_size);
+GBGL_DEF gbglFont *gbgl_cache_font              (gbglFontCache *fc, char const *ttf_filename, f32 font_size);
+
 
 GBGL_DEF b32            gbgl_get_packed_font_dim                 (gbglFontCache *cache, gbglFontCachedTTF *ttf, i32 *width, i32 *height);
 GBGL_DEF gbglGlyphInfo *gbgl_get_glyph_info                      (gbglFont *font, char32 codepoint, isize *out_index);
 GBGL_DEF f32            gbgl_get_font_kern_amt_from_glyph_indices(gbglFont *font, isize left_index, isize right_index);
-GBGL_DEF void           gbgl_get_string_dimensions              (gbglFont *font, char const *str, f32 *out_width, f32 *out_height);
+GBGL_DEF void           gbgl_get_string_dimensions               (gbglFont *font, char const *str, f32 *out_width, f32 *out_height);
 GBGL_DEF f32            gbgl_get_sub_string_width                (gbglFont *font, char const *str, isize char_count);
 GBGL_DEF i32            gbgl_get_wrapped_line_count              (gbglFont *font, char const *str, isize max_len, isize max_width);
 GBGL_DEF f32            gbgl_get_string_width                    (gbglFont *font, char const *str, isize max_len);
 
+
+#endif
 
 ////////////////////////////////////////////////////////////////
 //
@@ -544,6 +605,9 @@ GBGL_DEF f32            gbgl_get_string_width                    (gbglFont *font
 #ifndef GBGL_BS_MAX_INDEX_COUNT
 #define GBGL_BS_MAX_INDEX_COUNT 6
 #endif
+
+
+#if !defined(GBGL_NO_FONTS)
 
 #ifndef GBGL_MAX_RENDER_STRING_LENGTH
 #define GBGL_MAX_RENDER_STRING_LENGTH 4096
@@ -570,6 +634,8 @@ GBGL_DEF f32            gbgl_get_string_width                    (gbglFont *font
 #define GBGL_TAB_CHARACTER_WIDTH 4
 #endif
 
+#endif
+
 typedef struct gbglBasicVertex {
 	f32 x, y;
 	f32 u, v;
@@ -585,8 +651,10 @@ typedef struct gbglBasicState {
 	gbglShader ortho_tex_shader;
 	gbglShader ortho_col_shader;
 
-	gbMat4 ortho_mat;
+	f32 ortho_mat[16];
 	i32 width, height;
+
+#if !defined(GBGL_NO_FONTS)
 
 	gbglFontCache   font_cache;
 	gbglShader      font_shader;
@@ -599,7 +667,7 @@ typedef struct gbglBasicState {
 	gbglTextParam text_param_stack[GBGL_TEXT_PARAM_STACK_SIZE];
 	isize         text_param_stack_count;
 	gbglTextParam text_params[GBGL_TEXT_PARAM_COUNT];
-
+#endif
 } gbglBasicState;
 
 GBGL_DEF void gbgl_bs_init(gbglBasicState *bs, i32 window_width, i32 window_height);
@@ -607,24 +675,30 @@ GBGL_DEF void gbgl_bs_set_resolution(gbglBasicState *bs, i32 window_width, i32 w
 GBGL_DEF void gbgl_bs_begin(gbglBasicState *bs, i32 window_width, i32 window_height);
 GBGL_DEF void gbgl_bs_end(gbglBasicState *bs);
 
-GBGL_DEF void gbgl_bs_draw_textured_rect(gbglBasicState *bs, gbglTexture *tex, gbVec2 pos, gbVec2 dim, b32 v_up);
-GBGL_DEF void gbgl_bs_draw_rect(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, gbColour col);
-GBGL_DEF void gbgl_bs_draw_rect_outline(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, gbColour col, f32 thickness);
+GBGL_DEF void gbgl_bs_draw_textured_rect(gbglBasicState *bs, gbglTexture *tex, f32 x, f32 y, f32 w, f32 h, b32 v_up);
+GBGL_DEF void gbgl_bs_draw_rect(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, gbColour col);
+GBGL_DEF void gbgl_bs_draw_rect_outline(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, gbColour col, f32 thickness);
 GBGL_DEF void gbgl_bs_draw_quad(gbglBasicState *bs,
-                                gbVec2 p0, gbVec2 p1, gbVec2 p2, gbVec2 p3,
+                                f32 x0, f32 y0,
+                                f32 x1, f32 y1,
+                                f32 x2, f32 y2,
+                                f32 x3, f32 y3,
                                 gbColour col);
 GBGL_DEF void gbgl_bs_draw_quad_outline(gbglBasicState *bs,
-                                        gbVec2 p0, gbVec2 p1, gbVec2 p2, gbVec2 p3,
+                                        f32 x0, f32 y0,
+                                        f32 x1, f32 y1,
+                                        f32 x2, f32 y2,
+                                        f32 x3, f32 y3,
                                         gbColour col, f32 thickness);
 
-GBGL_DEF void gbgl_bs_draw_line(gbglBasicState *bs, gbVec2 p0, gbVec2 p1, gbColour col, f32 thickness);
+GBGL_DEF void gbgl_bs_draw_line(gbglBasicState *bs, f32 x0, f32 y0, f32 x1, f32 y1, gbColour col, f32 thickness);
 
-GBGL_DEF void gbgl_bs_draw_elliptical_arc(gbglBasicState *bs, gbVec2 p, f32 radius_a, f32 radius_b, f32 min_angle, f32 max_angle, gbColour col);
-GBGL_DEF void gbgl_bs_draw_elliptical_arc_outline(gbglBasicState *bs, gbVec2 p, f32 radius_a, f32 radius_b,
+GBGL_DEF void gbgl_bs_draw_elliptical_arc(gbglBasicState *bs, f32 x, f32 y, f32 radius_a, f32 radius_b, f32 min_angle, f32 max_angle, gbColour col);
+GBGL_DEF void gbgl_bs_draw_elliptical_arc_outline(gbglBasicState *bs, f32 x, f32 y, f32 radius_a, f32 radius_b,
                                                   f32 min_angle, f32 max_angle, gbColour col, f32 thickness);
 
-GBGL_DEF void gbgl_bs_draw_circle(gbglBasicState *bs, gbVec2 p, f32 radius, gbColour col);
-GBGL_DEF void gbgl_bs_draw_circle_outline(gbglBasicState *bs, gbVec2 p, f32 radius, gbColour col, f32 thickness);
+GBGL_DEF void gbgl_bs_draw_circle(gbglBasicState *bs, f32 x, f32 y, f32 radius, gbColour col);
+GBGL_DEF void gbgl_bs_draw_circle_outline(gbglBasicState *bs, f32 x, f32 y, f32 radius, gbColour col, f32 thickness);
 
 
 // Corners Flags:
@@ -633,17 +707,18 @@ GBGL_DEF void gbgl_bs_draw_circle_outline(gbglBasicState *bs, gbVec2 p, f32 radi
 // 4 - Top    Right
 // 8 - Top    Left
 // NOTE(bill): Apple, please don't sue me!
-GBGL_DEF void gbgl_bs_draw_rounded_rect_corners(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f32 roundness, gbColour col, u32 corners);
-GBGL_DEF void gbgl_bs_draw_rounded_rect(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f32 roundness, gbColour col);
+GBGL_DEF void gbgl_bs_draw_rounded_rect_corners(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbColour col, u32 corners);
+GBGL_DEF void gbgl_bs_draw_rounded_rect(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbColour col);
 
-GBGL_DEF void gbgl_bs_draw_rounded_rect_corners_outline(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f32 roundness, gbColour col, f32 thickness, u32 corners);
-GBGL_DEF void gbgl_bs_draw_rounded_rect_outline(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f32 roundness, gbColour col, f32 thickness);
+GBGL_DEF void gbgl_bs_draw_rounded_rect_corners_outline(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbColour col, f32 thickness, u32 corners);
+GBGL_DEF void gbgl_bs_draw_rounded_rect_outline(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbColour col, f32 thickness);
 
 
-GBGL_DEF isize gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColour col, char const *str, isize len);
-GBGL_DEF isize gbgl_bs_draw_string   (gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColour col, char const *fmt, ...);
-GBGL_DEF isize gbgl_bs_draw_string_va(gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColour col, char const *fmt, va_list va);
-
+#if !defined(GBGL_NO_FONTS)
+GBGL_DEF isize gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, f32 x, f32 y, gbColour col, char const *str, isize len);
+GBGL_DEF isize gbgl_bs_draw_string   (gbglBasicState *bs, gbglFont *font, f32 x, f32 y, gbColour col, char const *fmt, ...);
+GBGL_DEF isize gbgl_bs_draw_string_va(gbglBasicState *bs, gbglFont *font, f32 x, f32 y, gbColour col, char const *fmt, va_list va);
+#endif
 
 
 #if defined(__cplusplus)
@@ -835,8 +910,6 @@ gbgl__load_single_shader_from_file(gbglShader *shader, gbglShaderType type, char
 		gb_local_persist char info_log[4096];
 		i64 file_size = gb_file_size(&shader->files[type]);
 		char *file_source = cast(char *)gbgl_malloc(file_size+1);
-		// TODO(bill): LOG MALLOC USAGE
-
 
 		GB_ASSERT_NOT_NULL(file_source);
 		if (file_source) {
@@ -1093,44 +1166,44 @@ gbgl_set_uniform_float(gbglShader *s, char const *name, f32 f)
 }
 
 gb_inline void
-gbgl_set_uniform_vec2(gbglShader *s, char const *name, gbVec2 v)
+gbgl_set_uniform_vec2(gbglShader *s, char const *name, f32 const *v)
 {
-	glUniform2fv(gbgl_get_uniform(s, name), 1, v.e);
+	glUniform2fv(gbgl_get_uniform(s, name), 1, v);
 }
 
 gb_inline void
-gbgl_set_uniform_vec3(gbglShader *s, char const *name, gbVec3 v)
+gbgl_set_uniform_vec3(gbglShader *s, char const *name, f32 const *v)
 {
-	glUniform3fv(gbgl_get_uniform(s, name), 1, v.e);
+	glUniform3fv(gbgl_get_uniform(s, name), 1, v);
 }
 
 gb_inline void
-gbgl_set_uniform_vec4(gbglShader *s, char const *name, gbVec4 v)
+gbgl_set_uniform_vec4(gbglShader *s, char const *name, f32 const *v)
 {
-	glUniform4fv(gbgl_get_uniform(s, name), 1, v.e);
+	glUniform4fv(gbgl_get_uniform(s, name), 1, v);
 }
 
 gb_inline void
-gbgl_set_uniform_mat4(gbglShader *s, char const *name, gbMat4 const *m)
+gbgl_set_uniform_mat4(gbglShader *s, char const *name, f32 const *m)
 {
 	gbgl_set_uniform_mat4_count(s, name, m, 1);
 }
 
 gb_inline void
-gbgl_set_uniform_mat4_count(gbglShader *s, char const *name, gbMat4 const *m, isize count)
+gbgl_set_uniform_mat4_count(gbglShader *s, char const *name, f32 const *m, isize count)
 {
-	glUniformMatrix4fv(gbgl_get_uniform(s, name), count, false, cast(f32 const *)m);
+	glUniformMatrix4fv(gbgl_get_uniform(s, name), count, false, m);
 }
 
 
 gb_inline void
 gbgl_set_uniform_colour(gbglShader *s, char const *name, gbColour col)
 {
-	gbVec4 v;
-	v.r = col.r / 255.0f;
-	v.g = col.g / 255.0f;
-	v.b = col.b / 255.0f;
-	v.a = col.a / 255.0f;
+	f32 v[4];
+	v[0] = col.r / 255.0f;
+	v[1] = col.g / 255.0f;
+	v[2] = col.b / 255.0f;
+	v[3] = col.a / 255.0f;
 	gbgl_set_uniform_vec4(s, name, v);
 }
 
@@ -1308,7 +1381,7 @@ gbgl_destroy_texture(gbglTexture *t)
 // Font
 //
 //
-
+#if !defined(GBGL_NO_FONTS)
 gb_inline i32
 gbgl__sort_kern_pair(void const *a, void const *b)
 {
@@ -1327,6 +1400,8 @@ gbgl__glypth_map_sort(void const *a, void const *b)
 }
 
 
+
+
 b32
 gbgl_get_packed_font_dim(gbglFontCache *cache, gbglFontCachedTTF *ttf, i32 *width, i32 *height)
 {
@@ -1340,7 +1415,7 @@ gbgl_get_packed_font_dim(gbglFontCache *cache, gbglFontCachedTTF *ttf, i32 *widt
 	}
 
 	for (;;) {
-		i32 res = stbtt_PackBegin(&spc, 0, *width, *height, 0, 1, 0);
+		i32 res = stbtt_PackBegin(&spc, NULL, *width, *height, 0, 1, 0);
 		GB_ASSERT(res == 1);
 		if (res != 1) {
 			return false;
@@ -1372,7 +1447,7 @@ gbgl_get_packed_font_dim(gbglFontCache *cache, gbglFontCachedTTF *ttf, i32 *widt
 						cache->rect_cache[j].x = cache->rect_cache[j].y = 0;
 					}
 					stbtt_PackEnd(&spc);
-					res = stbtt_PackBegin(&spc, 0, *width, *height, 0, 1, 0);
+					res = stbtt_PackBegin(&spc, NULL, *width, *height, 0, 1, 0);
 					GB_ASSERT(res == 1);
 					if (res != 1) {
 						result = false;
@@ -1398,21 +1473,59 @@ done:
 	return result;
 }
 
+#if 0
+void
+gbgl_destroy_font_cache(gbglFontCache *fc)
+{
+	gbglFontCachedTTF *curr_ttf = fc->ttf_buffer;
+	gbglFontCachedTTF *next_ttf = NULL;
+
+	gbglFont *curr_font = fc->fonts;
+	gbglFont *next_font = NULL;
+
+	gbgl_free(fc->font_char_list);
+	gbgl_free(fc->codepoints);
+	gbgl_free(fc->ranges);
+	gbgl_free(fc->packed_char_data);
+	gbgl_free(fc->rect_cache);
+
+	// NOTE(bill): Free all linked listed ttfs
+	while (curr_ttf) {
+		gbgl_free(curr_ttf->name);
+		gbgl_free(curr_ttf->ttf);
+
+		next_ttf = curr_ttf->next;
+		gbgl_free(curr_ttf);
+		curr_ttf = next_ttf;
+	}
+
+	// NOTE(bill): Free all linked listed fonts
+	while (curr_font) {
+		gbgl_free(curr_font->ttf_filename);
+		gbgl_destroy_texture(&curr_font->texture);
+		gbgl_free(curr_font->glyph_map);
+		gbgl_free(curr_font->glyphs);
+		gbgl_free(curr_font->kern_table);
+
+		next_font = curr_font->next;
+		gbgl_free(curr_font);
+		curr_font = next_font;
+	}
+}
+#endif
+
 
 gb_inline gbglFont *
-gbgl_get_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
+gbgl_load_font_from_file(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 {
-	gbglFont *f = gbgl_get_font_only(fc, ttf_filename, font_size);
-	if (f) {
-		return f;
-	} else {
-		return gbgl_cache_font(fc, ttf_filename, font_size);
-	}
+	gbglFont *f = gbgl_get_font_only_from_cache(fc, ttf_filename, font_size);
+	if (f) return f;
+	return gbgl_cache_font(fc, ttf_filename, font_size);
 }
 
 
 gb_inline gbglFont *
-gbgl_get_font_only(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
+gbgl_get_font_only_from_cache(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 {
 	gbglFont *f = fc->fonts;
 	while (f) {
@@ -1427,69 +1540,71 @@ gbgl_get_font_only(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 gbglFont *
 gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 {
-	gbglFontCache *font_cache = fc;
-	gbglFont *f = gbgl_get_font_only(fc, ttf_filename, font_size);
+	gbglFont *f = gbgl_get_font_only_from_cache(fc, ttf_filename, font_size);
 	gbglFontCachedTTF *ttf = NULL;
 	isize i;
 
-	if (f)
+	if (f) { // NOTE(bill): The font is already cached
 		return f;
+	}
 
-	if (!font_cache->fonts) {
-		font_cache->fonts = cast(gbglFont *)gbgl_malloc(gb_size_of(gbglFont));
-		f = font_cache->fonts;
+	if (!fc->fonts) {
+		fc->fonts = cast(gbglFont *)gbgl_malloc(gb_size_of(gbglFont));
+		f = fc->fonts;
 	} else {
-		f = font_cache->fonts;
+		f = fc->fonts;
 		while (f && f->next)
 			f = f->next;
 		f->next = cast(gbglFont *)gbgl_malloc(gb_size_of(gbglFont));
 		f = f->next;
 	}
 	GB_ASSERT_NOT_NULL(f);
-	if (!f)
+	if (!f) {
+		gb_fprintf(stderr, "Failed to cache font\n");
 		return NULL;
+	}
 
 	gb_zero_struct(f);
 
 	// NOTE(bill): Make sure the character list file has been loaded
-	if (!font_cache->font_char_list) {
+	if (!fc->font_char_list) {
 		isize codepoint_count = 0, cpi = 0;
-		font_cache->font_char_list = GBGL_FONT_CHAR_LIST;
-		font_cache->font_char_list_count = gb_strlen(GBGL_FONT_CHAR_LIST);
+		fc->font_char_list = GBGL_FONT_CHAR_LIST;
+		fc->font_char_list_count = gb_strlen(GBGL_FONT_CHAR_LIST);
 
-		for (i = 0; i < font_cache->font_char_list_count; i++) {
+		for (i = 0; i < fc->font_char_list_count; i++) {
 			char32 c;
-			isize utf8_len = gb_utf8_decode_len(font_cache->font_char_list + i, font_cache->font_char_list_count, &c);
+			isize utf8_len = gb_utf8_decode_len(fc->font_char_list + i, fc->font_char_list_count, &c);
 			i += utf8_len-1;
 			codepoint_count++;
 		}
 
-		font_cache->codepoint_count = codepoint_count;
-		font_cache->ranges           = cast(stbtt_pack_range *)gbgl_malloc(gb_size_of(stbtt_pack_range) * codepoint_count);
-		font_cache->codepoints       = cast(char32 *)          gbgl_malloc(gb_size_of(char32)           * codepoint_count);
-		font_cache->packed_char_data = cast(stbtt_packedchar *)gbgl_malloc(gb_size_of(stbtt_packedchar) * codepoint_count);
-		font_cache->rect_cache       = cast(stbrp_rect *)      gbgl_malloc(gb_size_of(stbrp_rect)       * codepoint_count);
+		fc->codepoint_count = codepoint_count;
+		fc->ranges           = cast(stbtt_pack_range *)gbgl_malloc(gb_size_of(stbtt_pack_range) * codepoint_count);
+		fc->codepoints       = cast(char32 *)          gbgl_malloc(gb_size_of(char32)           * codepoint_count);
+		fc->packed_char_data = cast(stbtt_packedchar *)gbgl_malloc(gb_size_of(stbtt_packedchar) * codepoint_count);
+		fc->rect_cache       = cast(stbrp_rect *)      gbgl_malloc(gb_size_of(stbrp_rect)       * codepoint_count);
 
-		if (!font_cache->ranges || !font_cache->codepoints || !font_cache->packed_char_data) {
+		if (!fc->ranges || !fc->codepoints || !fc->packed_char_data) {
 			gb_fprintf(stderr, "Unable to get memory for fonts");
 		}
 
-		for (i = 0; i < font_cache->font_char_list_count; i++) {
-			isize utf8_len = gb_utf8_decode_len(font_cache->font_char_list+i, font_cache->font_char_list_count, font_cache->codepoints+cpi);
+		for (i = 0; i < fc->font_char_list_count; i++) {
+			isize utf8_len = gb_utf8_decode_len(fc->font_char_list+i, fc->font_char_list_count, fc->codepoints+cpi);
 			i += utf8_len-1;
 			cpi++;
 		}
-		GB_ASSERT(cpi == font_cache->codepoint_count);
-		for (i = 0; i < font_cache->codepoint_count; i++) {
-			font_cache->ranges[i].first_unicode_codepoint_in_range = font_cache->codepoints[i];
-			font_cache->ranges[i].array_of_unicode_codepoints = 0;
-			font_cache->ranges[i].num_chars = 1;
-			font_cache->ranges[i].chardata_for_range = font_cache->packed_char_data + i;
+		GB_ASSERT(cpi == fc->codepoint_count);
+		for (i = 0; i < fc->codepoint_count; i++) {
+			fc->ranges[i].first_unicode_codepoint_in_range = fc->codepoints[i];
+			fc->ranges[i].array_of_unicode_codepoints = 0;
+			fc->ranges[i].num_chars = 1;
+			fc->ranges[i].chardata_for_range = fc->packed_char_data + i;
 		}
 	}
 
 	{
-		gbglFontCachedTTF **ttf_cache = &font_cache->ttf_buffer;
+		gbglFontCachedTTF **ttf_cache = &fc->ttf_buffer;
 
 		while (*ttf_cache) {
 			if (gb_strcmp((*ttf_cache)->name, ttf_filename) == 0)
@@ -1498,6 +1613,8 @@ gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 		}
 		if (!*ttf_cache) {
 			isize name_len;
+			gbFile file;
+
 
 			*ttf_cache = cast(gbglFontCachedTTF *)gbgl_malloc(gb_size_of(gbglFontCachedTTF));
 			GB_ASSERT_NOT_NULL(*ttf_cache);
@@ -1512,39 +1629,35 @@ gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 			gb_strncpy((*ttf_cache)->name, ttf_filename, name_len);
 			(*ttf_cache)->name[name_len] = '\0';
 
-			{
-				gbFile file;
+			if (gb_open_file(&file, ttf_filename)) {
+				i64 len = gb_file_size(&file);
+				(*ttf_cache)->ttf = cast(u8 *)gbgl_malloc(len);
+				GB_ASSERT_NOT_NULL((*ttf_cache)->ttf);
 
-				if (gb_open_file(&file, ttf_filename)) {
-					i64 len = gb_file_size(&file);
-					(*ttf_cache)->ttf = cast(u8 *)gbgl_malloc(len);
-					GB_ASSERT_NOT_NULL((*ttf_cache)->ttf);
+				gb_file_read_at(&file, (*ttf_cache)->ttf, len, 0);
 
-					gb_file_read_at(&file, (*ttf_cache)->ttf, len, 0);
-
-					gb_close_file(&file);
-				} else {
-					GB_PANIC("Could not open ttf file: %s", ttf_filename);
-				}
-
-				stbtt_InitFont(&(*ttf_cache)->finfo, (*ttf_cache)->ttf, stbtt_GetFontOffsetForIndex((*ttf_cache)->ttf, 0));
+				gb_close_file(&file);
+			} else {
+				GB_PANIC("Could not open ttf file: %s", ttf_filename);
 			}
+
+			stbtt_InitFont(&(*ttf_cache)->finfo, (*ttf_cache)->ttf, stbtt_GetFontOffsetForIndex((*ttf_cache)->ttf, 0));
 		}
 		ttf = *ttf_cache;
 		GB_ASSERT_NOT_NULL(ttf);
 	}
 
 	// NOTE(bill): Set the range for the this look up
-	for (i = 0; i < font_cache->codepoint_count; i++)
-		font_cache->ranges[i].font_size = font_size;
+	for (i = 0; i < fc->codepoint_count; i++)
+		fc->ranges[i].font_size = font_size;
 
 	{ // NOTE(bill): Figure out smallest non-square power of 2 texture size
 		i32 w, h;
-		if (gbgl_get_packed_font_dim(font_cache, ttf, &w, &h)) {
+		if (gbgl_get_packed_font_dim(fc, ttf, &w, &h)) {
 			isize str_len, i, j;
 
 			// NOTE(bill): Setup the font data
-			f->glyph_count   = font_cache->codepoint_count;
+			f->glyph_count   = fc->codepoint_count;
 			f->bitmap_width  = w;
 			f->bitmap_height = h;
 			f->size          = font_size;
@@ -1567,7 +1680,7 @@ gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 				px = cast(u8 *)gbgl_malloc(w * h);
 				res = stbtt_PackBegin(&spc, px, w, h, 0, 1, 0);
 				GB_ASSERT(res == 1);
-				res = stbtt_PackFontRanges(&spc, ttf->ttf, 0, font_cache->ranges, font_cache->codepoint_count);
+				res = stbtt_PackFontRanges(&spc, ttf->ttf, 0, fc->ranges, fc->codepoint_count);
 				GB_ASSERT(res == 1);
 				stbtt_PackEnd(&spc);
 
@@ -1583,18 +1696,18 @@ gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 
 				for (i = 0; i < f->glyph_count; i++) {
 					gbglGlyphInfo *gi = f->glyphs + i;
-					gi->s0 = cast(f32)font_cache->packed_char_data[i].x0;
-					gi->t0 = cast(f32)font_cache->packed_char_data[i].y0;
-					gi->s1 = cast(f32)font_cache->packed_char_data[i].x1;
-					gi->t1 = cast(f32)font_cache->packed_char_data[i].y1;
+					gi->s0 = cast(f32)fc->packed_char_data[i].x0;
+					gi->t0 = cast(f32)fc->packed_char_data[i].y0;
+					gi->s1 = cast(f32)fc->packed_char_data[i].x1;
+					gi->t1 = cast(f32)fc->packed_char_data[i].y1;
 
-					gi->xoff = cast(i16)font_cache->packed_char_data[i].xoff;
-					gi->yoff = cast(i16)font_cache->packed_char_data[i].yoff;
-					gi->xadv = font_cache->packed_char_data[i].xadvance;
+					gi->xoff = cast(i16)fc->packed_char_data[i].xoff;
+					gi->yoff = cast(i16)fc->packed_char_data[i].yoff;
+					gi->xadv = fc->packed_char_data[i].xadvance;
 				}
 
 				for (i = 0; i < f->glyph_count; i++) {
-					f->glyph_map[i].codepoint = font_cache->codepoints[i];
+					f->glyph_map[i].codepoint = fc->codepoints[i];
 					f->glyph_map[i].index = i;
 				}
 
@@ -1604,7 +1717,7 @@ gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 					isize kps_count = 0;
 					for (i = 0; i < f->glyph_count; i++) {
 						for (j = 0; j < f->glyph_count; j++) {
-							i32 kern = stbtt_GetCodepointKernAdvance(&ttf->finfo, font_cache->codepoints[i], font_cache->codepoints[j]);
+							i32 kern = stbtt_GetCodepointKernAdvance(&ttf->finfo, fc->codepoints[i], fc->codepoints[j]);
 							if (kern != 0)
 								kps_count++;
 						}
@@ -1615,7 +1728,7 @@ gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 						f->kern_table = cast(gbglKernPair *)gbgl_malloc(gb_size_of(*f->kern_table) * kps_count);
 						for (i = 0; i < f->glyph_count; i++) {
 							for (j = 0; j < f->glyph_count; j++) {
-								isize kern = stbtt_GetCodepointKernAdvance(&ttf->finfo, font_cache->codepoints[i], font_cache->codepoints[j]);
+								isize kern = stbtt_GetCodepointKernAdvance(&ttf->finfo, fc->codepoints[i], fc->codepoints[j]);
 								if (kern != 0) {
 									gbglKernPair *kp = f->kern_table + ikp++;
 									kp->i0 = cast(u16)i;
@@ -1637,7 +1750,8 @@ gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 }
 
 
-gb_inline GB_COMPARE_PROC(gbgl_font_glyph_map_search_proc)
+gb_inline
+GB_COMPARE_PROC(gbgl__font_glyph_map_search_proc)
 {
 	gbglGlyphMapKVPair const *gm = cast(gbglGlyphMapKVPair const *)a;
 	char32 ucp = *cast(char32 const *)b;
@@ -1647,7 +1761,7 @@ gb_inline GB_COMPARE_PROC(gbgl_font_glyph_map_search_proc)
 gbglGlyphInfo *
 gbgl_get_glyph_info(gbglFont *font, char32 codepoint, isize *out_index)
 {
-	isize index = gb_binary_search(font->glyph_map, font->glyph_count, gb_size_of(*font->glyph_map), &codepoint, gbgl_font_glyph_map_search_proc);
+	isize index = gb_binary_search(font->glyph_map, font->glyph_count, gb_size_of(*font->glyph_map), &codepoint, gbgl__font_glyph_map_search_proc);
 	if (index >= 0) {
 		GB_ASSERT(codepoint == font->glyph_map[index].codepoint);
 		if (out_index)
@@ -1808,7 +1922,7 @@ gbgl_get_string_width(gbglFont *font, char const *str, isize max_len)
 	return gbgl_get_sub_string_width(font, str, char_count);
 }
 
-
+#endif
 
 
 ////////////////////////////////////////////////////////////////
@@ -1928,9 +2042,35 @@ gbgl_bs_init(gbglBasicState *bs, i32 window_width, i32 window_height)
 void
 gbgl_bs_set_resolution(gbglBasicState *bs, i32 window_width, i32 window_height)
 {
+	f32 left   = 0.0f;
+	f32 right  = cast(f32)window_width;
+	f32 bottom = 0.0f;
+	f32 top    = cast(f32)window_height;
+	f32 znear  = 0.0f;
+	f32 zfar   = 1.0f;
+
 	bs->width  = window_width;
 	bs->height = window_height;
-	gb_mat4_ortho2d(&bs->ortho_mat, 0, bs->width, 0, bs->height);
+
+	bs->ortho_mat[0] = 2.0f / (right - left);
+	bs->ortho_mat[1] = 0.0f;
+	bs->ortho_mat[2] = 0.0f;
+	bs->ortho_mat[3] = 0.0f;
+
+	bs->ortho_mat[4] = 0.0f;
+	bs->ortho_mat[5] = 2.0f / (top - bottom);
+	bs->ortho_mat[6] = 0.0f;
+	bs->ortho_mat[7] = 0.0f;
+
+	bs->ortho_mat[8]  =  0.0f;
+	bs->ortho_mat[9]  =  0.0f;
+	bs->ortho_mat[10] = -2.0f / (zfar - znear);
+	bs->ortho_mat[11] =  0.0f;
+
+	bs->ortho_mat[12] = -(right + left) / (right - left);
+	bs->ortho_mat[13] = -(top + bottom) / (top - bottom);
+	bs->ortho_mat[14] = -(zfar + znear) / (zfar - znear);
+	bs->ortho_mat[15] = 1.0f;
 }
 
 void
@@ -1952,30 +2092,30 @@ gbgl_bs_end(gbglBasicState *bs)
 
 
 void
-gbgl_bs_draw_textured_rect(gbglBasicState *bs, gbglTexture *tex, gbVec2 pos, gbVec2 dim, b32 v_up)
+gbgl_bs_draw_textured_rect(gbglBasicState *bs, gbglTexture *tex, f32 x, f32 y, f32 w, f32 h, b32 v_up)
 {
-	bs->vertices[0].x = pos.x;
-	bs->vertices[0].y = pos.y;
+	bs->vertices[0].x = x;
+	bs->vertices[0].y = y;
 	bs->vertices[0].u = 0.0f;
 	bs->vertices[0].v = v_up ? 0.0f : 1.0f;
 
-	bs->vertices[1].x = pos.x + dim.x;
-	bs->vertices[1].y = pos.y;
+	bs->vertices[1].x = x + w;
+	bs->vertices[1].y = y;
 	bs->vertices[1].u = 1.0f;
 	bs->vertices[1].v = v_up ? 0.0f : 1.0f;
 
-	bs->vertices[2].x = pos.x + dim.x;
-	bs->vertices[2].y = pos.y + dim.y;
+	bs->vertices[2].x = x + w;
+	bs->vertices[2].y = y + h;
 	bs->vertices[2].u = 1.0f;
 	bs->vertices[2].v = v_up ? 1.0f : 0.0f;
 
-	bs->vertices[3].x = pos.x;
-	bs->vertices[3].y = pos.y + dim.y;
+	bs->vertices[3].x = x;
+	bs->vertices[3].y = y + h;
 	bs->vertices[3].u = 0.0f;
 	bs->vertices[3].v = v_up ? 1.0f : 0.0f;
 
 	gbgl_use_shader(&bs->ortho_tex_shader);
-	gbgl_set_uniform_mat4(&bs->ortho_tex_shader, "u_ortho_mat", &bs->ortho_mat);
+	gbgl_set_uniform_mat4(&bs->ortho_tex_shader, "u_ortho_mat", bs->ortho_mat);
 	gbgl_bind_texture2d(tex, 0, bs->nearest_sampler);
 
 	gbgl_vbo_copy(bs->vbo, bs->vertices, 4*gb_size_of(bs->vertices[0]), 0);
@@ -1992,24 +2132,24 @@ gbgl_bs_draw_textured_rect(gbglBasicState *bs, gbglTexture *tex, gbVec2 pos, gbV
 }
 
 void
-gbgl_bs_draw_rect(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, gbColour col)
+gbgl_bs_draw_rect(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, gbColour col)
 {
 	gbgl_bs_draw_quad(bs,
-	                  gb_vec2(pos.x,       pos.y),
-	                  gb_vec2(pos.x+dim.x, pos.y),
-	                  gb_vec2(pos.x+dim.x, pos.y+dim.y),
-	                  gb_vec2(pos.x,       pos.y+dim.y),
+	                  x,   y,
+	                  x+w, y,
+	                  x+w, y+h,
+	                  x,   y+h,
 	                  col);
 }
 
 void
-gbgl_bs_draw_rect_outline(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, gbColour col, f32 thickness)
+gbgl_bs_draw_rect_outline(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, gbColour col, f32 thickness)
 {
 	gbgl_bs_draw_quad_outline(bs,
-	                          gb_vec2(pos.x,       pos.y),
-	                          gb_vec2(pos.x+dim.x, pos.y),
-	                          gb_vec2(pos.x+dim.x, pos.y+dim.y),
-	                          gb_vec2(pos.x,       pos.y+dim.y),
+	                          x,   y,
+	                          x+w, y,
+	                          x+w, y+h,
+	                          x,   y+h,
 	                          col,
 	                          thickness);
 }
@@ -2018,11 +2158,10 @@ gbgl_bs_draw_rect_outline(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, gbColour c
 gb_internal void
 gbgl__bs_setup_ortho_colour_state(gbglBasicState *bs, isize vertex_count, gbColour col)
 {
-	gbVec4 vcol = gb_vec4(col.r/255.0f, col.g/255.0f, col.b/255.0f, col.a/255.0f);
 
 	gbgl_use_shader(&bs->ortho_col_shader);
-	gbgl_set_uniform_mat4(&bs->ortho_col_shader, "u_ortho_mat", &bs->ortho_mat);
-	gbgl_set_uniform_vec4(&bs->ortho_col_shader, "u_colour", vcol);
+	gbgl_set_uniform_mat4(&bs->ortho_col_shader, "u_ortho_mat", bs->ortho_mat);
+	gbgl_set_uniform_colour(&bs->ortho_col_shader, "u_colour", col);
 
 	gbgl_vbo_copy(bs->vbo, bs->vertices, vertex_count*gb_size_of(bs->vertices[0]), 0);
 	gbgl_vert_ptr_aa(0, 2, gbglBasicVertex, x);
@@ -2036,38 +2175,47 @@ gbgl__bs_setup_ortho_colour_state(gbglBasicState *bs, isize vertex_count, gbColo
 
 void
 gbgl_bs_draw_quad(gbglBasicState *bs,
-                  gbVec2 p0, gbVec2 p1, gbVec2 p2, gbVec2 p3, gbColour col)
+                  f32 x0, f32 y0,
+                  f32 x1, f32 y1,
+                  f32 x2, f32 y2,
+                  f32 x3, f32 y3,
+                  gbColour col)
 {
-	bs->vertices[0].x = p0.x;
-	bs->vertices[0].y = p0.y;
+	bs->vertices[0].x = x0;
+	bs->vertices[0].y = y0;
 
-	bs->vertices[1].x = p1.x;
-	bs->vertices[1].y = p1.y;
+	bs->vertices[1].x = x1;
+	bs->vertices[1].y = y1;
 
-	bs->vertices[2].x = p2.x;
-	bs->vertices[2].y = p2.y;
+	bs->vertices[2].x = x2;
+	bs->vertices[2].y = y2;
 
-	bs->vertices[3].x = p3.x;
-	bs->vertices[3].y = p3.y;
+	bs->vertices[3].x = x3;
+	bs->vertices[3].y = y3;
 
 	gbgl__bs_setup_ortho_colour_state(bs, 4, col);
 	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, NULL);
 }
 
 void
-gbgl_bs_draw_quad_outline(gbglBasicState *bs, gbVec2 p0, gbVec2 p1, gbVec2 p2, gbVec2 p3, gbColour col, f32 thickness)
+gbgl_bs_draw_quad_outline(gbglBasicState *bs,
+                          f32 x0, f32 y0,
+                          f32 x1, f32 y1,
+                          f32 x2, f32 y2,
+                          f32 x3, f32 y3,
+                          gbColour col, f32 thickness)
 {
-	bs->vertices[0].x = p0.x;
-	bs->vertices[0].y = p0.y;
+	bs->vertices[0].x = x0;
+	bs->vertices[0].y = y0;
 
-	bs->vertices[1].x = p1.x;
-	bs->vertices[1].y = p1.y;
+	bs->vertices[1].x = x1;
+	bs->vertices[1].y = y1;
 
-	bs->vertices[2].x = p2.x;
-	bs->vertices[2].y = p2.y;
+	bs->vertices[2].x = x2;
+	bs->vertices[2].y = y2;
 
-	bs->vertices[3].x = p3.x;
-	bs->vertices[3].y = p3.y;
+	bs->vertices[3].x = x3;
+	bs->vertices[3].y = y3;
 
 	gbgl__bs_setup_ortho_colour_state(bs, 4, col);
 	glLineWidth(thickness);
@@ -2075,13 +2223,13 @@ gbgl_bs_draw_quad_outline(gbglBasicState *bs, gbVec2 p0, gbVec2 p1, gbVec2 p2, g
 }
 
 void
-gbgl_bs_draw_line(gbglBasicState *bs, gbVec2 p0, gbVec2 p1, gbColour col, f32 thickness)
+gbgl_bs_draw_line(gbglBasicState *bs, f32 x0, f32 y0, f32 x1, f32 y1, gbColour col, f32 thickness)
 {
-	bs->vertices[0].x = p0.x;
-	bs->vertices[0].y = p0.y;
+	bs->vertices[0].x = x0;
+	bs->vertices[0].y = y0;
 
-	bs->vertices[1].x = p1.x;
-	bs->vertices[1].y = p1.y;
+	bs->vertices[1].x = x1;
+	bs->vertices[1].y = y1;
 
 	gbgl__bs_setup_ortho_colour_state(bs, 2, col);
 	glLineWidth(thickness);
@@ -2089,21 +2237,21 @@ gbgl_bs_draw_line(gbglBasicState *bs, gbVec2 p0, gbVec2 p1, gbColour col, f32 th
 }
 
 void
-gbgl_bs_draw_elliptical_arc(gbglBasicState *bs, gbVec2 p, f32 radius_a, f32 radius_b,
+gbgl_bs_draw_elliptical_arc(gbglBasicState *bs, f32 x, f32 y, f32 radius_a, f32 radius_b,
                             f32 min_angle, f32 max_angle, gbColour col)
 {
 	isize i;
 
-	bs->vertices[0].x = p.x;
-	bs->vertices[0].y = p.y;
+	bs->vertices[0].x = x;
+	bs->vertices[0].y = y;
 
 	for (i = 0; i < 31; i++) {
 		f32 t = cast(f32)i / 30.0f;
-		f32 a = gb_lerp(min_angle, max_angle, t);
-		f32 c = gb_cos(a);
-		f32 s = gb_sin(a);
-		bs->vertices[i+1].x = p.x + c*radius_a;
-		bs->vertices[i+1].y = p.y + s*radius_b;
+		f32 a = gbgl_lerp(min_angle, max_angle, t);
+		f32 c = gbgl_cos(a);
+		f32 s = gbgl_sin(a);
+		bs->vertices[i+1].x = x + c*radius_a;
+		bs->vertices[i+1].y = y + s*radius_b;
 	}
 
 	gbgl__bs_setup_ortho_colour_state(bs, 32, col);
@@ -2111,18 +2259,18 @@ gbgl_bs_draw_elliptical_arc(gbglBasicState *bs, gbVec2 p, f32 radius_a, f32 radi
 }
 
 void
-gbgl_bs_draw_elliptical_arc_outline(gbglBasicState *bs, gbVec2 p, f32 radius_a, f32 radius_b,
+gbgl_bs_draw_elliptical_arc_outline(gbglBasicState *bs, f32 x, f32 y, f32 radius_a, f32 radius_b,
                                     f32 min_angle, f32 max_angle, gbColour col, f32 thickness)
 {
 	isize i;
 
 	for (i = 0; i < 32; i++) {
 		f32 t = cast(f32)i / 31.0f;
-		f32 a = gb_lerp(min_angle, max_angle, t);
-		f32 c = gb_cos(a);
-		f32 s = gb_sin(a);
-		bs->vertices[i+1].x = p.x + c*radius_a;
-		bs->vertices[i+1].y = p.y + s*radius_b;
+		f32 a = gbgl_lerp(min_angle, max_angle, t);
+		f32 c = gbgl_cos(a);
+		f32 s = gbgl_sin(a);
+		bs->vertices[i+1].x = x + c*radius_a;
+		bs->vertices[i+1].y = y + s*radius_b;
 	}
 
 	gbgl__bs_setup_ortho_colour_state(bs, 32, col);
@@ -2133,63 +2281,63 @@ gbgl_bs_draw_elliptical_arc_outline(gbglBasicState *bs, gbVec2 p, f32 radius_a, 
 
 
 gb_inline void
-gbgl_bs_draw_circle(gbglBasicState *bs, gbVec2 p, f32 radius, gbColour col)
+gbgl_bs_draw_circle(gbglBasicState *bs, f32 x, f32 y, f32 radius, gbColour col)
 {
-	gbgl_bs_draw_elliptical_arc(bs, p, radius, radius, 0, GB_MATH_TAU, col);
+	gbgl_bs_draw_elliptical_arc(bs, x, y, radius, radius, 0, GBGL_TAU, col);
 }
 
 gb_inline void
-gbgl_bs_draw_circle_outline(gbglBasicState *bs, gbVec2 p, f32 radius, gbColour col, f32 thickness)
+gbgl_bs_draw_circle_outline(gbglBasicState *bs, f32 x, f32 y, f32 radius, gbColour col, f32 thickness)
 {
-	gbgl_bs_draw_elliptical_arc_outline(bs, p, radius, radius, 0, GB_MATH_TAU, col, thickness);
+	gbgl_bs_draw_elliptical_arc_outline(bs, x, y, radius, radius, 0, GBGL_TAU, col, thickness);
 }
 
 void
-gbgl_bs_draw_rounded_rect_corners(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f32 roundness, gbColour col, u32 corners)
+gbgl_bs_draw_rounded_rect_corners(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbColour col, u32 corners)
 {
-	if ((2.0f*roundness > gb_abs(dim.x)) ||
-	    (2.0f*roundness > gb_abs(dim.y))) {
-		roundness = 0.5f*gb_min(gb_abs(dim.x), gb_abs(dim.y));
+	if ((2.0f*roundness > gbgl_abs(w)) ||
+	    (2.0f*roundness > gbgl_abs(h))) {
+		roundness = 0.5f*gbgl_min(gbgl_abs(w), gbgl_abs(h));
 	}
 
 	if (roundness == 0 || corners == 0) {
-		gbgl_bs_draw_rect(bs, pos, dim, col);
+		gbgl_bs_draw_rect(bs, x, y, w, h, col);
 	} else {
 		isize i, vc = 0;
 
-		bs->vertices[vc].x = pos.x + 0.5f*dim.x;
-		bs->vertices[vc].y = pos.y + 0.5f*dim.y;
+		bs->vertices[vc].x = x + 0.5f*w;
+		bs->vertices[vc].y = y + 0.5f*h;
 		vc++;
 
 		if (corners & 1) {
 			for (i = 0; i < 6; i++) {
 				f32 t = cast(f32)i / 5.0f;
-				f32 a = gb_lerp(0.5f*GB_MATH_TAU, 0.75f*GB_MATH_TAU, t);
-				f32 c = gb_cos(a);
-				f32 s = gb_sin(a);
-				bs->vertices[vc].x = pos.x + roundness + c*roundness;
-				bs->vertices[vc].y = pos.y + roundness + s*roundness;
+				f32 a = gbgl_lerp(0.5f*GBGL_TAU, 0.75f*GBGL_TAU, t);
+				f32 c = gbgl_cos(a);
+				f32 s = gbgl_sin(a);
+				bs->vertices[vc].x = x + roundness + c*roundness;
+				bs->vertices[vc].y = y + roundness + s*roundness;
 				vc++;
 			}
 		} else {
-			bs->vertices[vc].x = pos.x;
-			bs->vertices[vc].y = pos.y;
+			bs->vertices[vc].x = x;
+			bs->vertices[vc].y = y;
 			vc++;
 		}
 
 		if (corners & 2) {
 			for (i = 0; i < 6; i++) {
 				f32 t = cast(f32)i / 5.0f;
-				f32 a = gb_lerp(0.75f*GB_MATH_TAU, 1.00f*GB_MATH_TAU, t);
-				f32 c = gb_cos(a);
-				f32 s = gb_sin(a);
-				bs->vertices[vc].x = pos.x + dim.x - roundness + c*roundness;
-				bs->vertices[vc].y = pos.y + roundness + s*roundness;
+				f32 a = gbgl_lerp(0.75f*GBGL_TAU, 1.00f*GBGL_TAU, t);
+				f32 c = gbgl_cos(a);
+				f32 s = gbgl_sin(a);
+				bs->vertices[vc].x = x + w - roundness + c*roundness;
+				bs->vertices[vc].y = y + roundness + s*roundness;
 				vc++;
 			}
 		} else {
-			bs->vertices[vc].x = pos.x + dim.x;
-			bs->vertices[vc].y = pos.y;
+			bs->vertices[vc].x = x + w;
+			bs->vertices[vc].y = y;
 			vc++;
 		}
 
@@ -2197,41 +2345,41 @@ gbgl_bs_draw_rounded_rect_corners(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f3
 		if (corners & 4) {
 			for (i = 0; i < 6; i++) {
 				f32 t = cast(f32)i / 5.0f;
-				f32 a = gb_lerp(0.00f*GB_MATH_TAU, 0.25f*GB_MATH_TAU, t);
-				f32 c = gb_cos(a);
-				f32 s = gb_sin(a);
-				bs->vertices[vc].x = pos.x + dim.x - roundness + c*roundness;
-				bs->vertices[vc].y = pos.y + dim.y - roundness + s*roundness;
+				f32 a = gbgl_lerp(0.00f*GBGL_TAU, 0.25f*GBGL_TAU, t);
+				f32 c = gbgl_cos(a);
+				f32 s = gbgl_sin(a);
+				bs->vertices[vc].x = x + w - roundness + c*roundness;
+				bs->vertices[vc].y = y + h - roundness + s*roundness;
 				vc++;
 			}
 		} else {
-			bs->vertices[vc].x = pos.x + dim.x;
-			bs->vertices[vc].y = pos.y + dim.y;
+			bs->vertices[vc].x = x + w;
+			bs->vertices[vc].y = y + h;
 			vc++;
 		}
 
 		if (corners & 8) {
 			for (i = 0; i < 6; i++) {
 				f32 t = cast(f32)i / 5.0f;
-				f32 a = gb_lerp(0.25f*GB_MATH_TAU, 0.50f*GB_MATH_TAU, t);
-				f32 c = gb_cos(a);
-				f32 s = gb_sin(a);
-				bs->vertices[vc].x = pos.x + roundness + c*roundness;
-				bs->vertices[vc].y = pos.y + dim.y - roundness + s*roundness;
+				f32 a = gbgl_lerp(0.25f*GBGL_TAU, 0.50f*GBGL_TAU, t);
+				f32 c = gbgl_cos(a);
+				f32 s = gbgl_sin(a);
+				bs->vertices[vc].x = x + roundness + c*roundness;
+				bs->vertices[vc].y = y + h - roundness + s*roundness;
 				vc++;
 			}
 		} else {
-			bs->vertices[vc].x = pos.x;
-			bs->vertices[vc].y = pos.y + dim.y;
+			bs->vertices[vc].x = x;
+			bs->vertices[vc].y = y + h;
 			vc++;
 		}
 
 		if (corners & 1) {
-			bs->vertices[vc].x = pos.x;
-			bs->vertices[vc].y = pos.y + roundness;
+			bs->vertices[vc].x = x;
+			bs->vertices[vc].y = y + roundness;
 		} else {
-			bs->vertices[vc].x = pos.x;
-			bs->vertices[vc].y = pos.y;
+			bs->vertices[vc].x = x;
+			bs->vertices[vc].y = y;
 		}
 		vc++;
 
@@ -2241,54 +2389,54 @@ gbgl_bs_draw_rounded_rect_corners(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f3
 }
 
 gb_inline void
-gbgl_bs_draw_rounded_rect(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f32 roundness, gbColour col)
+gbgl_bs_draw_rounded_rect(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbColour col)
 {
-	gbgl_bs_draw_rounded_rect_corners(bs, pos, dim, roundness, col, 1|2|4|8);
+	gbgl_bs_draw_rounded_rect_corners(bs, x, y, w, h, roundness, col, 1|2|4|8);
 }
 
 
 void
-gbgl_bs_draw_rounded_rect_corners_outline(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f32 roundness, gbColour col, f32 thickness, u32 corners)
+gbgl_bs_draw_rounded_rect_corners_outline(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbColour col, f32 thickness, u32 corners)
 {
-	if ((2.0f*roundness > gb_abs(dim.x)) ||
-	    (2.0f*roundness > gb_abs(dim.y))) {
-		roundness = 0.5f*gb_min(gb_abs(dim.x), gb_abs(dim.y));
+	if ((2.0f*roundness > gbgl_abs(w)) ||
+	    (2.0f*roundness > gbgl_abs(h))) {
+		roundness = 0.5f*gbgl_min(gbgl_abs(w), gbgl_abs(h));
 	}
 
 	if (roundness == 0 || corners == 0) {
-		gbgl_bs_draw_rect_outline(bs, pos, dim, col, thickness);
+		gbgl_bs_draw_rect_outline(bs, x, y, w, h, col, thickness);
 	} else {
 		isize i, vc = 0;
 
 		if (corners & 1) {
 			for (i = 0; i < 6; i++) {
 				f32 t = cast(f32)i / 5.0f;
-				f32 a = gb_lerp(0.5f*GB_MATH_TAU, 0.75f*GB_MATH_TAU, t);
-				f32 c = gb_cos(a);
-				f32 s = gb_sin(a);
-				bs->vertices[vc].x = pos.x + roundness + c*roundness;
-				bs->vertices[vc].y = pos.y + roundness + s*roundness;
+				f32 a = gbgl_lerp(0.5f*GBGL_TAU, 0.75f*GBGL_TAU, t);
+				f32 c = gbgl_cos(a);
+				f32 s = gbgl_sin(a);
+				bs->vertices[vc].x = x + roundness + c*roundness;
+				bs->vertices[vc].y = y + roundness + s*roundness;
 				vc++;
 			}
 		} else {
-			bs->vertices[vc].x = pos.x;
-			bs->vertices[vc].y = pos.y;
+			bs->vertices[vc].x = x;
+			bs->vertices[vc].y = y;
 			vc++;
 		}
 
 		if (corners & 2) {
 			for (i = 0; i < 6; i++) {
 				f32 t = cast(f32)i / 5.0f;
-				f32 a = gb_lerp(0.75f*GB_MATH_TAU, 1.00f*GB_MATH_TAU, t);
-				f32 c = gb_cos(a);
-				f32 s = gb_sin(a);
-				bs->vertices[vc].x = pos.x + dim.x - roundness + c*roundness;
-				bs->vertices[vc].y = pos.y + roundness + s*roundness;
+				f32 a = gbgl_lerp(0.75f*GBGL_TAU, 1.00f*GBGL_TAU, t);
+				f32 c = gbgl_cos(a);
+				f32 s = gbgl_sin(a);
+				bs->vertices[vc].x = x + w - roundness + c*roundness;
+				bs->vertices[vc].y = y + roundness + s*roundness;
 				vc++;
 			}
 		} else {
-			bs->vertices[vc].x = pos.x + dim.x;
-			bs->vertices[vc].y = pos.y;
+			bs->vertices[vc].x = x + w;
+			bs->vertices[vc].y = y;
 			vc++;
 		}
 
@@ -2296,32 +2444,32 @@ gbgl_bs_draw_rounded_rect_corners_outline(gbglBasicState *bs, gbVec2 pos, gbVec2
 		if (corners & 4) {
 			for (i = 0; i < 6; i++) {
 				f32 t = cast(f32)i / 5.0f;
-				f32 a = gb_lerp(0.00f*GB_MATH_TAU, 0.25f*GB_MATH_TAU, t);
-				f32 c = gb_cos(a);
-				f32 s = gb_sin(a);
-				bs->vertices[vc].x = pos.x + dim.x - roundness + c*roundness;
-				bs->vertices[vc].y = pos.y + dim.y - roundness + s*roundness;
+				f32 a = gbgl_lerp(0.00f*GBGL_TAU, 0.25f*GBGL_TAU, t);
+				f32 c = gbgl_cos(a);
+				f32 s = gbgl_sin(a);
+				bs->vertices[vc].x = x + w - roundness + c*roundness;
+				bs->vertices[vc].y = y + h - roundness + s*roundness;
 				vc++;
 			}
 		} else {
-			bs->vertices[vc].x = pos.x + dim.x;
-			bs->vertices[vc].y = pos.y + dim.y;
+			bs->vertices[vc].x = x + w;
+			bs->vertices[vc].y = y + h;
 			vc++;
 		}
 
 		if (corners & 8) {
 			for (i = 0; i < 6; i++) {
 				f32 t = cast(f32)i / 5.0f;
-				f32 a = gb_lerp(0.25f*GB_MATH_TAU, 0.50f*GB_MATH_TAU, t);
-				f32 c = gb_cos(a);
-				f32 s = gb_sin(a);
-				bs->vertices[vc].x = pos.x + roundness + c*roundness;
-				bs->vertices[vc].y = pos.y + dim.y - roundness + s*roundness;
+				f32 a = gbgl_lerp(0.25f*GBGL_TAU, 0.50f*GBGL_TAU, t);
+				f32 c = gbgl_cos(a);
+				f32 s = gbgl_sin(a);
+				bs->vertices[vc].x = x + roundness + c*roundness;
+				bs->vertices[vc].y = y + h - roundness + s*roundness;
 				vc++;
 			}
 		} else {
-			bs->vertices[vc].x = pos.x;
-			bs->vertices[vc].y = pos.y + dim.y;
+			bs->vertices[vc].x = x;
+			bs->vertices[vc].y = y + h;
 			vc++;
 		}
 
@@ -2332,18 +2480,19 @@ gbgl_bs_draw_rounded_rect_corners_outline(gbglBasicState *bs, gbVec2 pos, gbVec2
 }
 
 gb_inline void
-gbgl_bs_draw_rounded_rect_outline(gbglBasicState *bs, gbVec2 pos, gbVec2 dim, f32 roundness, gbColour col, f32 thickness)
+gbgl_bs_draw_rounded_rect_outline(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbColour col, f32 thickness)
 {
-	gbgl_bs_draw_rounded_rect_corners_outline(bs, pos, dim, roundness, col, thickness, 1|2|4|8);
+	gbgl_bs_draw_rounded_rect_corners_outline(bs, x, y, w, h, roundness, col, thickness, 1|2|4|8);
 }
 
 
 
 
+#if !defined(GBGL_NO_FONTS)
 
 
 isize
-gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColour col, char const *str, isize len)
+gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, f32 x, f32 y, gbColour col, char const *str, isize len)
 {
 	isize char_count = gb_utf8_strnlen(str, len);
 	isize line_count = 0;
@@ -2364,11 +2513,11 @@ gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColou
 		if (justify == GBGL_JUSTIFY_CENTRE) {
 			f32 width;
 			gbgl_get_string_dimensions(font, ptr, &width, NULL);
-			x = cast(i32)gb_round(cast(f32)x - width*0.5f);
+			x = gbgl_round(x - width*0.5f);
 		} else if (justify == GBGL_JUSTIFY_RIGHT) {
 			f32 width;
 			gbgl_get_string_dimensions(font, ptr, &width, NULL);
-			x = cast(i32)gb_round(cast(f32)x - width);
+			x = gbgl_round(x - width);
 		}
 
 		line_count = 1;
@@ -2474,7 +2623,7 @@ gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColou
 			isize sampler_index = 0;
 
 			gbgl_use_shader(&bs->font_shader);
-			gbgl_set_uniform_mat4(&bs->font_shader, "u_ortho_mat", &bs->ortho_mat);
+			gbgl_set_uniform_mat4(&bs->font_shader, "u_ortho_mat", bs->ortho_mat);
 			gbgl_set_uniform_colour(&bs->font_shader, "u_colour", col);
 			GB_ASSERT(bs->text_params[GBGL_TEXT_PARAM_TEXTURE_FILTER].val_i32 < gb_count_of(bs->font_samplers));
 			if (bs->text_params[GBGL_TEXT_PARAM_TEXTURE_FILTER].val_i32 < gb_count_of(bs->font_samplers))
@@ -2499,7 +2648,7 @@ gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColou
 }
 
 isize
-gbgl_bs_draw_string(gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColour col, char const *fmt, ...)
+gbgl_bs_draw_string(gbglBasicState *bs, gbglFont *font, f32 x, f32 y, gbColour col, char const *fmt, ...)
 {
 	isize len;
 	va_list va;
@@ -2509,8 +2658,8 @@ gbgl_bs_draw_string(gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColour c
 	return len;
 }
 
-isize
-gbgl_bs_draw_string_va(gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColour col, char const *fmt, va_list va)
+gb_inline isize
+gbgl_bs_draw_string_va(gbglBasicState *bs, gbglFont *font, f32 x, f32 y, gbColour col, char const *fmt, va_list va)
 {
 	isize len = gb_snprintf_va(bs->font_text_buffer, gb_size_of(bs->font_text_buffer),
 	                           fmt, va);
@@ -2520,7 +2669,7 @@ gbgl_bs_draw_string_va(gbglBasicState *bs, gbglFont *font, i32 x, i32 y, gbColou
 	return gbgl_bs_draw_substring(bs, font, x, y, col, bs->font_text_buffer, len);
 }
 
-
+#endif
 
 
 #endif
