@@ -1,5 +1,5 @@
-/* gb.h - v0.05 - Ginger Bill's C Helper Library - public domain
-                - no warranty implied; use at your own risk
+/* gb.h - v0.05a - Ginger Bill's C Helper Library - public domain
+                 - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
 	to replace the C/C++ standard library
@@ -26,6 +26,7 @@ Conventions used:
 
 
 Version History:
+	0.05a - Minor function name changes
 	0.05  - Radix Sort for unsigned integers (TODO: Other primitives)
 	0.04  - Better UTF support and search/sort procs
 	0.03  - Completely change procedure naming convention
@@ -1025,12 +1026,20 @@ GB_DEF gbString gb_trim_space_string(gbString str); /* Whitespace ` \t\r\n\v\f` 
 
 typedef gbBuffer(u8) gbByteBuffer;
 
-#define gb_init_buffer(x, allocator, cap) do {                     \
+#define gb_init_buffer_from_allocator(x, allocator, cap) do {      \
 	void **data = cast(void **)&((x)->data);                       \
 	gb_zero_struct(x);                                             \
 	(x)->capacity = (cap);                                         \
 	*data = gb_alloc((allocator), (cap)*gb_size_of((x)->data[0])); \
 } while (0)
+
+#define gb_init_buffer_from_memory(x, memory, cap) do {            \
+	void **data = cast(void **)&((x)->data);                       \
+	gb_zero_struct(x);                                             \
+	(x)->capacity = (cap);                                         \
+	*data = memory;                                                \
+} while (0)
+
 
 #define gb_free_buffer(x, allocator) do { gb_free(allocator, (x)->data); } while (0)
 
