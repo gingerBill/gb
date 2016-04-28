@@ -1,118 +1,121 @@
-// gb_string.h - v0.94 - public domain string library - no warranty implied; use at your own risk
-// A Simple Dynamic Strings Library for C and C++
-//
-// Version History:
-//     0.94 - Remove "declare anywhere"
-//     0.93 - Fix typos and errors
-//     0.92 - Add extern "C" if compiling as C++
-//     0.91 - Remove `char * cstr` from String_Header
-//     0.90 - Initial Version
-//
-// LICENSE
-//
-//     This software is in the public domain. Where that dedication is not
-//     recognized, you are granted a perpetual, irrevocable license to copy,
-//     distribute, and modify this file as you see fit.
-//
-// How to use:
-//
-//     Do this:
-//         #define GB_STRING_IMPLEMENTATION
-//     before you include this file in *one* C++ file to create the implementation
-//
-//     i.e. it should look like this:
-//     #include ...
-//     #include ...
-//     #include ...
-//     #define GB_STRING_IMPLEMENTATION
-//     #include "gb_string.h"
-//
-//     You can #define GB_ALLOC, and GB_FREE to avoid using malloc,free.
-//
-//     If you prefer to use C++, you can use all the same functions in a
-//     namespace instead, do this:
-//         #define GB_STRING_CPP
-//     before you include the header file
-//
-//     i.e it should look like this:
-//     #define GB_STRING_CPP
-//     #include "gb_string.h"
-//
-//     The C++ version has the advantage that you do not need to reassign variables
-//     i.e.
-//
-//         /* C version */
-//         str = gb_append_cstring(str, "another string");
-//         /* C++ version */
-//         gb::append_cstring(str, "another string");
-//
-//         This could be achieved in C by passing a pointer to the string but for
-//         simplicity and consistency, reassigning the variable is better.
-// Reasoning:
-//
-//     By default, strings in C are null terminated which means you have to count
-//     the number of character up to the null character to calculate the length.
-//     Many "better" C string libraries will create a struct for a string.
-//     i.e.
-//
-//         struct String
-//         {
-//             size_t length;
-//             size_t capacity;
-//             char *  cstring;
-//         };
-//
-//     This library tries to augment normal C strings in a better way that is still
-//     compatible with C-style strings.
+/* gb_string.h - v0.95 - public domain string library - no warranty implied; use at your own risk
+	A Simple Dynamic Strings Library for C and C++
 
-//
-//     +--------+-----------------------+-----------------+
-//     | Header | Binary C-style String | Null Terminator |
-//     +--------+-----------------------+-----------------+
-//              |
-//              +-> Pointer returned by functions
-//
-//     Due to the meta-data being stored before the string pointer and every gb string
-//     having an implicit null terminator, gb strings are full compatible with c-style
-//     strings and read-only functions.
-//
-// Advantages:
-//
-//     * gb strings can be passed to C-style string functions without accessing a struct
-//       member of calling a function, i.e.
-//
-//           printf("%s\n", gb_str);
-//
-//       Many other libraries do either of these:
-//
-//           printf("%s\n", string->cstr);
-//           printf("%s\n", get_cstring(string));
-//
-//     * You can access each character just like a C-style string:
-//
-//           printf("%c %c\n", str[0], str[13]);
-//
-//     * gb strings are singularly allocated. The meta-data is next to the character
-//       array which is better for the cache.
-//
-// Disadvantages:
-//
-//     * In the C version of these functions, many return the new string. i.e.
-//
-//           str = gb_append_cstring(str, "another string");
-//
-//       In the C++ version, this is made easier with the use of references. i.e.
-//
-//           gb::append_cstring(str, "another string");
-//
-//     * Custom allocators must redefine GB_ALLOC and GB_FREE which can be annoying.
-//       realloc is not used for compatibility with many custom allocators that do not
-//       have a reallocation function.
-//
-//
-// Examples:
-//
-// C example
+	Version History:
+		0.95  - C90 Support
+	    0.94  - Remove "declare anywhere"
+	    0.93  - Fix typos and errors
+	    0.92  - Add extern "C" if compiling as C++
+	    0.91  - Remove `char * cstr` from String_Header
+	    0.90  - Initial Version
+
+	LICENSE
+
+	    This software is in the public domain. Where that dedication is not
+	    recognized, you are granted a perpetual, irrevocable license to copy,
+	    distribute, and modify this file as you see fit.
+
+	How to use:
+
+	    Do this:
+	        #define GB_STRING_IMPLEMENTATION
+	    before you include this file in *one* C++ file to create the implementation
+
+	    i.e. it should look like this:
+	    #include ...
+	    #include ...
+	    #include ...
+	    #define GB_STRING_IMPLEMENTATION
+	    #include "gb_string.h"
+
+	    You can #define GB_ALLOC, and GB_FREE to avoid using malloc,free.
+
+	    If you prefer to use C++, you can use all the same functions in a
+	    namespace instead, do this:
+	        #define GB_STRING_CPP
+	    before you include the header file
+
+	    i.e it should look like this:
+	    #define GB_STRING_CPP
+	    #include "gb_string.h"
+
+	    The C++ version has the advantage that you do not need to reassign variables
+	    i.e.
+
+	        C version
+	        str = gb_append_cstring(str, "another string");
+	        C++ version
+	        gb::append_cstring(str, "another string");
+
+	        This could be achieved in C by passing a pointer to the string but for
+	        simplicity and consistency, reassigning the variable is better.
+
+	Reasoning:
+
+	    By default, strings in C are null terminated which means you have to count
+	    the number of character up to the null character to calculate the length.
+	    Many "better" C string libraries will create a struct for a string.
+	    i.e.
+
+	        struct String {
+	            size_t length;
+	            size_t capacity;
+	            char *  cstring;
+	        };
+
+	    This library tries to augment normal C strings in a better way that is still
+	    compatible with C-style strings.
+
+	    +--------+-----------------------+-----------------+
+	    | Header | Binary C-style String | Null Terminator |
+	    +--------+-----------------------+-----------------+
+	             |
+	             +-> Pointer returned by functions
+
+	    Due to the meta-data being stored before the string pointer and every gb string
+	    having an implicit null terminator, gb strings are full compatible with c-style
+	    strings and read-only functions.
+
+	Advantages:
+
+	    * gb strings can be passed to C-style string functions without accessing a struct
+	      member of calling a function, i.e.
+
+	          printf("%s\n", gb_str);
+
+	      Many other libraries do either of these:
+
+	          printf("%s\n", string->cstr);
+	          printf("%s\n", get_cstring(string));
+
+	    * You can access each character just like a C-style string:
+
+	          printf("%c %c\n", str[0], str[13]);
+
+	    * gb strings are singularly allocated. The meta-data is next to the character
+	      array which is better for the cache.
+
+	Disadvantages:
+
+	    * In the C version of these functions, many return the new string. i.e.
+
+	          str = gb_append_cstring(str, "another string");
+
+	      In the C++ version, this is made easier with the use of references. i.e.
+
+	          gb::append_cstring(str, "another string");
+
+	    * Custom allocators must redefine GB_ALLOC and GB_FREE which can be annoying.
+	      realloc is not used for compatibility with many custom allocators that do not
+	      have a reallocation function.
+
+	    * This is not compatible with the "gb.h" gbString. That version is a better version
+	      as it allows for custom allocators.
+
+*/
+
+/* Examples: */
+/* C example */
 #if 0
 #include <stdio.h>
 #include <stdlib.h>
@@ -150,8 +153,8 @@ int main(int argc, char **argv)
 
 }
 #endif
-//
-// C++ example
+
+/* C++ example */
 #if 0
 #include <stdio.h>
 #include <stdlib.h>
@@ -169,12 +172,12 @@ int main(int argc, char **argv)
 	append_string(str, other_str);
 	append_cstring(str, "world!");
 
-	printf("%s\n", str); // Hello, world!
+	printf("%s\n", str); /* Hello, world! */
 
 	printf("str length = %d\n", string_length(str));
 
 	set_string(str, "Potato soup");
-	printf("%s\n", str); // Potato soup
+	printf("%s\n", str); /* Potato soup */
 
 	set_string(str, "Hello");
 	set_string(other_str, "Pizza");
@@ -185,7 +188,7 @@ int main(int argc, char **argv)
 
 	set_string(str, "Ab.;!...AHello World       ??");
 	trim_string(str, "Ab.;!. ?");
-	printf("%s\n", str); // "Hello World"
+	printf("%s\n", str); /* "Hello World" */
 
 	free_string(str);
 	free_string(other_str);
@@ -210,7 +213,7 @@ int main(int argc, char **argv)
 #define gb_inline __forceinline
 #endif
 
-#include <string.h> // Needed for memcpy and cstring functions
+#include <string.h> /* Needed for memcpy and cstring functions */
 
 #ifdef __cplusplus
 extern "C" {
@@ -305,9 +308,9 @@ gb_inline void string_make_space_for(String& str, usize add_len) { str = gb_stri
 gb_inline usize string_allocation_size(const String str) { return gb_string_allocation_size(str); }
 gb_inline bool strings_are_equal(const String lhs, const String rhs) { return gb_strings_are_equal(lhs, rhs) == GB_TRUE; }
 gb_inline void trim_string(String& str, char const *cut_set) { str = gb_trim_string(str, cut_set); }
-} // namespace gb
-#endif // GB_STRING_CPP
-#endif // GB_STRING_H
+} /* namespace gb */
+#endif /* GB_STRING_CPP */
+#endif /* GB_STRING_H */
 #ifdef GB_STRING_IMPLEMENTATION
 static void
 gb_set_string_length(gbString str, gbUsize len)
@@ -468,7 +471,7 @@ gbString gb_string_make_space_for(gbString str, gbUsize add_len)
 	gbUsize available, old_size, new_size;
 
 	available = gb_string_available_space(str);
-	if (available >= add_len) // Return if there is enough space left
+	if (available >= add_len) /* Return if there is enough space left */
 		return str;
 
 
@@ -534,5 +537,5 @@ gbString gb_trim_string(gbString str, char const *cut_set)
 
 
 
-#endif // GB_STRING_IMPLEMENTATION
+#endif /* GB_STRING_IMPLEMENTATION */
 
