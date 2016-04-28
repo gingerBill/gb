@@ -1,43 +1,43 @@
-// gb_ini.h - v0.92 - public domain ini file loader library - no warranty implied; use at your own risk
-// A Simple Ini File Loader Library for C and C++
-//
-// Version History:
-//     0.91  - New styling
-//     0.91a - Error handling fix
-//     0.91  - Add extern "C" if compiling as C++
-//     0.90  - Initial Version
-//
-// LICENSE
-//
-//     This software is in the public domain. Where that dedication is not
-//     recognized, you are granted a perpetual, irrevocable license to copy,
-//     distribute, and modify this file as you see fit.
-//
-// How to use:
-//
-//     Do this:
-//         #define GB_INI_IMPLEMENTATION
-//     before you include this file in *one* C++ file to create the implementation
-//
-//     i.e. it should look like this:
-//     #include ...
-//     #include ...
-//     #include ...
-//     #define GB_INI_IMPLEMENTATION
-//     #include "gb_ini.h"
-//
-//     If you prefer to use C++, you can use all the same functions in a
-//     namespace instead, do this:
-//         #define GB_INI_CPP
-//     before you include the header file
-//
-//     i.e it should look like this:
-//     #define GB_INI_CPP
-//     #include "gb_ini.h"
-//
-// Examples:
-//
-// test.ini contents
+/* gb_ini.h - v0.93 - public domain ini file loader library - no warranty implied; use at your own risk
+	A Simple Ini File Loader Library for C and C++
+
+		Version History:
+			0.93  - C90 support
+			0.92  - ??
+			0.91  - New styling
+			0.91a - Error handling fix
+			0.91  - Add extern "C" if compiling as C++
+			0.90  - Initial Version
+
+		LICENSE
+		This software is in the public domain. Where that dedication is not
+		recognized, you are granted a perpetual, irrevocable license to copy,
+		distribute, and modify this file as you see fit.
+
+		How to use:
+		Do this:
+		    #define GB_INI_IMPLEMENTATION
+		before you include this file in *one* C++ file to create the implementation
+
+		i.e. it should look like this:
+		#include ...
+		#include ...
+		#include ...
+		#define GB_INI_IMPLEMENTATION
+		#include "gb_ini.h"
+
+		If you prefer to use C++, you can use all the same functions in a
+		namespace instead, do this:
+			#define GB_INI_CPP
+		before you include the header file
+
+			i.e it should look like this:
+			#define GB_INI_CPP
+			#include "gb_ini.h"
+*/
+
+/* Examples: */
+/* test.ini contents*/
 #if 0
 ; This is a Comment
 # This is also
@@ -51,15 +51,14 @@ name = Public Domain
 [author]
 name = Ginger Bill
 #endif
-// C example
+/* C example */
 #if 0
 #define GB_INI_IMPLEMENTATION
 #include "gb_ini.h"
 
 #include <stdio.h>
 #include <stdlib.h>
-struct Library
-{
+struct Library {
 	char const *name;
 	int         version;
 	char const *license;
@@ -94,8 +93,7 @@ int main(int argc, char **argv)
 {
 	struct Library lib = {0};
 	gbIniError err = gb_ini_parse("test.ini", &test_ini_handler, &lib);
-	if (err.type != GB_INI_ERROR_NONE)
-	{
+	if (err.type != GB_INI_ERROR_NONE) {
 		if (err.line_num > 0)
 			printf("Line (%d): ", err.line_num);
 		printf("%s\n", gb_ini_error_string(err));
@@ -111,8 +109,8 @@ int main(int argc, char **argv)
 	return 0;
 }
 #endif
-//
-// C++ example
+
+/* C++ example */
 #if 0
 #define GB_INI_CPP
 #define GB_INI_IMPLEMENTATION
@@ -121,8 +119,7 @@ int main(int argc, char **argv)
 #include <stdio.h>
 #include <stdlib.h>
 
-struct Library
-{
+struct Library {
 	char const *name;
 	int         version;
 	char const *license;
@@ -160,8 +157,7 @@ int main(int argc, char** argv)
 	using namespace gb;
 
 	Ini_Error err = ini_parse("test.ini", &test_ini_handler, &lib);
-	if (err.type != INI_ERROR_NONE)
-	{
+	if (err.type != INI_ERROR_NONE) {
 		if (err.line_num > 0)
 			printf("Line (%d): ", err.line_num);
 		printf("%s\n", ini_error_string(err));
@@ -200,12 +196,12 @@ int main(int argc, char** argv)
 
 #ifndef _MSC_VER
 	#ifdef __cplusplus
-	#define gb_inline inline
+	#define gbini_inline inline
 	#else
-	#define gb_inline
+	#define gbini_inline
 	#endif
 #else
-#define gb_inline __forceinline
+#define gbini_inline __forceinline
 #endif
 
 #include <stdio.h>
@@ -222,7 +218,7 @@ enum {
 	GB_INI_ERROR_ASSIGNMENT_MISSING,
 	GB_INI_ERROR_HANDLER_ERROR,
 
-	GB_INI_ERROR_COUNT,
+	GB_INI_ERROR_COUNT
 };
 
 typedef struct gbIniError {
@@ -235,8 +231,9 @@ typedef struct gbIniError {
 typedef int gbIniHRT;
 #endif
 
-// This macro can be use to declare this type of function without
-// needing to define all the of the parameters
+/* This macro can be use to declare this type of function without
+ * needing to define all the of the parameters
+ */
 #define GB_INI_HANDLER(func_name) gbIniHRT func_name(void *data, char const *section, char const *name, char const *value)
 typedef GB_INI_HANDLER(gbIniHandler);
 
@@ -245,7 +242,7 @@ extern char const *GB_ERROR_STRINGS[GB_INI_ERROR_COUNT];
 gbIniError gb_ini_parse(char const *filename, gbIniHandler* handler_func, void *data);
 gbIniError gb_ini_parse_file(FILE *file, gbIniHandler* handler_func, void *data);
 
-gb_inline char const *gb_ini_error_string(gbIniError const err) { return GB_ERROR_STRINGS[err.type]; }
+gbini_inline char const *gb_ini_error_string(gbIniError const err) { return GB_ERROR_STRINGS[err.type]; }
 
 #ifdef __cplusplus
 }
@@ -261,25 +258,25 @@ namespace gb
 typedef gbIniError   IniError;
 typedef gbIniHandler IniHandler;
 
-// Just a copy but with the GB_ prefix stripped
+/* Just a copy but with the GB_ prefix stripped */
 enum {
 	INI_ERROR_NONE = 0,
 
 	INI_ERROR_FILE_ERROR,
 	INI_ERROR_MISSING_SECTION_BRACKET,
 	INI_ERROR_ASSIGNMENT_MISSING,
-	INI_ERROR_HANDLER_ERROR,
+	INI_ERROR_HANDLER_ERROR
 
-	// No need for enum count
+	/* No need for enum count */
 };
 
 inline Ini_Error ini_parse(char const *filename, Ini_Handler *handler_func, void *data) { return gb_ini_parse(filename, handler_func, data); }
 inline Ini_Error ini_parse(FILE *file, Ini_Handler *handler_func, void *data) { return gb_ini_parse_file(file, handler_func, data); }
 inline char const *ini_error_string(const Ini_Error err) { return GB_ERROR_STRINGS[err.type]; }
 
-} // namespace gb
-#endif // GB_INI_CPP
-#endif // GB_INI_INCLUDE_GB_INI_H
+} /* namespace gb */
+#endif /* GB_INI_CPP */
+#endif /* GB_INI_INCLUDE_GB_INI_H */
 
 #ifdef GB_INI_IMPLEMENTATION
 #include <ctype.h>
@@ -294,7 +291,7 @@ char const *GB_ERROR_STRINGS[GB_INI_ERROR_COUNT] = {
 	"Error in handler function",
 };
 
-static gb_inline char*
+static gbini_inline char*
 gb__left_whitespace_skip(char const *str)
 {
 	while (*str && isspace((unsigned char)(*str)))
@@ -302,7 +299,7 @@ gb__left_whitespace_skip(char const *str)
 	return (char*)str;
 }
 
-static gb_inline char*
+static gbini_inline char*
 gb__right_whitespace_strip(char* str)
 {
 	char* end = str + strlen(str);
@@ -311,7 +308,7 @@ gb__right_whitespace_strip(char* str)
 	return str;
 }
 
-static gb_inline char*
+static gbini_inline char*
 gb__find_char_or_comment_in_string(char const *str, char c)
 {
 	int was_whitespace = 0;
@@ -323,7 +320,7 @@ gb__find_char_or_comment_in_string(char const *str, char c)
 	return (char*)str;
 }
 
-static gb_inline char*
+static gbini_inline char*
 gb__string_copy(char* dst, char const *src, size_t size)
 {
 	strncpy(dst, src, size);
@@ -366,7 +363,7 @@ gb_ini_parse_file(FILE *file, gbIniHandler *handler_func, void *data)
 		start = line;
 
 #if GB_INI_CHECK_FOR_UTF8_BOM
-		// Check for UTF-8 Byte Order Mark
+		/* Check for UTF-8 Byte Order Mark */
 		if (line_num == 1 &&
 		    (unsigned char)start[0] == 0xef &&
 		    (unsigned char)start[1] == 0xbb &&
@@ -378,9 +375,9 @@ gb_ini_parse_file(FILE *file, gbIniHandler *handler_func, void *data)
 		start = gb__left_whitespace_skip(gb__right_whitespace_strip(start));
 
 		if (start[0] == ';' || start[0] == '#')
-			continue; // Allow '#' and ';' comments at start of line
+			continue; /* Allow '#' and ';' comments at start of line */
 
-		if (start[0] == '[') { // [section]
+		if (start[0] == '[') { /* [section] */
 			end = gb__find_char_or_comment_in_string(start+1, ']');
 			if (*end == ']') {
 				char *sect = start + 1;
@@ -411,7 +408,7 @@ gb_ini_parse_file(FILE *file, gbIniHandler *handler_func, void *data)
 					err.line_num = line_num;
 				}
 			} else if (!err.type) {
-				// No '=' found on name=value line
+				/* No '=' found on name=value line */
 				err.type = GB_INI_ERROR_ASSIGNMENT_MISSING;
 				err.line_num = line_num;
 				continue;
@@ -425,4 +422,4 @@ gb_ini_parse_file(FILE *file, gbIniHandler *handler_func, void *data)
 	return err;
 }
 
-#endif // GB_INI_IMPLEMENTATION
+#endif /* GB_INI_IMPLEMENTATION */
