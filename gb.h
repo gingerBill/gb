@@ -1,4 +1,4 @@
-/* gb.h - v0.06a - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.06b - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -26,6 +26,7 @@ Conventions used:
 
 
 Version History:
+	0.06b - OS X Support
 	0.06a - Linux Support
 	0.06  - Windows GCC Support and MSVC x86 Support
 	0.05b - Formatting
@@ -180,9 +181,13 @@ extern "C" {
 	#define WIN32_MEAN_AND_LEAN 1
 	#define VC_EXTRALEAN        1
 	#include <windows.h>
- 	#include <process.h>
+	#include <process.h>
 #else
 	#include <pthread.h>
+	#include <time.h>
+	#include <mach/mach_time.h>
+	#include <sys/stat.h>
+	#include <dlfcn.h>
 #endif
 
 
@@ -450,7 +455,7 @@ namespace gb {
 	/* NOTE(bill): "Move" semantics - invented because the C++ committee are idiots (as a collective not as indiviuals (well a least some aren't)) */
 	template <typename T> inline T &&forward(typename RemoveReference<T>::Type &t)  { return static_cast<T &&>(t); }
 	template <typename T> inline T &&forward(typename RemoveReference<T>::Type &&t) { return static_cast<T &&>(t); }
-	template <typename T> inline T &&move   (T &&t)                                 { return static<typename RemoveReference<T>::Type &&>(t); }
+	template <typename T> inline T &&move   (T &&t)                                 { return static_cast<typename RemoveReference<T>::Type &&>(t); }
 	template <typename F>
 	struct privDefer {
 		F f;
@@ -1477,7 +1482,7 @@ gb_snprintf_va(char *str, isize n, char const *fmt, va_list va)
 #if defined(_WIN32)
 	res = _vsnprintf(str, n, fmt, va);
 #else
-	res = vsnprintf(str, n, fmt, va)
+	res = vsnprintf(str, n, fmt, va);
 #endif
 	if (n) str[n-1] = 0;
 	/* NOTE(bill): Unix returns length output would require, Windows returns negative when truncated. */
@@ -1491,7 +1496,7 @@ gb_inline i32
 gb_fprintln(FILE *f, char const *str)
 {
 	i32 res;
-	res = gb_fprintf(f, str);
+	res = gb_fprintf(f, "%s", str);
 	gb_fprintf(f, "\n");
 	res++;
 	return res;
@@ -1802,7 +1807,7 @@ gb_inline i32
 gb_fetch_and_atomic32(gbAtomic32 volatile *a, i32 operand)
 {
 	i32 original;
-	register i32 tmp; /* NOTE(bill): One of the only cases when you need to use the register keyword! */
+	i32 tmp;
 	__asm__ volatile(
 		"1:     movl    %1, %0\n"
 		"       movl    %0, %2\n"
@@ -1819,7 +1824,7 @@ gb_inline i32
 gb_fetch_or_atomic32(gbAtomic32 volatile *a, i32 operand)
 {
 	i32 original;
-	register i32 temp;
+	i32 temp;
 	__asm__ volatile(
 		"1:     movl    %1, %0\n"
 		"       movl    %0, %2\n"
@@ -1936,7 +1941,7 @@ gb_fetch_and_atomic64(gbAtomic64 volatile *a, i64 operand)
 {
 #if defined(GB_ARCH_64_BIT)
 	i64 original;
-	register i64 tmp;
+	i64 tmp;
 	__asm__ volatile(
 		"1:     movq    %1, %0\n"
 		"       movq    %0, %2\n"
@@ -1961,7 +1966,7 @@ gb_fetch_or_atomic64(gbAtomic64 volatile *a, i64 operand)
 {
 #if defined(GB_ARCH_64_BIT)
 	i64 original;
-	register i64 temp;
+	i64 temp;
 	__asm__ volatile(
 		"1:     movq    %1, %0\n"
 		"       movq    %0, %2\n"
@@ -2037,9 +2042,45 @@ gb_unlock_mutex(gbMutex *m)
 
 
 #else
+gb_inline void
+gb_init_mutex(gbMutex *m)
+{
+	pthread_mutexattr_t attr;
+	pthread_mutexattr_init(&attr);
+#if defined (PTHREAD_MUTEX_RECURSIVE) || defined(__FreeBSD__)
+	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+#else
+	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE_NP);
+#endif
+	pthread_mutex_init(&m->posix_handle, &attr);
+}
+gb_inline void
+gb_destroy_mutex(gbMutex *m)
+{
+	pthread_mutex_destroy(&m->posix_handle);
+}
 
+gb_inline void
+gb_lock_mutex(gbMutex *m)
+{
+	pthread_mutex_lock(&m->posix_handle);
+}
+
+gb_inline b32
+gb_try_lock_mutex(gbMutex *m)
+{
+	return pthread_mutex_trylock(&m->posix_handle) == 0;
+}
+
+gb_inline void
+gb_unlock_mutex(gbMutex *m)
+{
+	pthread_mutex_unlock(&m->posix_handle);
+}
 #endif
 
+
+#if defined(GB_SYSTEM_WINDOWS)
 gb_inline void
 gb_init_semaphore(gbSemaphore *s)
 {
@@ -2068,12 +2109,58 @@ gb_wait_semaphore(gbSemaphore *s)
 	GB_ASSERT_MSG(result == WAIT_OBJECT_0, "WaitForSingleObject: GetLastError");
 }
 
+#else
+gb_inline void
+gb_init_semaphore(gbSemaphore *s)
+{
+	int err = pthread_cond_init(&s->cond, NULL);
+	GB_ASSERT(err == 0);
+	gb_init_mutex(&s->mutex);
+}
+
+gb_inline void
+gb_destroy_semaphore(gbSemaphore *s)
+{
+	int err = pthread_cond_destroy(&s->cond);
+	GB_ASSERT(err == 0);
+	gb_destroy_mutex(&s->mutex);
+}
+
+gb_inline void
+gb_post_semaphore(gbSemaphore *s, i32 count)
+{
+	i32 i;
+	gb_lock_mutex(&s->mutex);
+	for (i = 0; i < count; i++)
+		pthread_cond_signal(&s->cond);
+	s->count += count;
+	gb_unlock_mutex(&s->mutex);
+}
+
+gb_inline void
+gb_wait_semaphore(gbSemaphore *s)
+{
+	gb_lock_mutex(&s->mutex);
+	while (s->count <= 0)
+		pthread_cond_wait(&s->cond, &s->mutex.posix_handle);
+	s->count--;
+	gb_unlock_mutex(&s->mutex);
+}
+
+#endif
+
+
+
 
 void
 gb_init_thread(gbThread *t)
 {
 	gb_zero_struct(t);
+#if defined(GB_SYSTEM_WINDOWS)
 	t->win32_handle = INVALID_HANDLE_VALUE;
+#else
+	t->posix_handle = 0;
+#endif
 	gb_init_semaphore(&t->semaphore);
 }
 
@@ -2109,8 +2196,20 @@ gb_start_thread_with_stack(gbThread *t, gbThreadProc *proc, void *data, isize st
 	t->data = data;
 	t->stack_size = stack_size;
 
+#if defined(GB_SYSTEM_WINDOWS)
 	t->win32_handle = CreateThread(NULL, stack_size, gb__thread_proc, t, 0, NULL);
 	GB_ASSERT_MSG(t->win32_handle != NULL, "CreateThread: GetLastError");
+#else
+	{
+		pthread_attr_t attr;
+		pthread_attr_init(&attr);
+		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+		if (stack_size != 0)
+			pthread_attr_setstacksize(&attr, stack_size);
+		pthread_create(&t->posix_handle, &attr, gb__thread_proc, t);
+		pthread_attr_destroy(&attr);
+	}
+#endif
 
 	t->is_running = true;
 	gb_wait_semaphore(&t->semaphore);
@@ -2121,9 +2220,14 @@ gb_join_thread(gbThread *t)
 {
 	if (!t->is_running) return;
 
+#if defined(GB_SYSTEM_WINDOWS)
 	WaitForSingleObject(t->win32_handle, INFINITE);
 	CloseHandle(t->win32_handle);
 	t->win32_handle = INVALID_HANDLE_VALUE;
+#else
+	pthread_join(t->posix_handle, NULL);
+	t->posix_handle = 0;
+#endif
 	t->is_running = false;
 }
 
@@ -2136,11 +2240,11 @@ gb_current_thread_id(void)
 #if defined(GB_SYSTEM_WINDOWS)
 	thread_id = GetCurrentThreadId();
 #elif defined(GB_SYSTEM_OSX) && defined(GB_ARCH_64_BIT)
-	asm("mov %%gs:0x00,%0" : "=r"(thread_id));
+	__asm__("mov %%gs:0x00,%0" : "=r"(thread_id));
 #elif defined(GB_ARCH_32_BIT)
-	asm("mov %%gs:0x08,%0" : "=r"(thread_id));
+	__asm__("mov %%gs:0x08,%0" : "=r"(thread_id));
 #elif defined(GB_ARCH_64_BIT)
-	asm("mov %%gs:0x10,%0" : "=r"(thread_id));
+	__asm__("mov %%gs:0x10,%0" : "=r"(thread_id));
 #else
 	#error Unsupported architecture for thread::current_id()
 #endif
@@ -3413,7 +3517,38 @@ gb_move_file(char const *existing_filename, char const *new_filename)
 
 
 #else
-#error
+
+gbFileTime
+gb_file_last_write_time(char const *filepath, ...)
+{
+	time_t result = 0;
+
+	struct stat file_stat;
+	va_list va;
+	va_start(va, filepath);
+	if (stat(gb_sprintf_va(filepath, va), &file_stat)) {
+		result = file_stat.st_mtimespec.tv_sec;
+	}
+
+	va_end(va);
+
+	return cast(gbFileTime)result;
+}
+
+gb_inline b32
+gb_copy_file(char const *existing_filename, char const *new_filename, b32 fail_if_exists)
+{
+	GB_PANIC("TODO(bill): Implement");
+	return false;
+}
+
+gb_inline b32
+gb_move_file(char const *existing_filename, char const *new_filename)
+{
+	GB_PANIC("TODO(bill): Implement");
+	return false;
+}
+
 #endif
 
 
@@ -3503,7 +3638,7 @@ gb_path_extension(char const *path)
 #if defined(GB_SYSTEM_WINDOWS)
 gb_inline void gb_exit(u32 code) { ExitProcess(code); }
 #else
-#error
+gb_inline void gb_exit(u32 code) { exit(code); }
 #endif
 
 
@@ -3529,7 +3664,21 @@ gb_inline void      gb_unload_dll      (gbDllHandle dll)                        
 gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) { return cast(gbDllProc)GetProcAddress(cast(HMODULE)dll, proc_name); }
 
 #else
-#error
+
+gbDllHandle
+gb_load_dll(char const *filepath, ...)
+{
+	gb_local_persist char buffer[512];
+	va_list va;
+	va_start(va, filepath);
+	gb_snprintf_va(buffer, gb_size_of(buffer), filepath, va);
+	va_end(va);
+	return cast(gbDllHandle)dlopen(buffer, RTLD_LAZY|RTLD_GLOBAL);
+}
+
+gb_inline void      gb_unload_dll      (gbDllHandle dll)                        { dlclose(dll); }
+gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) { return cast(gbDllProc)dlsym(dll, proc_name); }
+
 #endif
 
 
@@ -3538,7 +3687,6 @@ gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) 
  * Time
  *
  */
-#if defined(GB_SYSTEM_WINDOWS)
 
 #if defined(_MSC_VER)
 	gb_inline u64 gb_rdtsc(void) { return __rdtsc(); }
@@ -3580,6 +3728,8 @@ gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) 
 		return result;
 	}
 #endif
+
+#if defined(GB_SYSTEM_WINDOWS)
 
 gb_inline f64
 gb_time_now(void)
@@ -3630,7 +3780,42 @@ gb_get_local_date(gbDate *date)
 }
 
 #else
-#error
+
+gb_global f64 gb__timebase  = 0.0;
+gb_global u64 gb__timestart = 0;
+
+gb_inline f64
+gb_time_now(void)
+{
+	struct timespec t;
+	f64 result;
+
+	if (gb__timestart) {
+		mach_timebase_info_data_t tb = {0};
+		mach_timebase_info(&tb);
+		gb__timebase = tb.numer;
+		gb__timebase /= tb.denom;
+		gb__timestart = mach_absolute_time();
+	}
+
+	result = (mach_absolute_time() - gb__timestart) * gb__timebase;
+	return result;
+}
+
+
+gb_inline void
+gb_get_system_date(gbDate *date)
+{
+	GB_PANIC("TODO(bill): Implement");
+}
+
+gb_inline void
+gb_get_local_date(gbDate *date)
+{
+	GB_PANIC("TODO(bill): Implement");
+}
+
+
 #endif
 
 
