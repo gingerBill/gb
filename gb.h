@@ -1,4 +1,4 @@
-/* gb.h - v0.06  - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.06a - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -26,6 +26,7 @@ Conventions used:
 
 
 Version History:
+	0.06a - Linux Support
 	0.06  - Windows GCC Support and MSVC x86 Support
 	0.05b - Formatting
 	0.05a - Minor function name changes
@@ -181,7 +182,7 @@ extern "C" {
 	#include <windows.h>
  	#include <process.h>
 #else
-#error Add OS Specific headers
+	#include <pthread.h>
 #endif
 
 
