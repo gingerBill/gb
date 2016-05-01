@@ -796,7 +796,7 @@ gb_mod(float x, float y)
 {
 	float result;
 	y = gb_abs(y);
-	result = gb_remainder(gb_abs(x), (y = gb_abs(y)));
+	result = gb_remainder(gb_abs(x), y);
 	if (gb_sign(result)) result += y;
 	return gb_copy_sign(result, x);
 }
