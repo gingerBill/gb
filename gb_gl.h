@@ -1641,7 +1641,7 @@ gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 
 				gb_close_file(&file);
 			} else {
-				GB_PANIC("Could not open ttf file: %s", ttf_filename);
+				GB_PANIC("Could not open ttf file");
 			}
 
 			stbtt_InitFont(&(*ttf_cache)->finfo, (*ttf_cache)->ttf, stbtt_GetFontOffsetForIndex((*ttf_cache)->ttf, 0));

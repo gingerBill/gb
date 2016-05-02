@@ -1,4 +1,4 @@
-/* gb.h - v0.06b - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.07  - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -21,11 +21,13 @@
 Conventions used:
 	gbTypesAreLikeThis (None core types)
 	gb_functions_and_variables_like_this
-	Prefer // Comments
+	Prefer C90 Comments
 	Never use _t suffix for types (I think they are stupid...)
 
 
 Version History:
+	0.07  - Hash Table and Hashing Functions
+	0.06c - Better Documentation
 	0.06b - OS X Support
 	0.06a - Linux Support
 	0.06  - Windows GCC Support and MSVC x86 Support
@@ -340,12 +342,14 @@ typedef i32 b32; /* NOTE(bill): Prefer this!!! */
 #endif
 
 
-
+/* TODO(bill): Is this enough to get inline working? */
 #if !defined(__cplusplus)
 	#if defined(_MSC_VER) && _MSC_VER <= 1800
 	#define inline __inline
 	#elif !defined(__STDC_VERSION__)
 	#define inline __inline__
+	#else
+	#define inline
 	#endif
 #endif
 
@@ -473,17 +477,17 @@ namespace gb {
 } /* namespace gb */
 }
 
-	/* Example */
-	#if 0
-		gbMutex m;
-		gb_mutex_init(&m);
-		{
-			gb_mutex_lock(&m);
-			defer (gb_mutex_unlock(&m));
+/* Example */
+#if 0
+	gbMutex m;
+	gb_mutex_init(&m);
+	{
+		gb_mutex_lock(&m);
+		defer (gb_mutex_unlock(&m));
 
-			...
-		}
-	#endif
+		...
+	}
+#endif
 
 #endif
 
@@ -538,7 +542,11 @@ namespace gb {
 
 #ifndef GB_DEBUG_TRAP
 	#if defined(_MSC_VER)
+	 	#if _MSC_VER < 1300
+		#define GB_DEBUG_TRAP() __asm int 3; // Trap to debugger!
+		#else
 		#define GB_DEBUG_TRAP() __debugbreak()
+		#endif
 	#else
 		#define GB_DEBUG_TRAP() __builtin_trap()
 	#endif
@@ -630,6 +638,7 @@ GB_DEF void gb_zero_size(void *ptr, isize size);
 GB_DEF void *gb_memcopy(void *dest, void const *source, isize size);
 GB_DEF void *gb_memmove(void *dest, void const *source, isize size);
 GB_DEF void *gb_memset (void *data, u8 byte_value, isize size);
+
 
 /* NOTE(bill): Very similar to doing `*cast(T *)(&u)` */
 #ifndef GB_BIT_CAST
@@ -923,10 +932,10 @@ typedef GB_COMPARE_PROC(gbCompareProc);
 GB_DEF void gb_qsort(void *base, isize count, isize size, gbCompareProc compare_proc);
 
 /* NOTE(bill): the count of temp == count of items */
-GB_DEF void gb_radix_sort_u8 (u8  *items, isize count, u8  *temp);
-GB_DEF void gb_radix_sort_u16(u16 *items, isize count, u16 *temp);
-GB_DEF void gb_radix_sort_u32(u32 *items, isize count, u32 *temp);
-GB_DEF void gb_radix_sort_u64(u64 *items, isize count, u64 *temp);
+GB_DEF void gb_radix_sort_u8 (u8  *gb_restrict items, u8  *gb_restrict temp, isize count);
+GB_DEF void gb_radix_sort_u16(u16 *gb_restrict items, u16 *gb_restrict temp, isize count);
+GB_DEF void gb_radix_sort_u32(u32 *gb_restrict items, u32 *gb_restrict temp, isize count);
+GB_DEF void gb_radix_sort_u64(u64 *gb_restrict items, u64 *gb_restrict temp, isize count);
 
 
 
@@ -949,20 +958,26 @@ GB_DEF b32  gb_is_char_digit       (char c);
 GB_DEF b32  gb_is_char_hex_digit   (char c);
 GB_DEF b32  gb_is_char_alpha       (char c);
 GB_DEF b32  gb_is_char_alphanumeric(char c);
+GB_DEF i32  gb_digit_to_int        (char c);
+GB_DEF i32  gb_hex_digit_to_int    (char c);
 
 
 
 GB_DEF void gb_to_lower(char *str);
 GB_DEF void gb_to_upper(char *str);
 
-GB_DEF isize  gb_strlen (char const *str);
-GB_DEF isize  gb_strnlen(char const *str, isize max_len);
-GB_DEF i32    gb_strcmp (char const *s1, char const *s2);
-GB_DEF char * gb_strncpy(char *dest, char const *source, isize len);
-GB_DEF i32    gb_strncmp(char const *s1, char const *s2, isize len);
+GB_DEF isize gb_strlen (char const *str);
+GB_DEF isize gb_strnlen(char const *str, isize max_len);
+GB_DEF i32   gb_strcmp (char const *s1, char const *s2);
+GB_DEF char *gb_strncpy(char *dest, char const *source, isize len);
+GB_DEF i32   gb_strncmp(char const *s1, char const *s2, isize len);
 
-GB_DEF isize gb_utf8_strlen (char const *str);
-GB_DEF isize gb_utf8_strnlen(char const *str, isize max_len);
+GB_DEF char const *gb_strtok(char *output, char const *src, char const *delimit);
+
+GB_DEF b32 gb_cstr_has_prefix(char const *str, char const *prefix);
+GB_DEF b32 gb_cstr_has_suffix(char const *str, char const *suffix);
+
+
 
 GB_DEF char const *gb_first_occurence_of_char(char const *s1, char c);
 GB_DEF char const *gb_last_occurence_of_char (char const *s1, char c);
@@ -974,12 +989,15 @@ GB_DEF void gb_cstr_concat(char *dest, isize dest_len,
 
 /***************************************************************
  *
- * Windows UTF-8 Handling
+ * UTF-8 Handling
  *
  *
- * Windows doesn't handle 8 bit filenames well ('cause Micro$hit)
  */
 
+GB_DEF isize gb_utf8_strlen (char const *str);
+GB_DEF isize gb_utf8_strnlen(char const *str, isize max_len);
+
+/* Windows doesn't handle 8 bit filenames well ('cause Micro$hit) */
 GB_DEF char16 *gb_utf8_to_utf16(char16 *buffer, char *str, isize len);
 GB_DEF char *  gb_utf16_to_utf8(char *buffer, char16 *str, isize len);
 
@@ -992,14 +1010,105 @@ GB_DEF isize gb_utf8_decode_len(char const *str, isize str_len, char32 *codepoin
  *
  * gbString - C Read-Only-Compatible
  *
+ *
+
+Reasoning:
+
+	By default, strings in C are null terminated which means you have to count
+	the number of character up to the null character to calculate the length.
+	Many "better" C string libraries will create a struct for a string.
+	i.e.
+
+	    struct String {
+	    	Allocator allocator;
+	        size_t    length;
+	        size_t    capacity;
+	        char *    cstring;
+	    };
+
+	This library tries to augment normal C strings in a better way that is still
+	compatible with C-style strings.
+
+	+--------+-----------------------+-----------------+
+	| Header | Binary C-style String | Null Terminator |
+	+--------+-----------------------+-----------------+
+	         |
+	         +-> Pointer returned by functions
+
+	Due to the meta-data being stored before the string pointer and every gb string
+	having an implicit null terminator, gb strings are full compatible with c-style
+	strings and read-only functions.
+
+Advantages:
+
+    * gb strings can be passed to C-style string functions without accessing a struct
+      member of calling a function, i.e.
+
+          printf("%s\n", gb_str);
+
+      Many other libraries do either of these:
+
+          printf("%s\n", string->cstr);
+          printf("%s\n", get_cstring(string));
+
+    * You can access each character just like a C-style string:
+
+          printf("%c %c\n", str[0], str[13]);
+
+    * gb strings are singularly allocated. The meta-data is next to the character
+      array which is better for the cache.
+
+Disadvantages:
+
+    * In the C version of these functions, many return the new string. i.e.
+          str = gb_append_cstring(str, "another string");
+      This could be changed to gb_append_cstring(&str, "another string"); but I'm still not sure.
+
+	* This is incompatible with "gb_string.h" strings
  */
 
+#if 0
+#include <stdio.h>
+#include <stdlib.h>
+
+#define GB_IMPLEMENTATION
+#include "gb.h"
+
+int main(int argc, char **argv)
+{
+	gbString str = gb_make_string("Hello");
+	gbString other_str = gb_make_string_length(", ", 2);
+	str = gb_append_string(str, other_str);
+	str = gb_append_cstring(str, "world!");
+
+	printf("%s\n", str); /* Hello, world! */
+
+	printf("str length = %d\n", gb_string_length(str));
+
+	str = gb_set_string(str, "Potato soup");
+	printf("%s\n", str); /* Potato soup */
+
+	str = gb_set_string(str, "Hello");
+	other_str = gb_set_string(other_str, "Pizza");
+	if (gb_strings_are_equal(str, other_str))
+		printf("Not called\n");
+	else
+		printf("Called\n");
+
+	str = gb_set_string(str, "Ab.;!...AHello World       ??");
+	str = gb_trim_string(str, "Ab.;!. ?");
+	printf("%s\n", str); /* "Hello World" */
+
+	gb_free_string(str);
+	gb_free_string(other_str);
+
+	return 0;
+}
+#endif
 
 typedef char *gbString;
 
-
-/* This is stored at the beginning of the string */
-/* NOTE(bill): If you only need a small string, just use a standard c string or change the size */
+/* NOTE(bill): If you only need a small string, just use a standard c string or change the size from isize to u16, etc. */
 typedef struct gbStringHeader {
 	gbAllocator allocator;
 	isize length;
@@ -1046,33 +1155,33 @@ GB_DEF gbString gb_trim_space_string(gbString str); /* Whitespace ` \t\r\n\v\f` 
 #define GB_BUFFER_TYPE
 #endif
 
-#define gbBuffer(Type) struct { isize count, capacity; Type *data; }
+#define gbBuffer(Type) struct { isize count, capacity; Type *e; }
 
 typedef gbBuffer(u8) gbByteBuffer;
 
 #define gb_init_buffer_from_allocator(x, allocator, cap) do {      \
-	void **data = cast(void **)&((x)->data);                       \
+	void **e = cast(void **)&((x)->e);                       \
 	gb_zero_struct(x);                                             \
 	(x)->capacity = (cap);                                         \
-	*data = gb_alloc((allocator), (cap)*gb_size_of((x)->data[0])); \
+	*e = gb_alloc((allocator), (cap)*gb_size_of((x)->e[0])); \
 } while (0)
 
 #define gb_init_buffer_from_memory(x, memory, cap) do {            \
-	void **data = cast(void **)&((x)->data);                       \
+	void **e = cast(void **)&((x)->e);                       \
 	gb_zero_struct(x);                                             \
 	(x)->capacity = (cap);                                         \
-	*data = memory;                                                \
+	*e = memory;                                                \
 } while (0)
 
 
-#define gb_free_buffer(x, allocator) do { gb_free(allocator, (x)->data); } while (0)
+#define gb_free_buffer(x, allocator) do { gb_free(allocator, (x)->e); } while (0)
 
-#define gb_append_buffer(x, item)    do { (x)->data[(x)->count++] = item; } while (0)
+#define gb_append_buffer(x, item)    do { (x)->e[(x)->count++] = item; } while (0)
 
 #define gb_appendv_buffer(x, items, item_count) do {                                \
-	GB_ASSERT(gb_size_of((items)[0]) == gb_size_of((x)->data[0]));                  \
+	GB_ASSERT(gb_size_of((items)[0]) == gb_size_of((x)->e[0]));                  \
 	GB_ASSERT((x)->count+item_count <= (x)->capacity);                              \
-	gb_memcopy((x)->data[a->count], (items), gb_size_of((x)->data[0])*(item_count)); \
+	gb_memcopy((x)->e[a->count], (items), gb_size_of((x)->e[0])*(item_count)); \
 	(x)->count += (item_count);                                                     \
 } while (0)
 
@@ -1096,8 +1205,7 @@ typedef gbBuffer(u8) gbByteBuffer;
 #ifndef GB_ARRAY_TYPE
 #define GB_ARRAY_TYPE
 
-#define gbArray(Type) struct { gbAllocator allocator; isize count, capacity; Type *data; }
-
+#define gbArray(Type) struct { gbAllocator allocator; isize count, capacity; Type *e; }
 
 typedef gbArray(void) gbVoidArray; /* NOTE(bill): Useful for generic stuff */
 
@@ -1114,17 +1222,58 @@ typedef gbArray(void) gbVoidArray; /* NOTE(bill): Useful for generic stuff */
  *     gb_reserve_array
  */
 
+#if 0 /* Example */
+void foo(void)
+{
+	isize i;
+	int test_values[] = {4, 2, 1, 7};
+	gbAllocator a = gb_heap_allocator();
+	gbArray(int) items;
+
+	gb_init_array(&items, a);
+
+	gb_append_array(&items, 1);
+	gb_append_array(&items, 4);
+	gb_append_array(&items, 9);
+	gb_append_array(&items, 16);
+
+	items.e[1] = 3; /* Manually set value */
+	                /* NOTE: No array bounds checking */
+
+	for (i = 0; i < items.count; i++)
+		gb_printf("%d\n", items.e[i]);
+	/* 1
+	 * 3
+	 * 9
+	 * 16
+	 */
+
+	gb_clear_array(&items);
+
+	gb_appendv_array(&items, test_values, gb_count_of(test_values));
+	for (i = 0; i < items.count; i++)
+		gb_printf("%d\n", items.e[i]);
+	/* 4
+	 * 2
+	 * 1
+	 * 7
+	 */
+
+	gb_free_array(&items);
+}
+#endif
+
 #define gb_init_array(x, allocator_) do { gb_zero_struct(x); (x)->allocator = allocator_; } while (0)
 
 #define gb_free_array(x) do {           \
 	if ((x)->allocator.proc) {          \
 		gbAllocator a = (x)->allocator; \
-		gb_free(a, (x)->data);          \
+		gb_free(a, (x)->e);          \
 		gb_init_array((x), a);          \
 	}                                   \
 } while (0)
 
-#define gb_set_array_capacity(array, capacity) gb__set_array_capacity((array), (capacity), gb_size_of((array)->data[0]))
+#define gb_set_array_capacity(array, capacity) gb__set_array_capacity((array), (capacity), gb_size_of((array)->e[0]))
 /* NOTE(bill): Do not use the thing below directly, use the macro */
 GB_DEF void gb__set_array_capacity(void *array, isize capacity, isize element_size);
 
@@ -1144,14 +1293,14 @@ GB_DEF void gb__set_array_capacity(void *array, isize capacity, isize element_si
 #define gb_append_array(x, item) do { \
 	if ((x)->capacity < (x)->count+1) \
 		gb_grow_array(x, 0);          \
-	(x)->data[(x)->count++] = (item); \
+	(x)->e[(x)->count++] = (item); \
 } while (0)
 
 #define gb_appendv_array(x, items, item_count) do {                                   \
-	GB_ASSERT(gb_size_of((items)[0]) == gb_size_of((x)->data[0]));                    \
+	GB_ASSERT(gb_size_of((items)[0]) == gb_size_of((x)->e[0]));                    \
 	if ((x)->capacity < (x)->count+(item_count))                                      \
 		gb_grow_array(x, (x)->count+(item_count));                                    \
-	gb_memcopy((x)->data[(x)->count], (items), gb_size_of((x)->data[0])*(item_count)); \
+	gb_memcopy((x)->e[(x)->count], (items), gb_size_of((x)->e[0])*(item_count)); \
 	(x)->count += (item_count);                                                       \
 } while (0)
 
@@ -1160,10 +1309,10 @@ GB_DEF void gb__set_array_capacity(void *array, isize capacity, isize element_si
 #define gb_pop_array(x)   do { GB_ASSERT((x)->count > 0); (x)->count--; } while (0)
 #define gb_clear_array(x) do { (x)->count = 0; } while (0)
 
-#define gb_resize_array(x, count) do {    \
-	if ((x)->capacity < (count))          \
-		gb_grow_array(x, count);          \
-	(x)->count = (count);                 \
+#define gb_resize_array(x, new_count) do { \
+	if ((x)->capacity < (new_count))       \
+		gb_grow_array(x, (new_count));     \
+	(x)->count = (new_count);              \
 } while (0)
 
 
@@ -1179,7 +1328,73 @@ GB_DEF void gb__set_array_capacity(void *array, isize capacity, isize element_si
 
 
 
+/***************************************************************
+ *
+ * Hashing Functions
+ *
+ */
 
+GB_EXTERN u32 gb_adler32(void const *data, isize len);
+
+GB_EXTERN u32 gb_crc32(void const *data, isize len);
+GB_EXTERN u64 gb_crc64(void const *data, isize len);
+
+GB_EXTERN u32 gb_fnv32 (void const *data, isize len);
+GB_EXTERN u64 gb_fnv64 (void const *data, isize len);
+GB_EXTERN u32 gb_fnv32a(void const *data, isize len);
+GB_EXTERN u64 gb_fnv64a(void const *data, isize len);
+
+/* NOTE(bill): Default seed of 0x9747b28c */
+GB_EXTERN u32 gb_murmur32(void const *data, isize len);
+GB_EXTERN u64 gb_murmur64(void const *data, isize len);
+
+GB_EXTERN u32 gb_murmur32_seed(void const *data, isize len, u32 seed);
+GB_EXTERN u64 gb_murmur64_seed(void const *data, isize len, u64 seed);
+
+
+
+/***************************************************************
+ *
+ * Hash Table - Still experimental!
+ *
+ */
+
+/* NOTE(bill): Hash table for POD types with a u64 key
+ * The hash table stores an isize which can be used to point to an array index for storing
+ * the hash table's values
+ * TODO(bill): Should the hash table store an isize or a void *? Which is more useful for the user?
+ */
+
+typedef struct gbHashTableEntry {
+	u64   key;
+	isize next;
+	isize value;
+} gbHashTableEntry;
+
+typedef struct gbHashTable {
+	gbArray(isize)            hashes;
+	gbArray(gbHashTableEntry) entries;
+} gbHashTable;
+
+
+/* TODO(bill): I'm not very sure on the naming of these procedures and if they should be named better. */
+GB_DEF void  gb_init_hash_table   (gbHashTable *h, gbAllocator a);
+GB_DEF void  gb_destroy_hash_table(gbHashTable *h);
+GB_DEF void  gb_clear_hash_table  (gbHashTable *h);
+GB_DEF b32   gb_hash_table_has    (gbHashTable const *h, u64 key);
+GB_DEF isize gb_hash_table_get    (gbHashTable const *h, u64 key, isize default_index);
+GB_DEF void  gb_hash_table_set    (gbHashTable *h, u64 key, isize index);
+GB_DEF void  gb_hash_table_remove (gbHashTable *h, u64 key);
+GB_DEF void  gb_hash_table_reserve(gbHashTable *h, isize capacity);
+
+GB_DEF void  gb_multi_hash_table_get         (gbHashTable const *h, u64 key, isize *indices, isize index_count);
+GB_DEF isize gb_multi_hash_table_count       (gbHashTable const *h, u64 key);
+GB_DEF void  gb_multi_hash_table_insert      (gbHashTable *h, u64 key, isize index);
+GB_DEF void  gb_multi_hash_table_remove_entry(gbHashTable *h, gbHashTableEntry const *e);
+GB_DEF void  gb_multi_hash_table_remove_all  (gbHashTable *h, u64 key);
+
+GB_DEF gbHashTableEntry const *gb_find_first_hash_table_entry(gbHashTable const *h, u64 key);
+GB_DEF gbHashTableEntry const *gb_find_next_hash_table_entry (gbHashTable const *h, gbHashTableEntry const *e);
 
 
 /***************************************************************
@@ -1209,22 +1424,22 @@ typedef struct gbFileContents {
 } gbFileContents;
 
 
-GB_DEF b32 gb_create_file     (gbFile *file, char const *filepath, ...); /* TODO(bill): Give file permissions */
-GB_DEF b32 gb_open_file       (gbFile *file, char const *filepath, ...);
+GB_DEF b32 gb_create_file     (gbFile *file, char const *filepath, ...) GB_PRINTF_ARGS(2); /* TODO(bill): Give file permissions */
+GB_DEF b32 gb_open_file       (gbFile *file, char const *filepath, ...) GB_PRINTF_ARGS(2);
 GB_DEF b32 gb_close_file      (gbFile *file);
 GB_DEF b32 gb_file_read_at    (gbFile *file, void *buffer, isize size, i64 offset);
 GB_DEF b32 gb_file_write_at   (gbFile *file, void const *buffer, isize size, i64 offset);
 GB_DEF i64 gb_file_size       (gbFile *file);
 GB_DEF b32 gb_has_file_changed(gbFile *file);
 
-GB_DEF gbFileTime gb_file_last_write_time(char const *filepath, ...);
+GB_DEF gbFileTime gb_file_last_write_time(char const *filepath, ...) GB_PRINTF_ARGS(1);
 
 
 GB_DEF b32 gb_copy_file(char const *existing_filename, char const *new_filename, b32 fail_if_exists);
 GB_DEF b32 gb_move_file(char const *existing_filename, char const *new_filename);
 
 
-GB_DEF gbFileContents gb_read_entire_file_contents(gbAllocator a, b32 zero_terminate, char const *filepath, ...);
+GB_DEF gbFileContents gb_read_entire_file_contents(gbAllocator a, b32 zero_terminate, char const *filepath, ...) GB_PRINTF_ARGS(3);
 
 
 #ifndef GB_PATH_SEPARATOR
@@ -1254,7 +1469,7 @@ GB_DEF void gb_exit(u32 code);
 typedef void *gbDllHandle;
 typedef void (*gbDllProc)(void);
 
-GB_DEF gbDllHandle gb_load_dll        (char const *filepath, ...);
+GB_DEF gbDllHandle gb_load_dll        (char const *filepath, ...) GB_PRINTF_ARGS(1);
 GB_DEF void        gb_unload_dll      (gbDllHandle dll);
 GB_DEF gbDllProc   gb_dll_proc_address(gbDllHandle dll, char const *proc_name);
 
@@ -1277,11 +1492,23 @@ typedef struct gbDate {
 } gbDate;
 
 
-GB_DEF u64 gb_rdtsc   (void);
-GB_DEF f64 gb_time_now(void);
+GB_DEF u64  gb_rdtsc   (void);
+GB_DEF f64  gb_time_now(void); /* NOTE(bill): This is only for relative time e.g. game loops */
+GB_DEF void gb_sleep_ms(u32 ms);
 
 GB_DEF void gb_get_system_date(gbDate *date);
 GB_DEF void gb_get_local_date (gbDate *date);
+
+
+#if !defined(GB_NO_COLOUR_TYPE)
+
+
+/***************************************************************
+ *
+ * Miscellany
+ *
+ */
+
 
 
 
@@ -1289,7 +1516,14 @@ GB_DEF void gb_get_local_date (gbDate *date);
  *
  * Colour Type
  * It's quite useful
+ * TODO(bill): Does this need to be in this library?
+ *             Can I remove the anonymous struct extension?
  */
+
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable:4201)
+#endif
 
 typedef union gbColour {
 	u32 rgba; /* NOTE(bill): 0xaabbggrr */
@@ -1297,6 +1531,11 @@ typedef union gbColour {
 	u8 e[4];
 } gbColour;
 GB_STATIC_ASSERT(gb_size_of(gbColour) == gb_size_of(u32));
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+
 
 GB_DEF gbColour gb_colour(f32 r, f32 g, f32 b, f32 a);
 
@@ -1313,40 +1552,7 @@ gb_global gbColour const GB_COLOUR_BLUE    = {0xffff0000};
 gb_global gbColour const GB_COLOUR_VIOLET  = {0xffff007f};
 gb_global gbColour const GB_COLOUR_MAGENTA = {0xffff00ff};
 
-/***************************************************************
- *
- * Window Management
- *
- */
-
-#if 0
-
-#ifndef GB_MAX_WINDOW_TITLE_LENGTH
-#define GB_MAX_WINDOW_TITLE_LENGTH 256
 #endif
-
-
-typedef struct gbPlatformData {
-	void *native_display_type;
-	void *native_window_handle;
-	void *context;
-	void *back_buffer;
-	void *back_buffer_depth_stencil;
-} gbPlatformData;
-
-
-typedef struct gbWindow {
-	gbPlatformData platform_data;
-	i32 x, y;
-	i32 width, height;
-	char title[GB_MAX_WINDOW_TITLE_LENGTH];
-	b32 fullscreen;
-	b32 active;
-} gbWindow;
-
-#endif
-
-
 
 #if defined(__cplusplus)
 }
@@ -1436,7 +1642,7 @@ gb_fprintf(FILE *f, char const *fmt, ...)
 	i32 res;
 	va_list va;
 	va_start(va, fmt);
-	res = gb_fprintf_va(stdout, fmt, va);
+	res = gb_fprintf_va(f, fmt, va);
 	va_end(va);
 	return res;
 }
@@ -1995,6 +2201,7 @@ volatile f32 gb__t1 = 1, gb__t2;
 gb_internal void
 gb__wait(i32 n)
 {
+	/* NOTE(bill): Taken from stb.h, Thank you Sean Barrett */
 	f32 z = 0;
 	i32 i;
 	for (i = 0; i < n; i++)
@@ -2548,10 +2755,10 @@ gb_qsort(void *base, isize count, isize size, gbCompareProc compare_proc)
 }
 
 void
-gb_radix_sort_u8(u8 *items, isize count, u8 *temp)
+gb_radix_sort_u8(u8 *gb_restrict items, u8 *gb_restrict temp, isize count)
 {
-	u8 *source = items;
-	u8 *dest = temp;
+	u8 *gb_restrict source = items;
+	u8 *gb_restrict dest = temp;
 	isize i;
 	isize offsets[256] = {0};
 	i64 total = 0;
@@ -2577,14 +2784,14 @@ gb_radix_sort_u8(u8 *items, isize count, u8 *temp)
 		dest[offsets[radix_piece]++] = source[i];
 	}
 
-	gb_swap(u8 *, source, dest);
+	gb_swap(u8 *gb_restrict, source, dest);
 }
 
 void
-gb_radix_sort_u16(u16 *items, isize count, u16 *temp)
+gb_radix_sort_u16(u16 *gb_restrict items, u16 *gb_restrict temp, isize count)
 {
-	u16 *source = items;
-	u16 *dest   = temp;
+	u16 *gb_restrict source = items;
+	u16 *gb_restrict dest   = temp;
 	isize byte_index, i;
 	for (byte_index = 0; byte_index < 16; byte_index += 8) {
 		isize offsets[256] = {0};
@@ -2611,15 +2818,15 @@ gb_radix_sort_u16(u16 *items, isize count, u16 *temp)
 			dest[offsets[radix_piece]++] = source[i];
 		}
 
-		gb_swap(u16 *, source, dest);
+		gb_swap(u16 *gb_restrict, source, dest);
 	}
 }
 
 void
-gb_radix_sort_u32(u32 *items, isize count, u32 *temp)
+gb_radix_sort_u32(u32 *gb_restrict items, u32 *gb_restrict temp, isize count)
 {
-	u32 *source = items;
-	u32 *dest   = temp;
+	u32 *gb_restrict source = items;
+	u32 *gb_restrict dest   = temp;
 	isize byte_index, i;
 	for (byte_index = 0; byte_index < 32; byte_index += 8) {
 		isize offsets[256] = {0};
@@ -2646,15 +2853,15 @@ gb_radix_sort_u32(u32 *items, isize count, u32 *temp)
 			dest[offsets[radix_piece]++] = source[i];
 		}
 
-		gb_swap(u32 *, source, dest);
+		gb_swap(u32 *gb_restrict, source, dest);
 	}
 }
 
 void
-gb_radix_sort_u64(u64 *items, isize count, u64 *temp)
+gb_radix_sort_u64(u64 *gb_restrict items, u64 *gb_restrict temp, isize count)
 {
-	u64 *source = items;
-	u64 *dest   = temp;
+	u64 *gb_restrict source = items;
+	u64 *gb_restrict dest   = temp;
 	isize byte_index, i;
 	for (byte_index = 0; byte_index < 64; byte_index += 8) {
 		isize offsets[256] = {0};
@@ -2681,7 +2888,7 @@ gb_radix_sort_u64(u64 *items, isize count, u64 *temp)
 			dest[offsets[radix_piece]++] = source[i];
 		}
 
-		gb_swap(u64 *, source, dest);
+		gb_swap(u64 *gb_restrict, source, dest);
 	}
 }
 
@@ -2780,6 +2987,25 @@ gb_inline b32
 gb_is_char_alphanumeric(char c)
 {
 	return gb_is_char_alpha(c) || gb_is_char_digit(c);
+}
+
+gb_inline i32
+gb_digit_to_int(char c)
+{
+	return gb_is_char_digit(c) ? c - '0' : c - 'W';
+}
+
+
+gb_inline i32
+gb_hex_digit_to_int(char c)
+{
+	if (gb_is_char_digit(c))
+		return gb_digit_to_int(c);
+	else if (gb_is_between(c, 'a', 'f'))
+		return c - 'a' + 10;
+	else if (gb_is_between(c, 'A', 'F'))
+		return c - 'A' + 10;
+	return 0;
 }
 
 
@@ -2896,12 +3122,46 @@ gb_strncmp(char const *s1, char const *s2, isize len)
 
 
 gb_inline char const *
+gb_strtok(char *output, char const *src, char const *delimit)
+{
+	while (*src && gb_first_occurence_of_char(delimit, *src) != NULL) {
+		*output++ = *src++;
+	}
+
+	*output = 0;
+	return *src ? src+1 : src;
+}
+
+gb_inline b32
+gb_cstr_has_prefix(char const *str, char const *prefix)
+{
+	while (*prefix) {
+		if (*str++ != *prefix++)
+			return false;
+	}
+	return true;
+}
+
+gb_inline b32
+gb_cstr_has_suffix(char const *str, char const *suffix)
+{
+	isize i = gb_strlen(str);
+	isize j = gb_strlen(suffix);
+	if (j <= i)
+		return gb_strcmp(str+i-j, suffix) == 0;
+	return false;
+}
+
+
+
+
+gb_inline char const *
 gb_first_occurence_of_char(char const *s, char c)
 {
 	char ch = c;
 	for (; *s != ch; s++) {
 		if (*s == '\0')
-			return 0;
+			return NULL;
 	}
 	return s;
 }
@@ -3245,27 +3505,26 @@ gb_utf16_to_utf8(char *buffer, char16 *str, isize len)
 }
 
 
-#define GB_UTF_SIZE 4
-#define GB_UTF_INVALID 0xfffd
+#define GB__UTF_SIZE 4
+#define GB__UTF_INVALID 0xfffd
 
-gb_global u8     const gb_utf_byte[GB_UTF_SIZE+1] = {0x80, 0, 0xc0, 0xe0, 0xf0};
-gb_global u8     const gb_utf_mask[GB_UTF_SIZE+1] = {0xc0, 0x80, 0xe0, 0xf0, 0xf8};
-gb_global char32 const gb_utf_min[GB_UTF_SIZE+1]  = {0, 0, 0x80, 0x800, 0x10000};
-gb_global char32 const gb_utf_max[GB_UTF_SIZE+1]  = {0x10ffff, 0x7f, 0x7ff, 0xffff, 0x10ffff};
+gb_global u8     const gb__utf_byte[GB__UTF_SIZE+1] = {0x80, 0, 0xc0, 0xe0, 0xf0};
+gb_global u8     const gb__utf_mask[GB__UTF_SIZE+1] = {0xc0, 0x80, 0xe0, 0xf0, 0xf8};
+gb_global char32 const gb__utf_min [GB__UTF_SIZE+1] = {0, 0, 0x80, 0x800, 0x10000};
+gb_global char32 const gb__utf_max [GB__UTF_SIZE+1] = {0x10ffff, 0x7f, 0x7ff, 0xffff, 0x10ffff};
 
 gb_internal isize
 gb__utf_validate(char32 *c, isize i)
 {
 	GB_ASSERT_NOT_NULL(c);
 	if (!c) return 0;
-	if (!gb_is_between(*c, gb_utf_min[i], gb_utf_max[i]) ||
+	if (!gb_is_between(*c, gb__utf_min[i], gb__utf_max[i]) ||
 	     gb_is_between(*c, 0xd800, 0xdfff)) {
-		*c = GB_UTF_INVALID;
+		*c = GB__UTF_INVALID;
 	}
 	i = 1;
-	while (*c > gb_utf_max[i]) {
+	while (*c > gb__utf_max[i])
 		i++;
-	}
 	return i;
 }
 
@@ -3274,9 +3533,9 @@ gb__utf_decode_byte(char c, isize *i)
 {
 	GB_ASSERT_NOT_NULL(i);
 	if (!i) return 0;
-	for (*i = 0; *i < gb_count_of(gb_utf_mask); (*i)++) {
-		if ((cast(u8)c & gb_utf_mask[*i]) == gb_utf_byte[*i])
-			return cast(u8)(c & ~gb_utf_mask[*i]);
+	for (*i = 0; *i < gb_count_of(gb__utf_mask); (*i)++) {
+		if ((cast(u8)c & gb__utf_mask[*i]) == gb__utf_byte[*i])
+			return cast(u8)(c & ~gb__utf_mask[*i]);
 	}
 	return 0;
 }
@@ -3294,10 +3553,10 @@ gb_utf8_decode_len(char const *s, isize str_len, char32 *c)
 
 	if (!s || !c) return 0;
 	if (!str_len) return 0;
-	*c = GB_UTF_INVALID;
+	*c = GB__UTF_INVALID;
 
 	cd = gb__utf_decode_byte(s[0], &len);
-	if (!gb_is_between(len, 1, GB_UTF_SIZE))
+	if (!gb_is_between(len, 1, GB__UTF_SIZE))
 		return 1;
 
 	for (i = 1, j = 1; i < str_len && j < len; i++, j++) {
@@ -3315,7 +3574,11 @@ gb_utf8_decode_len(char const *s, isize str_len, char32 *c)
 
 
 
-
+/***************************************************************
+ *
+ * Array
+ *
+ */
 
 
 gb_no_inline void
@@ -3323,7 +3586,7 @@ gb__set_array_capacity(void *array_, isize capacity, isize element_size)
 {
 	/* NOTE(bill): I know this is unsafe so don't call this function directly */
 	gbVoidArray *a = cast(gbVoidArray *)array_;
-	void *data = NULL;
+	void *e = NULL;
 
 	GB_ASSERT(element_size > 0);
 
@@ -3341,15 +3604,713 @@ gb__set_array_capacity(void *array_, isize capacity, isize element_size)
 	}
 
 	if (capacity > 0) {
-		data = gb_alloc(a->allocator, element_size*capacity);
-		gb_memcopy(data, a->data, element_size*a->count);
+		e = gb_alloc(a->allocator, element_size*capacity);
+		gb_memcopy(e, a->e, element_size*a->count);
 	}
-	gb_free(a->allocator, a->data);
-	a->data = data;
+	gb_free(a->allocator, a->e);
+	a->e = e;
 	a->capacity = capacity;
 }
 
 
+/***************************************************************
+ *
+ * Hashing functions
+ *
+ */
+
+u32
+gb_adler32(void const *data, isize len)
+{
+	u32 const MOD_ALDER = 65521;
+	u32 a = 1, b = 0;
+	isize i;
+	u8 const *bytes = cast(u8 const *)data;
+	for (i = 0; i < len; i++) {
+		a = (a + bytes[i]) % MOD_ALDER;
+		b = (b + a) % MOD_ALDER;
+	}
+
+	return (b << 16) | a;
+}
+
+
+gb_global u32 const GB__CRC32_TABLE[256] = {
+	0x00000000, 0x77073096, 0xee0e612c, 0x990951ba,
+	0x076dc419, 0x706af48f, 0xe963a535, 0x9e6495a3,
+	0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988,
+	0x09b64c2b, 0x7eb17cbd, 0xe7b82d07, 0x90bf1d91,
+	0x1db71064, 0x6ab020f2, 0xf3b97148, 0x84be41de,
+	0x1adad47d, 0x6ddde4eb, 0xf4d4b551, 0x83d385c7,
+	0x136c9856, 0x646ba8c0, 0xfd62f97a, 0x8a65c9ec,
+	0x14015c4f, 0x63066cd9, 0xfa0f3d63, 0x8d080df5,
+	0x3b6e20c8, 0x4c69105e, 0xd56041e4, 0xa2677172,
+	0x3c03e4d1, 0x4b04d447, 0xd20d85fd, 0xa50ab56b,
+	0x35b5a8fa, 0x42b2986c, 0xdbbbc9d6, 0xacbcf940,
+	0x32d86ce3, 0x45df5c75, 0xdcd60dcf, 0xabd13d59,
+	0x26d930ac, 0x51de003a, 0xc8d75180, 0xbfd06116,
+	0x21b4f4b5, 0x56b3c423, 0xcfba9599, 0xb8bda50f,
+	0x2802b89e, 0x5f058808, 0xc60cd9b2, 0xb10be924,
+	0x2f6f7c87, 0x58684c11, 0xc1611dab, 0xb6662d3d,
+	0x76dc4190, 0x01db7106, 0x98d220bc, 0xefd5102a,
+	0x71b18589, 0x06b6b51f, 0x9fbfe4a5, 0xe8b8d433,
+	0x7807c9a2, 0x0f00f934, 0x9609a88e, 0xe10e9818,
+	0x7f6a0dbb, 0x086d3d2d, 0x91646c97, 0xe6635c01,
+	0x6b6b51f4, 0x1c6c6162, 0x856530d8, 0xf262004e,
+	0x6c0695ed, 0x1b01a57b, 0x8208f4c1, 0xf50fc457,
+	0x65b0d9c6, 0x12b7e950, 0x8bbeb8ea, 0xfcb9887c,
+	0x62dd1ddf, 0x15da2d49, 0x8cd37cf3, 0xfbd44c65,
+	0x4db26158, 0x3ab551ce, 0xa3bc0074, 0xd4bb30e2,
+	0x4adfa541, 0x3dd895d7, 0xa4d1c46d, 0xd3d6f4fb,
+	0x4369e96a, 0x346ed9fc, 0xad678846, 0xda60b8d0,
+	0x44042d73, 0x33031de5, 0xaa0a4c5f, 0xdd0d7cc9,
+	0x5005713c, 0x270241aa, 0xbe0b1010, 0xc90c2086,
+	0x5768b525, 0x206f85b3, 0xb966d409, 0xce61e49f,
+	0x5edef90e, 0x29d9c998, 0xb0d09822, 0xc7d7a8b4,
+	0x59b33d17, 0x2eb40d81, 0xb7bd5c3b, 0xc0ba6cad,
+	0xedb88320, 0x9abfb3b6, 0x03b6e20c, 0x74b1d29a,
+	0xead54739, 0x9dd277af, 0x04db2615, 0x73dc1683,
+	0xe3630b12, 0x94643b84, 0x0d6d6a3e, 0x7a6a5aa8,
+	0xe40ecf0b, 0x9309ff9d, 0x0a00ae27, 0x7d079eb1,
+	0xf00f9344, 0x8708a3d2, 0x1e01f268, 0x6906c2fe,
+	0xf762575d, 0x806567cb, 0x196c3671, 0x6e6b06e7,
+	0xfed41b76, 0x89d32be0, 0x10da7a5a, 0x67dd4acc,
+	0xf9b9df6f, 0x8ebeeff9, 0x17b7be43, 0x60b08ed5,
+	0xd6d6a3e8, 0xa1d1937e, 0x38d8c2c4, 0x4fdff252,
+	0xd1bb67f1, 0xa6bc5767, 0x3fb506dd, 0x48b2364b,
+	0xd80d2bda, 0xaf0a1b4c, 0x36034af6, 0x41047a60,
+	0xdf60efc3, 0xa867df55, 0x316e8eef, 0x4669be79,
+	0xcb61b38c, 0xbc66831a, 0x256fd2a0, 0x5268e236,
+	0xcc0c7795, 0xbb0b4703, 0x220216b9, 0x5505262f,
+	0xc5ba3bbe, 0xb2bd0b28, 0x2bb45a92, 0x5cb36a04,
+	0xc2d7ffa7, 0xb5d0cf31, 0x2cd99e8b, 0x5bdeae1d,
+	0x9b64c2b0, 0xec63f226, 0x756aa39c, 0x026d930a,
+	0x9c0906a9, 0xeb0e363f, 0x72076785, 0x05005713,
+	0x95bf4a82, 0xe2b87a14, 0x7bb12bae, 0x0cb61b38,
+	0x92d28e9b, 0xe5d5be0d, 0x7cdcefb7, 0x0bdbdf21,
+	0x86d3d2d4, 0xf1d4e242, 0x68ddb3f8, 0x1fda836e,
+	0x81be16cd, 0xf6b9265b, 0x6fb077e1, 0x18b74777,
+	0x88085ae6, 0xff0f6a70, 0x66063bca, 0x11010b5c,
+	0x8f659eff, 0xf862ae69, 0x616bffd3, 0x166ccf45,
+	0xa00ae278, 0xd70dd2ee, 0x4e048354, 0x3903b3c2,
+	0xa7672661, 0xd06016f7, 0x4969474d, 0x3e6e77db,
+	0xaed16a4a, 0xd9d65adc, 0x40df0b66, 0x37d83bf0,
+	0xa9bcae53, 0xdebb9ec5, 0x47b2cf7f, 0x30b5ffe9,
+	0xbdbdf21c, 0xcabac28a, 0x53b39330, 0x24b4a3a6,
+	0xbad03605, 0xcdd70693, 0x54de5729, 0x23d967bf,
+	0xb3667a2e, 0xc4614ab8, 0x5d681b02, 0x2a6f2b94,
+	0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d,
+};
+
+gb_global u64 const GB__CRC64_TABLE[256] = {
+	0x0000000000000000ull, 0x42F0E1EBA9EA3693ull, 0x85E1C3D753D46D26ull, 0xC711223CFA3E5BB5ull,
+	0x493366450E42ECDFull, 0x0BC387AEA7A8DA4Cull, 0xCCD2A5925D9681F9ull, 0x8E224479F47CB76Aull,
+	0x9266CC8A1C85D9BEull, 0xD0962D61B56FEF2Dull, 0x17870F5D4F51B498ull, 0x5577EEB6E6BB820Bull,
+	0xDB55AACF12C73561ull, 0x99A54B24BB2D03F2ull, 0x5EB4691841135847ull, 0x1C4488F3E8F96ED4ull,
+	0x663D78FF90E185EFull, 0x24CD9914390BB37Cull, 0xE3DCBB28C335E8C9ull, 0xA12C5AC36ADFDE5Aull,
+	0x2F0E1EBA9EA36930ull, 0x6DFEFF5137495FA3ull, 0xAAEFDD6DCD770416ull, 0xE81F3C86649D3285ull,
+	0xF45BB4758C645C51ull, 0xB6AB559E258E6AC2ull, 0x71BA77A2DFB03177ull, 0x334A9649765A07E4ull,
+	0xBD68D2308226B08Eull, 0xFF9833DB2BCC861Dull, 0x388911E7D1F2DDA8ull, 0x7A79F00C7818EB3Bull,
+	0xCC7AF1FF21C30BDEull, 0x8E8A101488293D4Dull, 0x499B3228721766F8ull, 0x0B6BD3C3DBFD506Bull,
+	0x854997BA2F81E701ull, 0xC7B97651866BD192ull, 0x00A8546D7C558A27ull, 0x4258B586D5BFBCB4ull,
+	0x5E1C3D753D46D260ull, 0x1CECDC9E94ACE4F3ull, 0xDBFDFEA26E92BF46ull, 0x990D1F49C77889D5ull,
+	0x172F5B3033043EBFull, 0x55DFBADB9AEE082Cull, 0x92CE98E760D05399ull, 0xD03E790CC93A650Aull,
+	0xAA478900B1228E31ull, 0xE8B768EB18C8B8A2ull, 0x2FA64AD7E2F6E317ull, 0x6D56AB3C4B1CD584ull,
+	0xE374EF45BF6062EEull, 0xA1840EAE168A547Dull, 0x66952C92ECB40FC8ull, 0x2465CD79455E395Bull,
+	0x3821458AADA7578Full, 0x7AD1A461044D611Cull, 0xBDC0865DFE733AA9ull, 0xFF3067B657990C3Aull,
+	0x711223CFA3E5BB50ull, 0x33E2C2240A0F8DC3ull, 0xF4F3E018F031D676ull, 0xB60301F359DBE0E5ull,
+	0xDA050215EA6C212Full, 0x98F5E3FE438617BCull, 0x5FE4C1C2B9B84C09ull, 0x1D14202910527A9Aull,
+	0x93366450E42ECDF0ull, 0xD1C685BB4DC4FB63ull, 0x16D7A787B7FAA0D6ull, 0x5427466C1E109645ull,
+	0x4863CE9FF6E9F891ull, 0x0A932F745F03CE02ull, 0xCD820D48A53D95B7ull, 0x8F72ECA30CD7A324ull,
+	0x0150A8DAF8AB144Eull, 0x43A04931514122DDull, 0x84B16B0DAB7F7968ull, 0xC6418AE602954FFBull,
+	0xBC387AEA7A8DA4C0ull, 0xFEC89B01D3679253ull, 0x39D9B93D2959C9E6ull, 0x7B2958D680B3FF75ull,
+	0xF50B1CAF74CF481Full, 0xB7FBFD44DD257E8Cull, 0x70EADF78271B2539ull, 0x321A3E938EF113AAull,
+	0x2E5EB66066087D7Eull, 0x6CAE578BCFE24BEDull, 0xABBF75B735DC1058ull, 0xE94F945C9C3626CBull,
+	0x676DD025684A91A1ull, 0x259D31CEC1A0A732ull, 0xE28C13F23B9EFC87ull, 0xA07CF2199274CA14ull,
+	0x167FF3EACBAF2AF1ull, 0x548F120162451C62ull, 0x939E303D987B47D7ull, 0xD16ED1D631917144ull,
+	0x5F4C95AFC5EDC62Eull, 0x1DBC74446C07F0BDull, 0xDAAD56789639AB08ull, 0x985DB7933FD39D9Bull,
+	0x84193F60D72AF34Full, 0xC6E9DE8B7EC0C5DCull, 0x01F8FCB784FE9E69ull, 0x43081D5C2D14A8FAull,
+	0xCD2A5925D9681F90ull, 0x8FDAB8CE70822903ull, 0x48CB9AF28ABC72B6ull, 0x0A3B7B1923564425ull,
+	0x70428B155B4EAF1Eull, 0x32B26AFEF2A4998Dull, 0xF5A348C2089AC238ull, 0xB753A929A170F4ABull,
+	0x3971ED50550C43C1ull, 0x7B810CBBFCE67552ull, 0xBC902E8706D82EE7ull, 0xFE60CF6CAF321874ull,
+	0xE224479F47CB76A0ull, 0xA0D4A674EE214033ull, 0x67C58448141F1B86ull, 0x253565A3BDF52D15ull,
+	0xAB1721DA49899A7Full, 0xE9E7C031E063ACECull, 0x2EF6E20D1A5DF759ull, 0x6C0603E6B3B7C1CAull,
+	0xF6FAE5C07D3274CDull, 0xB40A042BD4D8425Eull, 0x731B26172EE619EBull, 0x31EBC7FC870C2F78ull,
+	0xBFC9838573709812ull, 0xFD39626EDA9AAE81ull, 0x3A28405220A4F534ull, 0x78D8A1B9894EC3A7ull,
+	0x649C294A61B7AD73ull, 0x266CC8A1C85D9BE0ull, 0xE17DEA9D3263C055ull, 0xA38D0B769B89F6C6ull,
+	0x2DAF4F0F6FF541ACull, 0x6F5FAEE4C61F773Full, 0xA84E8CD83C212C8Aull, 0xEABE6D3395CB1A19ull,
+	0x90C79D3FEDD3F122ull, 0xD2377CD44439C7B1ull, 0x15265EE8BE079C04ull, 0x57D6BF0317EDAA97ull,
+	0xD9F4FB7AE3911DFDull, 0x9B041A914A7B2B6Eull, 0x5C1538ADB04570DBull, 0x1EE5D94619AF4648ull,
+	0x02A151B5F156289Cull, 0x4051B05E58BC1E0Full, 0x87409262A28245BAull, 0xC5B073890B687329ull,
+	0x4B9237F0FF14C443ull, 0x0962D61B56FEF2D0ull, 0xCE73F427ACC0A965ull, 0x8C8315CC052A9FF6ull,
+	0x3A80143F5CF17F13ull, 0x7870F5D4F51B4980ull, 0xBF61D7E80F251235ull, 0xFD913603A6CF24A6ull,
+	0x73B3727A52B393CCull, 0x31439391FB59A55Full, 0xF652B1AD0167FEEAull, 0xB4A25046A88DC879ull,
+	0xA8E6D8B54074A6ADull, 0xEA16395EE99E903Eull, 0x2D071B6213A0CB8Bull, 0x6FF7FA89BA4AFD18ull,
+	0xE1D5BEF04E364A72ull, 0xA3255F1BE7DC7CE1ull, 0x64347D271DE22754ull, 0x26C49CCCB40811C7ull,
+	0x5CBD6CC0CC10FAFCull, 0x1E4D8D2B65FACC6Full, 0xD95CAF179FC497DAull, 0x9BAC4EFC362EA149ull,
+	0x158E0A85C2521623ull, 0x577EEB6E6BB820B0ull, 0x906FC95291867B05ull, 0xD29F28B9386C4D96ull,
+	0xCEDBA04AD0952342ull, 0x8C2B41A1797F15D1ull, 0x4B3A639D83414E64ull, 0x09CA82762AAB78F7ull,
+	0x87E8C60FDED7CF9Dull, 0xC51827E4773DF90Eull, 0x020905D88D03A2BBull, 0x40F9E43324E99428ull,
+	0x2CFFE7D5975E55E2ull, 0x6E0F063E3EB46371ull, 0xA91E2402C48A38C4ull, 0xEBEEC5E96D600E57ull,
+	0x65CC8190991CB93Dull, 0x273C607B30F68FAEull, 0xE02D4247CAC8D41Bull, 0xA2DDA3AC6322E288ull,
+	0xBE992B5F8BDB8C5Cull, 0xFC69CAB42231BACFull, 0x3B78E888D80FE17Aull, 0x7988096371E5D7E9ull,
+	0xF7AA4D1A85996083ull, 0xB55AACF12C735610ull, 0x724B8ECDD64D0DA5ull, 0x30BB6F267FA73B36ull,
+	0x4AC29F2A07BFD00Dull, 0x08327EC1AE55E69Eull, 0xCF235CFD546BBD2Bull, 0x8DD3BD16FD818BB8ull,
+	0x03F1F96F09FD3CD2ull, 0x41011884A0170A41ull, 0x86103AB85A2951F4ull, 0xC4E0DB53F3C36767ull,
+	0xD8A453A01B3A09B3ull, 0x9A54B24BB2D03F20ull, 0x5D45907748EE6495ull, 0x1FB5719CE1045206ull,
+	0x919735E51578E56Cull, 0xD367D40EBC92D3FFull, 0x1476F63246AC884Aull, 0x568617D9EF46BED9ull,
+	0xE085162AB69D5E3Cull, 0xA275F7C11F7768AFull, 0x6564D5FDE549331Aull, 0x279434164CA30589ull,
+	0xA9B6706FB8DFB2E3ull, 0xEB46918411358470ull, 0x2C57B3B8EB0BDFC5ull, 0x6EA7525342E1E956ull,
+	0x72E3DAA0AA188782ull, 0x30133B4B03F2B111ull, 0xF7021977F9CCEAA4ull, 0xB5F2F89C5026DC37ull,
+	0x3BD0BCE5A45A6B5Dull, 0x79205D0E0DB05DCEull, 0xBE317F32F78E067Bull, 0xFCC19ED95E6430E8ull,
+	0x86B86ED5267CDBD3ull, 0xC4488F3E8F96ED40ull, 0x0359AD0275A8B6F5ull, 0x41A94CE9DC428066ull,
+	0xCF8B0890283E370Cull, 0x8D7BE97B81D4019Full, 0x4A6ACB477BEA5A2Aull, 0x089A2AACD2006CB9ull,
+	0x14DEA25F3AF9026Dull, 0x562E43B4931334FEull, 0x913F6188692D6F4Bull, 0xD3CF8063C0C759D8ull,
+	0x5DEDC41A34BBEEB2ull, 0x1F1D25F19D51D821ull, 0xD80C07CD676F8394ull, 0x9AFCE626CE85B507ull,
+};
+
+u32
+gb_crc32(void const *data, isize len)
+{
+	isize remaining;
+	u32 result = cast(u32)(~0);
+	u8 const *c = cast(u8 const *)data;
+	for (remaining = len; remaining--; c++)
+		result = (result >> 8) ^ (GB__CRC32_TABLE[(result ^ *c) & 0xff]);
+	return ~result;
+}
+
+u64
+gb_crc64(void const *data, isize len)
+{
+	isize remaining;
+	u64 result = cast(u64)(~0);
+	u8 const *c = cast(u8 const *)data;
+	for (remaining = len; remaining--; c++)
+		result = (result >> 8) ^ (GB__CRC64_TABLE[(result ^ *c) & 0xff]);
+	return ~result;
+}
+
+u32
+gb_fnv32(void const *data, isize len)
+{
+	isize i;
+	u32 h = 0x811c9dc5;
+	u8 const *c = cast(u8 const *)data;
+
+	for (i = 0; i < len; i++)
+		h = (h * 0x01000193) ^ c[i];
+
+	return h;
+}
+
+u64
+gb_fnv64(void const *data, isize len)
+{
+	isize i;
+	u64 h = 0xcbf29ce484222325ull;
+	u8 const *c = cast(u8 const *)data;
+
+	for (i = 0; i < len; i++)
+		h = (h * 0x100000001b3ll) ^ c[i];
+
+	return h;
+}
+
+u32
+gb_fnv32a(void const *data, isize len)
+{
+	isize i;
+	u32 h = 0x811c9dc5;
+	u8 const *c = cast(u8 const *)data;
+
+	for (i = 0; i < len; i++)
+		h = (h ^ c[i]) * 0x01000193;
+
+	return h;
+}
+
+u64
+gb_fnv64a(void const *data, isize len)
+{
+	isize i;
+	u64 h = 0xcbf29ce484222325ull;
+	u8 const *c = cast(u8 const *)data;
+
+	for (i = 0; i < len; i++)
+		h = (h ^ c[i]) * 0x100000001b3ll;
+
+	return h;
+}
+
+gb_inline u32 gb_murmur32(void const *data, isize len) { return gb_murmur32_seed(data, len, 0x9747b28c); }
+gb_inline u64 gb_murmur64(void const *data, isize len) { return gb_murmur64_seed(data, len, 0x9747b28c); }
+
+u32
+gb_murmur32_seed(void const *data, isize len, u32 seed)
+{
+	u32 const c1 = 0xcc9e2d51;
+	u32 const c2 = 0x1b873593;
+	u32 const r1 = 15;
+	u32 const r2 = 13;
+	u32 const m = 5;
+	u32 const n = 0xe6546b64;
+
+	isize i, nblocks = len / 4;
+	u32 hash = seed, k1 = 0;
+	u32 const *blocks = cast(u32 const*)data;
+	u8 const *tail = cast(u8 const *)(data) + nblocks*4;
+
+	for (i = 0; i < nblocks; i++) {
+		u32 k = blocks[i];
+		k *= c1;
+		k = (k << r1) | (k >> (32 - r1));
+		k *= c2;
+
+		hash ^= k;
+		hash = ((hash << r2) | (hash >> (32 - r2))) * m + n;
+	}
+
+	switch (len & 3) {
+	case 3:
+		k1 ^= tail[2] << 16;
+	case 2:
+		k1 ^= tail[1] << 8;
+	case 1:
+		k1 ^= tail[0];
+
+		k1 *= c1;
+		k1 = (k1 << r1) | (k1 >> (32 - r1));
+		k1 *= c2;
+		hash ^= k1;
+	}
+
+	hash ^= len;
+	hash ^= (hash >> 16);
+	hash *= 0x85ebca6b;
+	hash ^= (hash >> 13);
+	hash *= 0xc2b2ae35;
+	hash ^= (hash >> 16);
+
+	return hash;
+}
+
+u64
+gb_murmur64_seed(void const *data_, isize len, u64 seed)
+{
+#if defined(GB_ARCH_64_BIT)
+	u64 const m = 0xc6a4a7935bd1e995ULL;
+	i32 const r = 47;
+
+	u64 h = seed ^ (len * m);
+
+	u64 const *data = cast(u64 const *)data_;
+	u8  const *data2 = cast(u8 const *)data_;
+	u64 const* end = data + (len / 8);
+
+	while (data != end) {
+		u64 k = *data++;
+
+		k *= m;
+		k ^= k >> r;
+		k *= m;
+
+		h ^= k;
+		h *= m;
+	}
+
+	switch (len & 7) {
+	case 7: h ^= cast(u64)(data2[6]) << 48;
+	case 6: h ^= cast(u64)(data2[5]) << 40;
+	case 5: h ^= cast(u64)(data2[4]) << 32;
+	case 4: h ^= cast(u64)(data2[3]) << 24;
+	case 3: h ^= cast(u64)(data2[2]) << 16;
+	case 2: h ^= cast(u64)(data2[1]) << 8;
+	case 1: h ^= cast(u64)(data2[0]);
+		h *= m;
+	};
+
+	h ^= h >> r;
+	h *= m;
+	h ^= h >> r;
+
+	return h;
+#else
+	u64 h;
+	u32 const m = 0x5bd1e995;
+	i32 const r = 24;
+
+	u32 h1 = cast(u32)(seed) ^ cast(u32)(len);
+	u32 h2 = cast(u32)(seed >> 32);
+
+	u32 const *data = cast(u32 const *)data_;
+
+	while (len >= 8) {
+		u32 k1 = *data++;
+		k1 *= m;
+		k1 ^= k1 >> r;
+		k1 *= m;
+		h1 *= m;
+		h1 ^= k1;
+		len -= 4;
+
+		u32 k2 = *data++;
+		k2 *= m;
+		k2 ^= k2 >> r;
+		k2 *= m;
+		h2 *= m;
+		h2 ^= k2;
+		len -= 4;
+	}
+
+	if (len >= 4) {
+		u32 k1 = *data++;
+		k1 *= m;
+		k1 ^= k1 >> r;
+		k1 *= m;
+		h1 *= m;
+		h1 ^= k1;
+		len -= 4;
+	}
+
+	switch (len) {
+	case 3: h2 ^= (cast(u8 const *)data)[2] << 16;
+	case 2: h2 ^= (cast(u8 const *)data)[1] <<  8;
+	case 1: h2 ^= (cast(u8 const *)data)[0] <<  0;
+		h2 *= m;
+	};
+
+	h1 ^= h2 >> 18;
+	h1 *= m;
+	h2 ^= h1 >> 22;
+	h2 *= m;
+	h1 ^= h2 >> 17;
+	h1 *= m;
+	h2 ^= h1 >> 19;
+	h2 *= m;
+
+	h = h1;
+	h = (h << 32) | h2;
+
+	return h;
+#endif
+}
+
+
+
+/***************************************************************
+ *
+ * Hash Table
+ *
+ */
+
+
+gb_inline void
+gb_init_hash_table(gbHashTable *h, gbAllocator a)
+{
+	gb_init_array(&h->hashes, a);
+	gb_init_array(&h->entries, a);
+}
+
+gb_inline void
+gb_destroy_hash_table(gbHashTable *h)
+{
+	gb_free_array(&h->hashes);
+	gb_free_array(&h->entries);
+}
+
+typedef struct gbprivFindResult {
+	isize hash_index;
+	isize data_prev;
+	isize entry_index;
+} gbprivFindResult;
+
+gb_global gbprivFindResult const GB__INVALID_FIND_RESULT = {-1, -1, -1};
+
+gb_internal gbprivFindResult
+gb__find_result_from_key(gbHashTable const *h, u64 key)
+{
+	gbprivFindResult fr = GB__INVALID_FIND_RESULT;
+
+	if (h->hashes.count == 0)
+		return fr;
+
+	fr.hash_index = key % h->hashes.count;
+	fr.entry_index = h->hashes.e[fr.hash_index];
+	while (fr.entry_index >= 0) {
+		if (h->entries.e[fr.entry_index].key == key)
+			return fr;
+		fr.data_prev = fr.entry_index;
+		fr.entry_index = h->entries.e[fr.entry_index].next;
+	}
+
+	return fr;
+}
+
+gb_internal gb_inline isize
+gb__find_entry_of_fail(gbHashTable const *h, u64 key)
+{
+	return gb__find_result_from_key(h, key).entry_index;
+}
+
+gb_inline b32
+gb_hash_table_has(gbHashTable const *h, u64 key)
+{
+	return gb__find_entry_of_fail(h, key) >= 0;
+}
+
+gb_inline isize
+gb_hash_table_get(gbHashTable const *h, u64 key, isize default_index)
+{
+	isize index = gb__find_entry_of_fail(h, key);
+
+	if (index < 0)
+		return default_index;
+	return h->entries.e[index].value;
+}
+
+gb_internal gb_inline isize
+gb__add_hash_table_entry(gbHashTable *h, u64 key)
+{
+	isize i = h->entries.count;
+	gbHashTableEntry e = {0};
+	e.key = key;
+	e.next = -1;
+	gb_append_array(&h->entries, e);
+
+	return i;
+}
+
+gb_internal isize
+gb__make_hash_table_entry(gbHashTable *h, u64 key)
+{
+	gbprivFindResult fr = gb__find_result_from_key(h, key);
+	isize index = gb__add_hash_table_entry(h, key);
+
+	if (fr.data_prev < 0)
+		h->hashes.e[fr.hash_index] = index;
+	else
+		h->entries.e[fr.data_prev].next = index;
+
+	h->entries.e[index].next = fr.entry_index;
+
+	return index;
+}
+
+gb_internal gb_inline isize
+gb__is_hash_table_full(gbHashTable *h)
+{
+	f64 const MAXIMUM_LOAD_COEFFICIENT = 0.75;
+	return h->entries.count >= MAXIMUM_LOAD_COEFFICIENT * h->hashes.count;
+}
+
+gb_internal gb_inline void gb__grow_hash_table(gbHashTable *h);
+
+gb_inline void
+gb_multi_hash_table_insert(gbHashTable *h, u64 key, isize index)
+{
+	isize next;
+	if (h->hashes.count == 0)
+		gb__grow_hash_table(h);
+
+	next = gb__make_hash_table_entry(h, key);
+	h->entries.e[next].value = index;
+
+	if (gb__is_hash_table_full(h))
+		gb__grow_hash_table(h);
+}
+
+gb_inline void
+gb_multi_hash_table_get(gbHashTable const *h, u64 key, isize *indices, isize index_count)
+{
+	isize i = 0;
+	gbHashTableEntry const *e = gb_find_first_hash_table_entry(h, key);
+	while (e && index_count --> 0) {
+		indices[i++] = e->value;
+		e = gb_find_next_hash_table_entry(h, e);
+	}
+}
+
+gb_inline isize
+gb_multi_hash_table_count(gbHashTable const *h, u64 key)
+{
+	isize count = 0;
+	gbHashTableEntry const *e = gb_find_first_hash_table_entry(h, key);
+	while (e) {
+		count++;
+		e = gb_find_next_hash_table_entry(h, e);
+	}
+	return count;
+}
+
+gbHashTableEntry const *
+gb_find_first_hash_table_entry(gbHashTable const *h, u64 key)
+{
+	isize index = gb__find_entry_of_fail(h, key);
+	if (index < 0) return NULL;
+	return &h->entries.e[index];
+}
+
+gbHashTableEntry const *
+gb_find_next_hash_table_entry(gbHashTable const *h, gbHashTableEntry const *e)
+{
+	if (e) {
+		isize index = e->next;
+		while (index >= 0) {
+			if (h->entries.e[index].key == e->key)
+				return &h->entries.e[index];
+			index = h->entries.e[index].next;
+		}
+	}
+	return NULL;
+}
+
+gb_internal gbprivFindResult
+gb__find_result_from_entry(gbHashTable *h, gbHashTableEntry const *e)
+{
+	gbprivFindResult fr = GB__INVALID_FIND_RESULT;
+
+	if (h->hashes.count == 0 || !e)
+		return fr;
+
+	fr.hash_index  = e->key % h->hashes.count;
+	fr.entry_index = h->hashes.e[fr.hash_index];
+	while (fr.entry_index >= 0) {
+		if (&h->entries.e[fr.entry_index] == e)
+			return fr;
+		fr.data_prev = fr.entry_index;
+		fr.entry_index = h->entries.e[fr.entry_index].next;
+	}
+
+	return fr;
+}
+
+gb_internal void
+gb__erase_hash_table_find_result(gbHashTable *h, gbprivFindResult fr)
+{
+	if (fr.data_prev < 0)
+		h->hashes.e[fr.hash_index] = h->entries.e[fr.entry_index].next;
+	else
+		h->entries.e[fr.data_prev].next = h->entries.e[fr.entry_index].next;
+
+	gb_pop_array(&h->entries);
+
+	if (fr.entry_index != h->entries.count) {
+		gbprivFindResult last;
+		h->entries.e[fr.entry_index] = h->entries.e[h->entries.count];
+		last = gb__find_result_from_key(h, h->entries.e[fr.entry_index].key);
+		if (last.data_prev < 0)
+			h->hashes.e[last.hash_index] = fr.entry_index;
+		else
+			h->entries.e[last.entry_index].next = fr.entry_index;
+	}
+}
+
+gb_inline void
+gb_multi_hash_table_remove_entry(gbHashTable *h, gbHashTableEntry const *e)
+{
+	gbprivFindResult fr = gb__find_result_from_entry(h, e);
+	if (fr.entry_index >= 0)
+		gb__erase_hash_table_find_result(h, fr);
+}
+
+gb_inline void
+gb_multi_hash_table_remove_all(gbHashTable *h, u64 key)
+{
+	while (gb_hash_table_has(h, key))
+		gb_hash_table_remove(h, key);
+}
+
+gb_internal void
+gb__rehash(gbHashTable *h, isize new_capacity)
+{
+	gbHashTable nh;
+	isize i;
+
+	gb_init_hash_table(&nh, h->hashes.allocator);
+	gb_resize_array(&nh.hashes, new_capacity);
+	gb_reserve_array(&nh.entries, h->entries.count);
+
+	for (i = 0; i < new_capacity; i++)
+		nh.hashes.e[i] = -1;
+
+	for (i = 0; i < h->entries.count; i++) {
+		gbHashTableEntry *e = &h->entries.e[i];
+		gb_multi_hash_table_insert(&nh, e->key, e->value);
+	}
+
+	{
+		gbHashTable empty;
+		gb_init_hash_table(&empty, h->hashes.allocator);
+		gb_destroy_hash_table(h);
+
+		gb_memcopy(&nh, &h, gb_size_of(gbHashTable));
+		gb_memcopy(&empty, &nh, gb_size_of(gbHashTable));
+	}
+
+}
+
+gb_internal gb_inline void
+gb__grow_hash_table(gbHashTable *h)
+{
+	isize new_capacity = 2*h->entries.count + 8;
+	gb__rehash(h, new_capacity);
+}
+
+gb_internal isize
+gb__find_or_make_entry(gbHashTable *h, u64 key)
+{
+	isize index;
+	gbprivFindResult fr = gb__find_result_from_key(h, key);
+	if (fr.entry_index >= 0)
+		return fr.entry_index;
+	index = gb__add_hash_table_entry(h, key);
+	if (fr.data_prev < 0)
+		h->hashes.e[fr.hash_index] = index;
+	else
+		h->entries.e[fr.data_prev].next = index;
+	return index;
+}
+
+gb_inline void
+gb_hash_table_set(gbHashTable *h, u64 key, isize index)
+{
+	isize i;
+	if (h->hashes.count == 0)
+		gb__grow_hash_table(h);
+	i = gb__find_or_make_entry(h, key);
+	h->entries.e[i].value = index;
+	if (gb__is_hash_table_full(h))
+		gb__grow_hash_table(h);
+}
+
+
+gb_internal gb_inline void
+gb__find_and_erase_entry(gbHashTable *h, u64 key)
+{
+	gbprivFindResult fr = gb__find_result_from_key(h, key);
+	if (fr.entry_index >= 0)
+		gb__erase_hash_table_find_result(h, fr);
+}
+
+gb_inline void
+gb_hash_table_remove(gbHashTable *h, u64 key)
+{
+	gb__find_and_erase_entry(h, key);
+}
+
+gb_inline void
+gb_hash_table_reserve(gbHashTable *h, isize capacity)
+{
+	gb__rehash(h, capacity);
+}
+
+gb_inline void
+gb_clear_hash_table(gbHashTable *h)
+{
+	gb_clear_array(&h->hashes);
+	gb_clear_array(&h->entries);
+}
 
 
 
@@ -3673,6 +4634,7 @@ gb_load_dll(char const *filepath, ...)
 	va_start(va, filepath);
 	gb_snprintf_va(buffer, gb_size_of(buffer), filepath, va);
 	va_end(va);
+	/* TODO(bill): Should this be RTLD_LOCAL? */
 	return cast(gbDllHandle)dlopen(buffer, RTLD_LAZY|RTLD_GLOBAL);
 }
 
@@ -3731,94 +4693,102 @@ gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) 
 
 #if defined(GB_SYSTEM_WINDOWS)
 
-gb_inline f64
-gb_time_now(void)
-{
-	gb_local_persist LARGE_INTEGER win32_perf_count_freq = {0};
-	f64 result;
-	LARGE_INTEGER counter;
-	if (!win32_perf_count_freq.QuadPart) {
-		QueryPerformanceFrequency(&win32_perf_count_freq);
-		GB_ASSERT(win32_perf_count_freq.QuadPart != 0);
+	gb_inline f64
+	gb_time_now(void)
+	{
+		gb_local_persist LARGE_INTEGER win32_perf_count_freq = {0};
+		f64 result;
+		LARGE_INTEGER counter;
+		if (!win32_perf_count_freq.QuadPart) {
+			QueryPerformanceFrequency(&win32_perf_count_freq);
+			GB_ASSERT(win32_perf_count_freq.QuadPart != 0);
+		}
+
+		QueryPerformanceCounter(&counter);
+
+		result = counter.QuadPart / cast(f64)(win32_perf_count_freq.QuadPart);
+		return result;
 	}
 
-	QueryPerformanceCounter(&counter);
+	gb_inline void gb_sleep_ms(u32 ms) { Sleep(ms); }
 
-	result = counter.QuadPart / cast(f64)(win32_perf_count_freq.QuadPart);
-	return result;
-}
+	gb_inline void
+	gb_get_system_date(gbDate *date)
+	{
+		SYSTEMTIME st = {0};
+		GetSystemTime(&st);
+		date->year         = st.wYear;
+		date->month        = st.wMonth;
+		date->day_of_week  = st.wDayOfWeek;
+		date->day          = st.wDay;
+		date->hour         = st.wHour;
+		date->minute       = st.wMinute;
+		date->second       = st.wSecond;
+		date->milliseconds = st.wMilliseconds;
+	}
 
-
-gb_inline void
-gb_get_system_date(gbDate *date)
-{
-	SYSTEMTIME st = {0};
-	GetSystemTime(&st);
-	date->year         = st.wYear;
-	date->month        = st.wMonth;
-	date->day_of_week  = st.wDayOfWeek;
-	date->day          = st.wDay;
-	date->hour         = st.wHour;
-	date->minute       = st.wMinute;
-	date->second       = st.wSecond;
-	date->milliseconds = st.wMilliseconds;
-}
-
-gb_inline void
-gb_get_local_date(gbDate *date)
-{
-	SYSTEMTIME st = {0};
-	GetLocalTime(&st);
-	date->year         = st.wYear;
-	date->month        = st.wMonth;
-	date->day_of_week  = st.wDayOfWeek;
-	date->day          = st.wDay;
-	date->hour         = st.wHour;
-	date->minute       = st.wMinute;
-	date->second       = st.wSecond;
-	date->milliseconds = st.wMilliseconds;
-}
+	gb_inline void
+	gb_get_local_date(gbDate *date)
+	{
+		SYSTEMTIME st = {0};
+		GetLocalTime(&st);
+		date->year         = st.wYear;
+		date->month        = st.wMonth;
+		date->day_of_week  = st.wDayOfWeek;
+		date->day          = st.wDay;
+		date->hour         = st.wHour;
+		date->minute       = st.wMinute;
+		date->second       = st.wSecond;
+		date->milliseconds = st.wMilliseconds;
+	}
 
 #else
 
-gb_global f64 gb__timebase  = 0.0;
-gb_global u64 gb__timestart = 0;
+	gb_global f64 gb__timebase  = 0.0;
+	gb_global u64 gb__timestart = 0;
 
-gb_inline f64
-gb_time_now(void)
-{
-	struct timespec t;
-	f64 result;
+	gb_inline f64
+	gb_time_now(void)
+	{
+		struct timespec t;
+		f64 result;
 
-	if (gb__timestart) {
-		mach_timebase_info_data_t tb = {0};
-		mach_timebase_info(&tb);
-		gb__timebase = tb.numer;
-		gb__timebase /= tb.denom;
-		gb__timestart = mach_absolute_time();
+		if (gb__timestart) {
+			mach_timebase_info_data_t tb = {0};
+			mach_timebase_info(&tb);
+			gb__timebase = tb.numer;
+			gb__timebase /= tb.denom;
+			gb__timestart = mach_absolute_time();
+		}
+
+		result = (mach_absolute_time() - gb__timestart) * gb__timebase;
+		return result;
 	}
 
-	result = (mach_absolute_time() - gb__timestart) * gb__timebase;
-	return result;
-}
+	gb_inline void
+	gb_sleep_ms(u32 ms)
+	{
+		timespec req = {cast(time_t)ms/1000, cast(long)((ms%1000)*1000000)};
+		timespec rem = {0, 0};
+		nanosleep(&req, &rem);
+	}
 
 
-gb_inline void
-gb_get_system_date(gbDate *date)
-{
-	GB_PANIC("TODO(bill): Implement");
-}
+	gb_inline void
+	gb_get_system_date(gbDate *date)
+	{
+		GB_PANIC("TODO(bill): Implement");
+	}
 
-gb_inline void
-gb_get_local_date(gbDate *date)
-{
-	GB_PANIC("TODO(bill): Implement");
-}
-
+	gb_inline void
+	gb_get_local_date(gbDate *date)
+	{
+		GB_PANIC("TODO(bill): Implement");
+	}
 
 #endif
 
-
+#if !defined(GB_NO_COLOUR_TYPE)
 gb_inline gbColour
 gb_colour(f32 r, f32 g, f32 b, f32 a)
 {
@@ -3829,10 +4799,12 @@ gb_colour(f32 r, f32 g, f32 b, f32 a)
 	result.a = cast(u8)(gb_clamp01(a) * 255.0f);
 	return result;
 }
+#endif
 
 #if defined(__GCC__) || defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
+
 
 #if defined(__cplusplus)
 }
