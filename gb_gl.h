@@ -1,4 +1,4 @@
-/* gb.h - v0.04a - OpenGL Helper Library - public domain
+/* gb.h - v0.04b - OpenGL Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -55,6 +55,7 @@ Conventions used:
 
 
 Version History:
+	0.04b - Work with the new gb.h
 	0.04a - Better Documentation
 	0.04  - Remove gb_math.h dependency
 	0.03a - Better Rounded Rect
@@ -907,7 +908,7 @@ gbgl__load_single_shader_from_file(gbglShader *shader, gbglShaderType type, char
 {
 	gbglShaderError err = GBGL_SHADER_ERROR_NONE;
 
-	if (!gb_open_file(&shader->files[type], "%s%s", name, GBGL_SHADER_FILE_EXTENSIONS[type])) {
+	if (!gb_file_open(&shader->files[type], "%s%s", name, GBGL_SHADER_FILE_EXTENSIONS[type])) {
 		err = GBGL_SHADER_ERROR_UNABLE_TO_READ_FILE;
 	} else {
 		gb_local_persist char info_log[4096];
@@ -935,7 +936,7 @@ gbgl__load_single_shader_from_file(gbglShader *shader, gbglShaderType type, char
 
 			gbgl_free(file_source);
 		}
-		gb_close_file(&shader->files[type]);
+		gb_file_close(&shader->files[type]);
 	}
 
 	return err;
@@ -1070,7 +1071,7 @@ gbgl_destroy_shader(gbglShader *shader)
 	i32 i;
 	for (i = 0; i < GBGL_SHADER_TYPE_COUNT; i++) {
 		if (shader->type_flags & GB_BIT(i)) {
-			gb_close_file(&shader->files[i]);
+			gb_file_close(&shader->files[i]);
 			glDeleteShader(shader->shaders[i]);
 		}
 	}
@@ -1089,7 +1090,7 @@ gbgl_has_shader_changed(gbglShader *shader)
 	i32 i;
 	for (i = 0; i < GBGL_SHADER_TYPE_COUNT; i++) {
 		if (shader->type_flags & GB_BIT(i)) {
-			if (gb_has_file_changed(&shader->files[i])) {
+			if (gb_file_has_changed(&shader->files[i])) {
 				return true;
 			}
 		}
@@ -1147,7 +1148,7 @@ gbgl_get_uniform(gbglShader *s, char const *name)
 	              "Uniform array for shader is full");
 
 	loc = glGetUniformLocation(s->program, name);
-	s->uniform_names[s->uniform_count] = gb_alloc_cstring(gb_heap_allocator(), name);
+	s->uniform_names[s->uniform_count] = gb_alloc_str(gb_heap_allocator(), name);
 	s->uniform_locs[s->uniform_count] = loc;
 	s->uniform_count++;
 
@@ -1429,7 +1430,7 @@ gbgl_get_packed_font_dim(gbglFontCache *cache, gbglFontCachedTTF *ttf, i32 *widt
 			gb_zero_array(cache->rect_cache, cache->codepoint_count);
 			rp_ctx = cast(stbrp_context *)spc.pack_info;
 			stbtt_PackFontRangesGatherRects(&spc, &ttf->finfo, cache->ranges, cache->codepoint_count, cache->rect_cache);
-			gb_qsort(cache->rect_cache, cache->codepoint_count, gb_size_of(cache->rect_cache[0]), rect_height_compare);
+			gb_qsort_array(cache->rect_cache, cache->codepoint_count, rect_height_compare);
 
 			for (i = 0; i < cache->codepoint_count; i++) {
 				stbrp__findresult fr = stbrp__skyline_pack_rectangle(rp_ctx, cache->rect_cache[i].w, cache->rect_cache[i].h);
@@ -1632,14 +1633,14 @@ gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 			gb_strncpy((*ttf_cache)->name, ttf_filename, name_len);
 			(*ttf_cache)->name[name_len] = '\0';
 
-			if (gb_open_file(&file, ttf_filename)) {
+			if (gb_file_open(&file, ttf_filename)) {
 				i64 len = gb_file_size(&file);
 				(*ttf_cache)->ttf = cast(u8 *)gbgl_malloc(len);
 				GB_ASSERT_NOT_NULL((*ttf_cache)->ttf);
 
 				gb_file_read_at(&file, (*ttf_cache)->ttf, len, 0);
 
-				gb_close_file(&file);
+				gb_file_close(&file);
 			} else {
 				GB_PANIC("Could not open ttf file");
 			}
@@ -1714,7 +1715,7 @@ gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 					f->glyph_map[i].index = i;
 				}
 
-				gb_qsort(f->glyph_map, f->glyph_count, gb_size_of(*f->glyph_map), gbgl__glyph_map_compare);
+				gb_qsort_array(f->glyph_map, f->glyph_count, gbgl__glyph_map_compare);
 
 				{ // Kerning Table
 					isize kps_count = 0;
@@ -1740,7 +1741,7 @@ gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 								}
 							}
 						}
-						gb_qsort(f->kern_table, f->kern_pair_count, gb_size_of(f->kern_table[0]), gbgl__kern_pair_compare);
+						gb_qsort_array(f->kern_table, f->kern_pair_count, gbgl__kern_pair_compare);
 					}
 				}
 			}
@@ -2015,7 +2016,7 @@ gbgl_bs_init(gbglBasicState *bs, i32 window_width, i32 window_height)
 		"#version 410 core\n"
 		"in vec2 v_tex_coord;\n"
 		"uniform vec4 u_colour;\n"
-		"layout (binding = 0) uniform sampler2D _utex;\n"
+		"layout (binding = 0) uniform sampler2D u_tex;\n"
 		"out vec4 o_colour;\n"
 		"void main(void) {\n"
 		"	o_colour = u_colour * texture2D(u_tex, v_tex_coord).r;\n"
