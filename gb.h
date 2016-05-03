@@ -1,4 +1,4 @@
-/* gb.h - v0.08  - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.08a - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -26,6 +26,7 @@ Conventions used:
 
 
 Version History:
+	0.08a - Fix *_appendv bug
 	0.08  - Huge Overhaul!
 	0.07a - Fix alignment in gb_heap_allocator_proc
 	0.07  - Hash Table and Hashing Functions
@@ -1142,10 +1143,10 @@ typedef struct gbBufferHeader {
 
 #define gb_buffer_append(x, item) do { (x)[gb_buffer_count(x)++] = (item); } while (0)
 
-#define gb_buffer_appednv(x, items, item_count) do { \
+#define gb_buffer_appendv(x, items, item_count) do { \
 	GB_ASSERT(gb_size_of(*(items)) == gb_size_of(*(x))); \
 	GB_ASSERT(gb_buffer_count(x)+item_count <= gb_buffer_capacity(x)); \
-	gb_memcopy((x)[gb_buffer_count(x)], (items), gb_size_of(*(x))*(item_count)); \
+	gb_memcopy(&(x)[gb_buffer_count(x)], (items), gb_size_of(*(x))*(item_count)); \
 	gb_buffer_count(x) += (item_count); \
 } while (0)
 
@@ -1286,7 +1287,7 @@ GB_DEF void *gb__set_array_capacity(void *array, isize capacity, isize element_s
 	GB_ASSERT(gb_size_of((items)[0]) == gb_size_of((x)[0])); \
 	if (gb__ah->capacity < gb__ah->count+(item_count)) \
 		gb_array_grow(x, gb__ah->count+(item_count)); \
-	gb_memcopy((x)[gb__ah->count], (items), gb_size_of((x)[0])*(item_count));\
+	gb_memcopy(&(x)[gb__ah->count], (items), gb_size_of((x)[0])*(item_count));\
 	gb__ah->count += (item_count); \
 } while (0)
 
