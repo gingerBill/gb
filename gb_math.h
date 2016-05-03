@@ -1,8 +1,9 @@
-/* gb_math.h - v0.06a - public domain C math library - no warranty implied; use at your own risk
+/* gb_math.h - v0.06b - public domain C math library - no warranty implied; use at your own risk
    A C math library geared towards game development
    use '#define GB_MATH_IMPLEMENTATION' before including to create the implementation in _ONE_ file
 
 Version History:
+	0.06b - Just formatting
 	0.06a - Implement rough versions of mod, remainder, copy_sign
 	0.06  - Windows GCC Support and C90-ish Support
 	0.05  - Less/no dependencies or CRT
@@ -205,50 +206,49 @@ GB_MATH_DEF float gb_angle_diff(float radians_a, float radians_b);
 #define gb_max(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
-GB_MATH_DEF float gb_copy_sign(float x, float y);
-GB_MATH_DEF float gb_remainder(float x, float y);
-GB_MATH_DEF float gb_mod(float x, float y);
-GB_MATH_DEF float gb_sqrt(float a);
-GB_MATH_DEF float gb_rsqrt(float a);
+GB_MATH_DEF float gb_copy_sign  (float x, float y);
+GB_MATH_DEF float gb_remainder  (float x, float y);
+GB_MATH_DEF float gb_mod        (float x, float y);
+GB_MATH_DEF float gb_sqrt       (float a);
+GB_MATH_DEF float gb_rsqrt      (float a);
 GB_MATH_DEF float gb_quake_rsqrt(float a); /* NOTE(bill): It's probably better to use 1.0f/gb_sqrt(a)
                                             * And for simd, there is usually isqrt functions too!
                                             */
-GB_MATH_DEF float gb_sin(float radians);
-GB_MATH_DEF float gb_cos(float radians);
-GB_MATH_DEF float gb_tan(float radians);
-GB_MATH_DEF float gb_arcsin(float a);
-GB_MATH_DEF float gb_arccos(float a);
-GB_MATH_DEF float gb_arctan(float a);
+GB_MATH_DEF float gb_sin    (float radians);
+GB_MATH_DEF float gb_cos    (float radians);
+GB_MATH_DEF float gb_tan    (float radians);
+GB_MATH_DEF float gb_arcsin (float a);
+GB_MATH_DEF float gb_arccos (float a);
+GB_MATH_DEF float gb_arctan (float a);
 GB_MATH_DEF float gb_arctan2(float y, float x);
 
-
-GB_MATH_DEF float gb_exp(float x);
-GB_MATH_DEF float gb_exp2(float x);
-GB_MATH_DEF float gb_log(float x);
-GB_MATH_DEF float gb_log2(float x);
-GB_MATH_DEF float gb_fast_exp(float x);  /* NOTE(bill): Only valid from -1 <= x <= +1 */
+GB_MATH_DEF float gb_exp      (float x);
+GB_MATH_DEF float gb_exp2     (float x);
+GB_MATH_DEF float gb_log      (float x);
+GB_MATH_DEF float gb_log2     (float x);
+GB_MATH_DEF float gb_fast_exp (float x);  /* NOTE(bill): Only valid from -1 <= x <= +1 */
 GB_MATH_DEF float gb_fast_exp2(float x); /* NOTE(bill): Only valid from -1 <= x <= +1 */
-GB_MATH_DEF float gb_pow(float x, float y); /* x^y */
+GB_MATH_DEF float gb_pow      (float x, float y); /* x^y */
 
 GB_MATH_DEF float gb_round(float x);
 GB_MATH_DEF float gb_floor(float x);
-GB_MATH_DEF float gb_ceil(float x);
+GB_MATH_DEF float gb_ceil (float x);
 
 GB_MATH_DEF float  gb_half_to_float(gbHalf value);
 GB_MATH_DEF gbHalf gb_float_to_half(float value);
 
 
 GB_MATH_DEF gbVec2 gb_vec2_zero(void);
-GB_MATH_DEF gbVec2 gb_vec2(float x, float y);
-GB_MATH_DEF gbVec2 gb_vec2v(float x[2]);
+GB_MATH_DEF gbVec2 gb_vec2     (float x, float y);
+GB_MATH_DEF gbVec2 gb_vec2v    (float x[2]);
 
 GB_MATH_DEF gbVec3 gb_vec3_zero(void);
-GB_MATH_DEF gbVec3 gb_vec3(float x, float y, float z);
-GB_MATH_DEF gbVec3 gb_vec3v(float x[3]);
+GB_MATH_DEF gbVec3 gb_vec3     (float x, float y, float z);
+GB_MATH_DEF gbVec3 gb_vec3v    (float x[3]);
 
 GB_MATH_DEF gbVec4 gb_vec4_zero(void);
-GB_MATH_DEF gbVec4 gb_vec4(float x, float y, float z, float w);
-GB_MATH_DEF gbVec4 gb_vec4v(float x[4]);
+GB_MATH_DEF gbVec4 gb_vec4     (float x, float y, float z, float w);
+GB_MATH_DEF gbVec4 gb_vec4v    (float x[4]);
 
 
 GB_MATH_DEF void gb_vec2_add(gbVec2 *d, gbVec2 v0, gbVec2 v1);
@@ -312,12 +312,12 @@ GB_MATH_DEF void gb_vec3_refract(gbVec3 *d, gbVec3 i, gbVec3 n, float eta);
 GB_MATH_DEF float gb_vec2_aspect_ratio(gbVec2 v);
 
 
-GB_MATH_DEF void gb_mat2_identity(gbMat2 *m);
+GB_MATH_DEF void gb_mat2_identity   (gbMat2 *m);
 GB_MATH_DEF void gb_float22_identity(float m[2][2]);
 
 GB_MATH_DEF void gb_mat2_transpose(gbMat2 *m);
-GB_MATH_DEF void gb_mat2_mul(gbMat2 *out, gbMat2 *m1, gbMat2 *m2);
-GB_MATH_DEF void gb_mat2_mul_vec2(gbVec2 *out, gbMat2 *m, gbVec2 in);
+GB_MATH_DEF void gb_mat2_mul      (gbMat2 *out, gbMat2 *m1, gbMat2 *m2);
+GB_MATH_DEF void gb_mat2_mul_vec2 (gbVec2 *out, gbMat2 *m, gbVec2 in);
 
 GB_MATH_DEF gbMat2 *gb_mat2_v(gbVec2 m[2]);
 GB_MATH_DEF gbMat2 *gb_mat2_f(float m[2][2]);
@@ -326,64 +326,65 @@ GB_MATH_DEF gbFloat2 *gb_float22_v(gbVec2 m[2]);
 GB_MATH_DEF gbFloat2 *gb_float22_4(float m[4]);
 
 GB_MATH_DEF void gb_float22_transpose(float (*vec)[2]);
-GB_MATH_DEF void gb_float22_mul(float (*out)[2], float (*mat1)[2], float (*mat2)[2]);
-GB_MATH_DEF void gb_float22_mul_vec2(gbVec2 *out, float m[2][2], gbVec2 in);
+GB_MATH_DEF void gb_float22_mul      (float (*out)[2], float (*mat1)[2], float (*mat2)[2]);
+GB_MATH_DEF void gb_float22_mul_vec2 (gbVec2 *out, float m[2][2], gbVec2 in);
 
 
-GB_MATH_DEF void gb_mat3_identity(gbMat3 *m);
+GB_MATH_DEF void gb_mat3_identity   (gbMat3 *m);
 GB_MATH_DEF void gb_float33_identity(float m[3][3]);
 
 GB_MATH_DEF void gb_mat3_transpose(gbMat3 *m);
-GB_MATH_DEF void gb_mat3_mul(gbMat3 *out, gbMat3 *m1, gbMat3 *m2);
-GB_MATH_DEF void gb_mat3_mul_vec3(gbVec3 *out, gbMat3 *m, gbVec3 in);
+GB_MATH_DEF void gb_mat3_mul      (gbMat3 *out, gbMat3 *m1, gbMat3 *m2);
+GB_MATH_DEF void gb_mat3_mul_vec3 (gbVec3 *out, gbMat3 *m, gbVec3 in);
 
 GB_MATH_DEF gbMat3 *gb_mat3_v(gbVec3 m[3]);
 GB_MATH_DEF gbMat3 *gb_mat3_f(float m[3][3]);
+
 GB_MATH_DEF gbFloat3 *gb_float33_m(gbMat3 *m);
 GB_MATH_DEF gbFloat3 *gb_float33_v(gbVec3 m[3]);
 GB_MATH_DEF gbFloat3 *gb_float33_9(float m[9]);
 
 GB_MATH_DEF void gb_float33_transpose(float (*vec)[3]);
-GB_MATH_DEF void gb_float33_mul(float (*out)[3], float (*mat1)[3], float (*mat2)[3]);
-GB_MATH_DEF void gb_float33_mul_vec3(gbVec3 *out, float m[3][3], gbVec3 in);
+GB_MATH_DEF void gb_float33_mul      (float (*out)[3], float (*mat1)[3], float (*mat2)[3]);
+GB_MATH_DEF void gb_float33_mul_vec3 (gbVec3 *out, float m[3][3], gbVec3 in);
 
-
-GB_MATH_DEF void gb_mat4_identity(gbMat4 *m);
+GB_MATH_DEF void gb_mat4_identity   (gbMat4 *m);
 GB_MATH_DEF void gb_float44_identity(float m[4][4]);
 
 GB_MATH_DEF void gb_mat4_transpose(gbMat4 *m);
-GB_MATH_DEF void gb_mat4_mul(gbMat4 *out, gbMat4 *m1, gbMat4 *m2);
-GB_MATH_DEF void gb_mat4_mul_vec4(gbVec4 *out, gbMat4 *m, gbVec4 in);
+GB_MATH_DEF void gb_mat4_mul      (gbMat4 *out, gbMat4 *m1, gbMat4 *m2);
+GB_MATH_DEF void gb_mat4_mul_vec4 (gbVec4 *out, gbMat4 *m, gbVec4 in);
 
 GB_MATH_DEF gbMat4 *gb_mat4_v(gbVec4 m[4]);
 GB_MATH_DEF gbMat4 *gb_mat4_f(float m[4][4]);
-GB_MATH_DEF gbFloat4 *gb_float44_m(gbMat4 *m);
-GB_MATH_DEF gbFloat4 *gb_float44_v(gbVec4 m[4]);
+
+GB_MATH_DEF gbFloat4 *gb_float44_m (gbMat4 *m);
+GB_MATH_DEF gbFloat4 *gb_float44_v (gbVec4 m[4]);
 GB_MATH_DEF gbFloat4 *gb_float44_16(float m[16]);
 
 GB_MATH_DEF void gb_float44_transpose(float (*vec)[4]);
-GB_MATH_DEF void gb_float44_mul(float (*out)[4], float (*mat1)[4], float (*mat2)[4]);
-GB_MATH_DEF void gb_float44_mul_vec4(gbVec4 *out, float m[4][4], gbVec4 in);
+GB_MATH_DEF void gb_float44_mul      (float (*out)[4], float (*mat1)[4], float (*mat2)[4]);
+GB_MATH_DEF void gb_float44_mul_vec4 (gbVec4 *out, float m[4][4], gbVec4 in);
 
 
-GB_MATH_DEF void gb_mat4_translate(gbMat4 *out, gbVec3 v);
-GB_MATH_DEF void gb_mat4_rotate(gbMat4 *out, gbVec3 v, float angle_radians);
-GB_MATH_DEF void gb_mat4_scale(gbMat4 *out, gbVec3 v);
-GB_MATH_DEF void gb_mat4_scalef(gbMat4 *out, float s);
-GB_MATH_DEF void gb_mat4_ortho2d(gbMat4 *out, float left, float right, float bottom, float top);
-GB_MATH_DEF void gb_mat4_ortho3d(gbMat4 *out, float left, float right, float bottom, float top, float z_near, float z_far);
-GB_MATH_DEF void gb_mat4_perspective(gbMat4 *out, float fovy, float aspect, float z_near, float z_far);
+GB_MATH_DEF void gb_mat4_translate           (gbMat4 *out, gbVec3 v);
+GB_MATH_DEF void gb_mat4_rotate              (gbMat4 *out, gbVec3 v, float angle_radians);
+GB_MATH_DEF void gb_mat4_scale               (gbMat4 *out, gbVec3 v);
+GB_MATH_DEF void gb_mat4_scalef              (gbMat4 *out, float s);
+GB_MATH_DEF void gb_mat4_ortho2d             (gbMat4 *out, float left, float right, float bottom, float top);
+GB_MATH_DEF void gb_mat4_ortho3d             (gbMat4 *out, float left, float right, float bottom, float top, float z_near, float z_far);
+GB_MATH_DEF void gb_mat4_perspective         (gbMat4 *out, float fovy, float aspect, float z_near, float z_far);
 GB_MATH_DEF void gb_mat4_infinite_perspective(gbMat4 *out, float fovy, float aspect, float z_near);
 
 GB_MATH_DEF void gb_mat4_look_at(gbMat4 *out, gbVec3 eye, gbVec3 centre, gbVec3 up);
 
 
 
-GB_MATH_DEF gbQuat gb_quat(float x, float y, float z, float w);
-GB_MATH_DEF gbQuat gb_quatv(float e[4]);
-GB_MATH_DEF gbQuat gb_quat_axis_angle(gbVec3 axis, float angle_radians);
+GB_MATH_DEF gbQuat gb_quat             (float x, float y, float z, float w);
+GB_MATH_DEF gbQuat gb_quatv            (float e[4]);
+GB_MATH_DEF gbQuat gb_quat_axis_angle  (gbVec3 axis, float angle_radians);
 GB_MATH_DEF gbQuat gb_quat_euler_angles(float pitch, float yaw, float roll);
-GB_MATH_DEF gbQuat gb_quat_identity(void);
+GB_MATH_DEF gbQuat gb_quat_identity    (void);
 
 GB_MATH_DEF void gb_quat_add(gbQuat *d, gbQuat q0, gbQuat q1);
 GB_MATH_DEF void gb_quat_sub(gbQuat *d, gbQuat q0, gbQuat q1);
@@ -409,39 +410,40 @@ GB_MATH_DEF void gb_quat_diveqf(gbQuat *d, float s);
 GB_MATH_DEF float gb_quat_dot(gbQuat q0, gbQuat q1);
 GB_MATH_DEF float gb_quat_mag(gbQuat q);
 
-GB_MATH_DEF void gb_quat_norm(gbQuat *d, gbQuat q);
-GB_MATH_DEF void gb_quat_conj(gbQuat *d, gbQuat q);
+GB_MATH_DEF void gb_quat_norm   (gbQuat *d, gbQuat q);
+GB_MATH_DEF void gb_quat_conj   (gbQuat *d, gbQuat q);
 GB_MATH_DEF void gb_quat_inverse(gbQuat *d, gbQuat q);
 
-GB_MATH_DEF void  gb_quat_axis(gbVec3 *axis, gbQuat q);
+GB_MATH_DEF void  gb_quat_axis (gbVec3 *axis, gbQuat q);
 GB_MATH_DEF float gb_quat_angle(gbQuat q);
 
 GB_MATH_DEF float gb_quat_pitch(gbQuat q);
-GB_MATH_DEF float gb_quat_yaw(gbQuat q);
-GB_MATH_DEF float gb_quat_roll(gbQuat q);
+GB_MATH_DEF float gb_quat_yaw  (gbQuat q);
+GB_MATH_DEF float gb_quat_roll (gbQuat q);
 
 /* NOTE(bill): Rotate v by q */
 GB_MATH_DEF void gb_quat_rotate_vec3(gbVec3 *d, gbQuat q, gbVec3 v);
-GB_MATH_DEF void gb_mat4_from_quat(gbMat4 *out, gbQuat q);
-GB_MATH_DEF void gb_quat_from_mat4(gbQuat *out, gbMat4 *m);
+GB_MATH_DEF void gb_mat4_from_quat  (gbMat4 *out, gbQuat q);
+GB_MATH_DEF void gb_quat_from_mat4  (gbQuat *out, gbMat4 *m);
 
 
 
 /* Interpolations */
-GB_MATH_DEF float gb_lerp(float a, float b, float t);
-GB_MATH_DEF float gb_smooth_step(float a, float b, float t);
+GB_MATH_DEF float gb_lerp         (float a, float b, float t);
+GB_MATH_DEF float gb_unlerp       (float t, float a, float b);
+GB_MATH_DEF float gb_smooth_step  (float a, float b, float t);
 GB_MATH_DEF float gb_smoother_step(float a, float b, float t);
 
 GB_MATH_DEF void gb_vec2_lerp(gbVec2 *d, gbVec2 a, gbVec2 b, float t);
 GB_MATH_DEF void gb_vec3_lerp(gbVec3 *d, gbVec3 a, gbVec3 b, float t);
 GB_MATH_DEF void gb_vec4_lerp(gbVec4 *d, gbVec4 a, gbVec4 b, float t);
 
-GB_MATH_DEF void gb_quat_lerp(gbQuat *d, gbQuat a, gbQuat b, float t);
+GB_MATH_DEF void gb_quat_lerp (gbQuat *d, gbQuat a, gbQuat b, float t);
 GB_MATH_DEF void gb_quat_nlerp(gbQuat *d, gbQuat a, gbQuat b, float t);
 GB_MATH_DEF void gb_quat_slerp(gbQuat *d, gbQuat a, gbQuat b, float t);
-GB_MATH_DEF void gb_quat_slerp_approx(gbQuat *d, gbQuat a, gbQuat b, float t);
 GB_MATH_DEF void gb_quat_nquad(gbQuat *d, gbQuat p, gbQuat a, gbQuat b, gbQuat q, float t);
 GB_MATH_DEF void gb_quat_squad(gbQuat *d, gbQuat p, gbQuat a, gbQuat b, gbQuat q, float t);
+GB_MATH_DEF void gb_quat_slerp_approx(gbQuat *d, gbQuat a, gbQuat b, float t);
 GB_MATH_DEF void gb_quat_squad_approx(gbQuat *d, gbQuat p, gbQuat a, gbQuat b, gbQuat q, float t);
 
 
@@ -449,9 +451,9 @@ GB_MATH_DEF void gb_quat_squad_approx(gbQuat *d, gbQuat p, gbQuat a, gbQuat b, g
 GB_MATH_DEF gbRect2 gb_rect2(gbVec2 pos, gbVec2 dim);
 GB_MATH_DEF gbRect3 gb_rect3(gbVec3 pos, gbVec3 dim);
 
-GB_MATH_DEF int gb_rect2_contains(gbRect2 a, float x, float y);
-GB_MATH_DEF int gb_rect2_contains_vec2(gbRect2 a, gbVec2 p);
-GB_MATH_DEF int gb_rect2_intersects(gbRect2 a, gbRect2 b);
+GB_MATH_DEF int gb_rect2_contains           (gbRect2 a, float x, float y);
+GB_MATH_DEF int gb_rect2_contains_vec2      (gbRect2 a, gbVec2 p);
+GB_MATH_DEF int gb_rect2_intersects         (gbRect2 a, gbRect2 b);
 GB_MATH_DEF int gb_rect2_intersection_result(gbRect2 a, gbRect2 b, gbRect2 *intersection);
 
 
@@ -464,7 +466,7 @@ GB_MATH_DEF gb_math_u64 gb_hash_murmur64(void const *key, size_t num_bytes, gb_m
 /* Random */
 /* TODO(bill): Use a generator for the random numbers */
 GB_MATH_DEF float gb_random_range_float(float min_inc, float max_inc);
-GB_MATH_DEF int gb_random_range_int(int min_inc, int max_inc);
+GB_MATH_DEF int   gb_random_range_int  (int min_inc, int max_inc);
 
 
 #if defined(__cplusplus)
@@ -472,6 +474,8 @@ GB_MATH_DEF int gb_random_range_int(int min_inc, int max_inc);
 #endif
 
 #if defined(__cplusplus) && defined(GB_MATH_USE_OPERATOR_OVERLOADS)
+
+/* TODO(bill): How should I apply GB_MATH_DEF to these operator overloads? */
 
 bool operator==(gbVec2 a, gbVec2 b) { return (a.x == b.x) && (a.y == b.y); }
 bool operator!=(gbVec2 a, gbVec2 b) { return !operator==(a, b); }
@@ -738,6 +742,7 @@ gbVec3 operator*(gbQuat q, gbVec3 v) { gbVec3 r; gb_quat_rotate_vec3(&r, q, v); 
 #define GB_MATH_IMPLEMENTATION_DONE
 
 
+/* NOTE(bill): To remove the need for memcpy */
 static void
 gb__memcpy_4byte(void *dest, void const *src, size_t size)
 {
@@ -750,6 +755,7 @@ gb__memcpy_4byte(void *dest, void const *src, size_t size)
 	}
 }
 
+/* NOTE(bill): To remove the need for memset */
 static void
 gb__memzero_byte4(void *dest, size_t size)
 {
@@ -1007,16 +1013,10 @@ float gb_ceil(float x)  { return (x < 0) ? (int)x : ((int)x)+1; }
 
 
 
-
-typedef union {
-	unsigned int i;
-	float f;
-} gb_uif32;
-
 float
 gb_half_to_float(gbHalf value)
 {
-	gb_uif32 result;
+	union { unsigned int i; float f; } result;
 	int s = (value >> 15) & 0x001;
 	int e = (value >> 10) & 0x01f;
 	int m =  value        & 0x3ff;
@@ -1058,7 +1058,7 @@ gb_half_to_float(gbHalf value)
 gbHalf
 gb_float_to_half(float value)
 {
-	gb_uif32 v;
+	union { unsigned int i; float f; } v;
 	int i, s, e, m;
 
 	v.f = value;
@@ -1888,8 +1888,9 @@ gb_quat_from_mat4(gbQuat *out, gbMat4 *mat)
 
 
 
-float gb_lerp(float a, float b, float t)          { return a*(1.0f-t) + b*t; }
-float gb_smooth_step(float a, float b, float t)   { float x = (t - a)/(b - a); return x*x*(3.0f - 2.0f*x); }
+float gb_lerp         (float a, float b, float t) { return a*(1.0f-t) + b*t; }
+float gb_unlerp       (float t, float a, float b) { return (t-a)/(b-a); }
+float gb_smooth_step  (float a, float b, float t) { float x = (t - a)/(b - a); return x*x*(3.0f - 2.0f*x); }
 float gb_smoother_step(float a, float b, float t) { float x = (t - a)/(b - a); return x*x*x*(x*(6.0f*x - 15.0f) + 10.0f); }
 
 

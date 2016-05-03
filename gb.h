@@ -1,4 +1,4 @@
-/* gb.h - v0.07  - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.07a - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -26,6 +26,7 @@ Conventions used:
 
 
 Version History:
+	0.07a - Fix alignment in gb_heap_allocator_proc
 	0.07  - Hash Table and Hashing Functions
 	0.06c - Better Documentation
 	0.06b - OS X Support
@@ -174,8 +175,10 @@ extern "C" {
 
 #include <stdarg.h>
 #include <stddef.h>
-#include <stdio.h> /* TODO(bill): Remove and replace with OS Specific stuff */
-#include <string.h> /* NOTE(bill): For memcpy, memmove, memcmp, etc. */
+#include <stdio.h>    /* TODO(bill): Remove and replace with OS Specific stuff */
+#include <stdlib.h>
+#include <string.h>   /* NOTE(bill): For memcpy, memmove, memcmp, etc. */
+#include <sys/stat.h> /* NOTE(bill): File info */
 
 #if defined(GB_SYSTEM_WINDOWS)
 	#define NOMINMAX            1
@@ -183,19 +186,18 @@ extern "C" {
 	#define WIN32_MEAN_AND_LEAN 1
 	#define VC_EXTRALEAN        1
 	#include <windows.h>
+	#include <direct.h>
 	#include <process.h>
+	#include <malloc.h>
 #else
-	#include <pthread.h>
-	#include <time.h>
-	#include <mach/mach_time.h>
-	#include <sys/stat.h>
 	#include <dlfcn.h>
+	#include <mach/mach_time.h>
+	#include <pthread.h>
+	#include <sys/stat.h>
+	#include <time.h>
+	#include <unistd.h>
 #endif
 
-
-#if !defined(GB_NO_STDLIB)
-#include <stdlib.h>
-#endif
 
 #ifndef gb_malloc
 #define gb_malloc(sz) malloc(sz)
@@ -712,6 +714,7 @@ gb_init_mutex(&m);
 }
 #endif
 
+/* TODO(bill): Should I create a Condition Type? */
 
 
 typedef struct gbSemaphore {
@@ -746,8 +749,8 @@ typedef struct gbThread {
 	void *data;
 
 	gbSemaphore semaphore;
-	isize stack_size;
-	b32 is_running;
+	isize       stack_size;
+	b32         is_running;
 } gbThread;
 
 GB_DEF void gb_init_thread            (gbThread *t);
@@ -757,6 +760,7 @@ GB_DEF void gb_start_thread_with_stack(gbThread *t, gbThreadProc *proc, void *da
 GB_DEF void gb_join_thread            (gbThread *t);
 GB_DEF b32  gb_is_thread_running      (gbThread const *t);
 GB_DEF u32  gb_current_thread_id      (void);
+GB_DEF void gb_set_thread_name        (gbThread *t, char const *name);
 
 /***************************************************************
  *
@@ -839,7 +843,7 @@ GB_DEF void *gb_alloc_copy_align(gbAllocator a, void const *src, isize size, isi
 GB_DEF char *gb_alloc_cstring(gbAllocator a, char const *str);
 
 
-/* NOTE(bill): These are very useful and the type case has saved me from numerous bugs */
+/* NOTE(bill): These are very useful and the type cast has saved me from numerous bugs */
 #ifndef gb_alloc_struct
 #define gb_alloc_struct(allocator, Type)       (Type *)gb_alloc_align(allocator, gb_size_of(Type))
 #define gb_alloc_array(allocator, Type, count) (Type *)gb_alloc(allocator, gb_size_of(Type) * (count))
@@ -1404,9 +1408,17 @@ GB_DEF gbHashTableEntry const *gb_find_next_hash_table_entry (gbHashTable const 
  */
 typedef u64 gbFileTime;
 
+typedef enum gbFileAccess {
+	GB_FILE_ACCESS_READ  = 1,
+	GB_FILE_ACCESS_WRITE = 2
+} gbFileAccess;
+
 typedef enum gbFileType {
-	GB_FILE_TYPE_READ  = 1,
-	GB_FILE_TYPE_WRITE = 2
+	GB_FILE_TYPE_UNKNOWN,
+	GB_FILE_TYPE_FILE,
+	GB_FILE_TYPE_DIRECTORY,
+
+	GB_FILE_TYPE_COUNT
 } gbFileType;
 
 typedef struct gbFile {
@@ -1414,6 +1426,7 @@ typedef struct gbFile {
 	char *path;
 	i64 size;
 	b32 is_open;
+	gbFileAccess access;
 	gbFileType type;
 	gbFileTime last_write_time;
 } gbFile;
@@ -1508,6 +1521,16 @@ GB_DEF void gb_get_local_date (gbDate *date);
  * Miscellany
  *
  */
+
+GB_DEF void gb_yield(void);
+GB_DEF void gb_set_env(char const *name, char const *value);
+GB_DEF void gb_unset_env(char const *name);
+GB_DEF i32  gb_chdir(char const *path);
+GB_DEF void gb_get_working_cmd(char *buffer, isize len);
+
+GB_DEF u16 gb_endian_swap16(u16 i);
+GB_DEF u32 gb_endian_swap32(u32 i);
+GB_DEF u64 gb_endian_swap64(u64 i);
 
 
 
@@ -2461,6 +2484,40 @@ gb_current_thread_id(void)
 
 
 
+void
+gb_set_thread_name(gbThread *t, char const *name)
+{
+#if defined(_MSC_VER)
+	/* TODO(bill): Bloody Windows!!! */
+	#pragma pack(push, 8)
+		struct gbprivThreadName {
+			DWORD  type;
+			LPCSTR name;
+			DWORD  id;
+			DWORD  flags;
+		};
+	#pragma pack(pop)
+		struct gbprivThreadName tn;
+		tn.type  = 0x1000;
+		tn.name  = name;
+		tn.id    = GetThreadId(t->win32_handle);
+		tn.flags = 0;
+
+		__try {
+			RaiseException(0x406d1388, 0, gb_size_of(tn)/4, cast(ULONG_PTR *)&tn);
+		} __except(EXCEPTION_EXECUTE_HANDLER) {
+		}
+
+#elif defined(GB_SYSTEM_OSX)
+	/* TODO(bill): Test if this works */
+	pthread_setname_np(name);
+#else
+	/* TODO(bill): Test if this works */
+	pthread_setname_np(t->posix_handle, name);
+#endif
+}
+
+
 
 
 
@@ -2476,25 +2533,34 @@ gb_heap_allocator(void)
 
 GB_ALLOCATOR_PROC(gb_heap_allocator_proc)
 {
+/* TODO(bill): Throughly test! */
 	switch (type) {
 	case GB_ALLOCATION_ALLOC: {
-		void *ptr;
-		isize actual_size = size + alignment;
-		ptr = gb_align_forward(gb_malloc(actual_size), alignment);
-
-		return ptr;
+#if defined(_MSC_VER)
+		return _aligned_malloc(size, alignment);
+#else
+		return aligned_alloc(alignment, size);
+#endif
 	} break;
 
 	case GB_ALLOCATION_FREE: {
-		gb_mfree(old_memory);
+#if defined(_MSC_VER)
+		_aligned_free(old_memory);
+#else
+		free(old_memory);
+#endif
 	} break;
 
 	case GB_ALLOCATION_FREE_ALL:
 		break;
 
 	case GB_ALLOCATION_RESIZE: {
+#if defined(_MSC_VER)
+		return _aligned_realloc(old_memory, size, alignment);
+#else
 		gbAllocator a = gb_heap_allocator();
 		return gb_default_resize_align(a, old_memory, old_size, size, alignment);
+#endif
 	} break;
 	}
 
@@ -4337,7 +4403,7 @@ gb_create_file(gbFile *file, char const *filepath, ...)
 		file->path = gb_alloc_cstring(gb_heap_allocator(), path);
 		file->size = gb_file_size(file);
 		file->is_open = true;
-		file->type = GB_FILE_TYPE_WRITE;
+		file->access = GB_FILE_ACCESS_WRITE;
 		file->last_write_time = gb_file_last_write_time(file->path);
 		return true;
 	}
@@ -4362,7 +4428,29 @@ gb_open_file(gbFile *file, char const *filepath, ...)
 		file->path = gb_alloc_cstring(gb_heap_allocator(), path);
 		file->size = gb_file_size(file);
 		file->is_open = true;
-		file->type = GB_FILE_TYPE_READ;
+		file->access  = GB_FILE_ACCESS_READ;
+		file->type    = GB_FILE_TYPE_UNKNOWN;
+	#if defined(_MSC_VER)
+		{
+			struct _stat64 st;
+			if (_stat64(path, &st) == 0) {
+				if ((st.st_mode & _S_IFREG) != 0)
+					file->type = GB_FILE_TYPE_FILE;
+				else if ((st.st_mode & _S_IFDIR) != 0)
+					file->type = GB_FILE_TYPE_DIRECTORY;
+			}
+		}
+	#else
+		{
+			struct stat64 st;
+			if (stat64(path, &st) == 0) {
+				if ((st.st_mode & S_IFREG) != 0)
+					file->type = GB_FILE_TYPE_FILE;
+				else if ((st.st_mode & S_IFDIR) != 0)
+					file->type = GB_FILE_TYPE_DIRECTORY;
+			}
+		}
+	#endif
 		file->last_write_time = gb_file_last_write_time(file->path);
 		return true;
 	}
@@ -4387,7 +4475,7 @@ gb_file_read_at(gbFile *file, void *buffer, isize size, i64 offset)
 {
 	i64 prev_cursor_pos;
 
-	GB_ASSERT(file->type == GB_FILE_TYPE_READ);
+	GB_ASSERT(file->access == GB_FILE_ACCESS_READ);
 
 	prev_cursor_pos = ftell(cast(FILE *)file->handle);
 	fseek(cast(FILE *)file->handle, offset, SEEK_SET);
@@ -4402,7 +4490,7 @@ gb_file_write_at(gbFile *file, void const *buffer, isize size, i64 offset)
 	isize written_size;
 	i64 prev_cursor_pos;
 
-	GB_ASSERT(file->type == GB_FILE_TYPE_WRITE);
+	GB_ASSERT(file->access == GB_FILE_ACCESS_WRITE);
 
 	prev_cursor_pos = ftell(cast(FILE *)file->handle);
 	fseek(cast(FILE *)file->handle, offset, SEEK_SET);
@@ -4787,6 +4875,102 @@ gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) 
 	}
 
 #endif
+
+
+
+/***************************************************************
+ *
+ * Miscellany
+ *
+ */
+
+gb_inline void
+gb_yield(void)
+{
+#if defined(GB_SYSTEM_WINDOWS)
+	Sleep(0);
+#else
+	sched_yield();
+#endif
+}
+
+gb_inline void
+gb_set_env(char const *name, char const *value)
+{
+#if defined(GB_SYSTEM_WINDOWS)
+	SetEnvironmentVariableA(name, value);
+#else
+	setenv(name, value, 1);
+#endif
+}
+
+gb_inline void
+gb_unset_env(char const *name)
+{
+#if defined(GB_SYSTEM_WINDOWS)
+	SetEnvironmentVariableA(name, NULL);
+#else
+	unsetenv(name);
+#endif
+}
+
+gb_inline i32
+gb_chdir(char const *path)
+{
+#if defined(_MSC_VER)
+	return _chdir(path);
+#else
+	return chdir(path);
+#endif
+}
+
+gb_inline void
+gb_get_working_cmd(char *buffer, isize len)
+{
+#if defined(_MSC_VER)
+	_getcwd(buffer, cast(int)len);
+#else
+	getcwd(buffer, len);
+#endif
+}
+
+gb_inline u16
+gb_endian_swap16(u16 i)
+{
+	return (i>>8) | (i<<8);
+}
+
+gb_inline u32
+gb_endian_swap32(u32 i)
+{
+	return (i>>24) |(i<<24) |
+	       ((i&0x00ff0000)>>8)  | ((i&0x00ff0000)<<8);
+}
+
+gb_inline u64
+gb_endian_swap64(u64 i)
+{
+	/* TODO(bill): Do I really need the cast here? */
+	return (i>>56) | (i<<56) |
+	       ((i&cast(u64)0x00ff000000000000)>>40) | ((i&cast(u64)0x000000000000ff00)<<40) |
+	       ((i&cast(u64)0x0000ff0000000000)>>24) | ((i&cast(u64)0x0000000000ff0000)<<24) |
+	       ((i&cast(u64)0x000000ff00000000)>>8)  | ((i&cast(u64)0x00000000ff000000)<<8);
+}
+
+
+
+
+
+
+
+/***************************************************************
+ *
+ * Colour Type
+ * It's quite useful
+ */
+
+
+
 
 #if !defined(GB_NO_COLOUR_TYPE)
 gb_inline gbColour
