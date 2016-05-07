@@ -211,7 +211,7 @@ extern "C" {
  *
  */
 
-/* To mark types chaning their size, e.g. intptr */
+/* NOTE(bill); To mark types changing their size, e.g. intptr */
 #ifndef _W64
 	#if !defined(__midl) && (defined(_X86_) || defined(_M_IX86)) && _MSC_VER >= 1300
 		#define _W64 __w64
@@ -222,12 +222,12 @@ extern "C" {
 
 #if defined(_MSC_VER)
 	#if _MSC_VER < 1300
-	typedef unsigned char   u8;
-	typedef   signed char   i8;
-	typedef unsigned short u16;
-	typedef   signed short i16;
-	typedef unsigned int   u32;
-	typedef   signed int   i32;
+	typedef unsigned char     u8;
+	typedef   signed char     i8;
+	typedef unsigned short   u16;
+	typedef   signed short   i16;
+	typedef unsigned int     u32;
+	typedef   signed int     i32;
 	#else
 	typedef unsigned __int8   u8;
 	typedef   signed __int8   i8;
@@ -307,6 +307,7 @@ typedef i32 b32; /* NOTE(bill): Prefer this!!! */
 	#endif
 #endif
 
+/* NOTE(bill): These do are not prefixed with gb because the types are not. */
 #ifndef U8_MIN
 #define U8_MIN 0u
 #define U8_MAX 0xffu
@@ -341,7 +342,7 @@ typedef i32 b32; /* NOTE(bill): Prefer this!!! */
 	#define ISIZE_MIX I64_MIN
 	#define ISIZE_MAX I64_MAX
 #else
-	#error Unknown architecture size
+	#error Unknown architecture size. This library only supports 32 bit and 64 bit architectures.
 #endif
 
 #define F32_MIN 1.17549435e-38f
@@ -866,6 +867,9 @@ GB_DEF void *gb_default_resize_align(gbAllocator a, void *ptr, isize old_size, i
 
 
 
+/* TODO(bill): Probably use a custom heap allocator system that doesn't depend on malloc/free
+ * Base it off TCMalloc or something else? Or something entirely custom?
+ */
 GB_DEF gbAllocator gb_heap_allocator(void);
 GB_DEF GB_ALLOCATOR_PROC(gb_heap_allocator_proc);
 
