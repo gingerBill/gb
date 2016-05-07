@@ -1,4 +1,4 @@
-/* gb.h - v0.08a - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.09  - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -26,6 +26,7 @@ Conventions used:
 
 
 Version History:
+	0.09  - Basic Virtual Memory System and Dreadful Free List allocator
 	0.08a - Fix *_appendv bug
 	0.08  - Huge Overhaul!
 	0.07a - Fix alignment in gb_heap_allocator_proc
@@ -210,13 +211,31 @@ extern "C" {
  *
  */
 
+/* To mark types chaning their size, e.g. intptr */
+#ifndef _W64
+	#if !defined(__midl) && (defined(_X86_) || defined(_M_IX86)) && _MSC_VER >= 1300
+		#define _W64 __w64
+	#else
+		#define _W64
+	#endif
+#endif
+
 #if defined(_MSC_VER)
+	#if _MSC_VER < 1300
+	typedef unsigned char   u8;
+	typedef   signed char   i8;
+	typedef unsigned short u16;
+	typedef   signed short i16;
+	typedef unsigned int   u32;
+	typedef   signed int   i32;
+	#else
 	typedef unsigned __int8   u8;
 	typedef   signed __int8   i8;
 	typedef unsigned __int16 u16;
 	typedef   signed __int16 i16;
 	typedef unsigned __int32 u32;
 	typedef   signed __int32 i32;
+	#endif
 	typedef unsigned __int64 u64;
 	typedef   signed __int64 i64;
 #else
@@ -246,8 +265,16 @@ typedef ptrdiff_t isize;
 
 GB_STATIC_ASSERT(sizeof(usize) == sizeof(isize));
 
-typedef uintptr_t uintptr;
-typedef  intptr_t  intptr;
+#if defined(_WIN64)
+	typedef signed   __int64  intptr;
+	typedef unsigned __int64 uintptr;
+#elif defined(_WIN32)
+	typedef _W64   signed int  intptr;
+	typedef _W64 unsigned int uintptr;
+#else
+	typedef uintptr_t uintptr;
+	typedef  intptr_t  intptr;
+#endif
 
 typedef float  f32;
 typedef double f64;
@@ -255,6 +282,7 @@ typedef double f64;
 GB_STATIC_ASSERT(sizeof(f32) == 4);
 GB_STATIC_ASSERT(sizeof(f64) == 8);
 
+typedef char char8;  /* NOTE(bill): Probably redundant but oh well! */
 typedef u16  char16;
 typedef u32  char32;
 
@@ -415,7 +443,7 @@ extern "C++" {
 	#endif
 #endif
 
-/* NOTE(bill): I do which I had a type_of that was portable */
+/* NOTE(bill): I do wish I had a type_of that was portable */
 #ifndef gb_swap
 #define gb_swap(Type, a, b) do { Type tmp = (a); (a) = (b); (b) = tmp; } while (0)
 #endif
@@ -499,10 +527,10 @@ namespace gb {
 #ifndef GB_JOIN_MACROS
 #define GB_JOIN_MACROS
 	#define GB_JOIN2_IND(a, b) a##b
-	#define GB_JOIN3_IND(a, b, c) a##b##c
 
-	#define GB_JOIN2(a, b)    GB_JOIN2_IND(a, b)
-	#define GB_JOIN3(a, b, c) GB_JOIN3_IND(a, b, c)
+	#define GB_JOIN2(a, b)       GB_JOIN2_IND(a, b)
+	#define GB_JOIN3(a, b, c)    GB_JOIN2(GB_JOIN2(a, b), c)
+	#define GB_JOIN4(a, b, c, d) GB_JOIN2(GB_JOIN2(GB_JOIN2(a, b), c), d)
 #endif
 
 
@@ -531,6 +559,7 @@ namespace gb {
 #endif
 
 
+
 /***************************************************************
  *
  * Debug
@@ -550,7 +579,6 @@ namespace gb {
 	#endif
 #endif
 
-/* TODO(bill): This relies upon variadic macros which are not supported in MSVC 2003 and below, check for it if needed */
 #ifndef GB_ASSERT_MSG
 #define GB_ASSERT_MSG(cond, msg) do { \
 	if (!(cond)) { \
@@ -568,7 +596,7 @@ namespace gb {
 #define GB_ASSERT_NOT_NULL(ptr) GB_ASSERT_MSG((ptr) != NULL, #ptr " must not be NULL")
 #endif
 
-/* NOTE(bill): Things that shouldn't happen */
+/* NOTE(bill): Things that shouldn't happen with a message! */
 #ifndef GB_PANIC
 #define GB_PANIC(msg) GB_ASSERT_MSG(0, msg)
 #endif
@@ -592,7 +620,6 @@ GB_DEF void gb_assert_handler(char const *condition, char const *file, i32 line,
 #define GB_PRINTF_ARGS(FMT)
 #endif
 
-/* TODO(bill): Should I completely rename these functions as they are a little weird to begin with? */
 
 GB_DEF i32   gb_printf     (char const *fmt, ...) GB_PRINTF_ARGS(1);
 GB_DEF i32   gb_printf_va  (char const *fmt, va_list va);
@@ -614,23 +641,22 @@ GB_DEF i32 gb_fprintln(FILE *f, char const *str);
  *
  */
 
-#ifndef gb_align_to
-#define gb_align_to(value, alignment) (((value) + ((alignment)-1)) & ~((alignment) - 1))
-#endif
 
-#ifndef gb_is_power_of_two
-#define gb_is_power_of_two(x) ((x) != 0) && !((x) & ((x)-1))
-#endif
+GB_DEF isize gb_is_power_of_two(isize x);
 
-GB_DEF void *gb_align_forward(void *ptr, isize alignment);
-GB_DEF void *gb_pointer_add  (void *ptr, isize bytes);
-GB_DEF void *gb_pointer_sub  (void *ptr, isize bytes);
+GB_DEF void *      gb_align_forward                       (void *ptr, isize alignment);
+GB_DEF isize       gb_align_forward_adjustment            (void *ptr, isize alignment);
+GB_DEF isize       gb_align_forward_adjustment_with_header(void *ptr, isize alignment, isize header_size);
+
+GB_DEF void *      gb_pointer_add      (void *ptr, isize bytes);
+GB_DEF void *      gb_pointer_sub      (void *ptr, isize bytes);
+GB_DEF void const *gb_pointer_add_const(void const *ptr, isize bytes);
+GB_DEF void const *gb_pointer_sub_const(void const *ptr, isize bytes);
 
 GB_DEF void gb_zero_size(void *ptr, isize size);
-
-#ifndef gb_zero_struct
-#define gb_zero_struct(t) gb_zero_size((t), gb_size_of(*(t))) /* NOTE(bill): Pass pointer of struct */
-#define gb_zero_array(a, count) gb_zero_size((a), gb_size_of((a)[0])*count)
+#ifndef     gb_zero_struct
+#define     gb_zero_struct(t) gb_zero_size((t), gb_size_of(*(t))) /* NOTE(bill): Pass pointer of struct */
+#define     gb_zero_array(a, count) gb_zero_size((a), gb_size_of(*(a))*count)
 #endif
 
 GB_DEF void *gb_memcopy(void *dest, void const *source, isize size);
@@ -648,12 +674,15 @@ GB_DEF void *gb_memset (void *data, u8 byte_value, isize size);
 
 
 
+
 #ifndef gb_kilobytes
 #define gb_kilobytes(x) (            (x) * (i64)(1024))
 #define gb_megabytes(x) (gb_kilobytes(x) * (i64)(1024))
 #define gb_gigabytes(x) (gb_megabytes(x) * (i64)(1024))
 #define gb_terabytes(x) (gb_gigabytes(x) * (i64)(1024))
 #endif
+
+
 
 
 /* Atomics */
@@ -682,6 +711,7 @@ GB_DEF i64  gb_atomic64_fetch_and              (gbAtomic64 volatile *a, i64 oper
 GB_DEF i64  gb_atomic64_fetch_or               (gbAtomic64 volatile *a, i64 operand);
 
 
+/* Mutex */
 typedef struct gbMutex {
 #if defined(GB_SYSTEM_WINDOWS)
 	CRITICAL_SECTION win32_critical_section;
@@ -697,7 +727,7 @@ GB_DEF b32  gb_mutex_try_lock(gbMutex *m);
 GB_DEF void gb_mutex_unlock  (gbMutex *m);
 
 /* NOTE(bill): If you wanted a Scoped Mutex in C++, why not use the defer() construct?
- * No need for a silly wrapper class
+ * No need for a silly wrapper class and it's clear!
  */
 #if 0
 gbMutex m = {0};
@@ -761,6 +791,28 @@ GB_DEF void gb_thread_set_name        (gbThread *t, char const *name);
 
 /***************************************************************
  *
+ * Virtual Memory
+ *
+ * Still incomplete and needs working on a lot as it's shit!
+ */
+
+/* TODO(bill): Track a lot more than just the pointer and size! */
+
+typedef struct gbVirtualMemory {
+	void *data;
+	isize size;
+} gbVirtualMemory;
+
+
+GB_DEF gbVirtualMemory gb_vm_alloc(void *addr, isize size);
+GB_DEF void            gb_vm_free (gbVirtualMemory vm);
+GB_DEF gbVirtualMemory gb_vm_trim (gbVirtualMemory vm, isize lead_size, isize size);
+GB_DEF b32             gb_vm_purge(gbVirtualMemory vm);
+
+
+
+/***************************************************************
+ *
  * Custom Allocation
  *
  */
@@ -795,6 +847,7 @@ GB_DEF void  gb_free        (gbAllocator a, void *ptr);
 GB_DEF void  gb_free_all    (gbAllocator a);
 GB_DEF void *gb_resize      (gbAllocator a, void *ptr, isize old_size, isize new_size);
 GB_DEF void *gb_resize_align(gbAllocator a, void *ptr, isize old_size, isize new_size, isize alignment);
+/* TODO(bill): For gb_resize, should the use need to pass the old_size or only the new_size? */
 
 GB_DEF void *gb_alloc_copy      (gbAllocator a, void const *src, isize size);
 GB_DEF void *gb_alloc_copy_align(gbAllocator a, void const *src, isize size, isize alignment);
@@ -804,7 +857,7 @@ GB_DEF char *gb_alloc_str(gbAllocator a, char const *str);
 
 /* NOTE(bill): These are very useful and the type cast has saved me from numerous bugs */
 #ifndef gb_alloc_struct
-#define gb_alloc_struct(allocator, Type)       (Type *)gb_alloc_align(allocator, gb_size_of(Type))
+#define gb_alloc_struct(allocator, Type)       (Type *)gb_alloc(allocator, gb_size_of(Type))
 #define gb_alloc_array(allocator, Type, count) (Type *)gb_alloc(allocator, gb_size_of(Type) * (count))
 #endif
 
@@ -822,6 +875,10 @@ GB_DEF GB_ALLOCATOR_PROC(gb_heap_allocator_proc);
 #define gb_mfree(ptr) gb_free(gb_heap_allocator(), ptr)
 #endif
 
+
+/*
+ * Arena Allocator
+ */
 
 typedef struct gbArena {
 	gbAllocator backing;
@@ -860,6 +917,9 @@ GB_DEF void              gb_temp_arena_memory_end  (gbTempArenaMemory tmp_mem);
 
 
 
+/*
+ * Pool Allocator
+ */
 
 
 typedef struct gbPool {
@@ -883,6 +943,49 @@ GB_DEF GB_ALLOCATOR_PROC(gb_pool_allocator_proc);
 
 
 
+
+/*
+ * Free List Allocator
+ */
+
+/* IMPORTANT TODO(bill): Thoroughly test the free list allocator! */
+/* NOTE(bill): This is a very shitty free list as it just picks the first free block not the best size
+ * as I am just being lazy. Also, I will probably remove it later; it's only here because why not?!
+ */
+/* NOTE(bill): I may also complete remove this if I completely implement a fixed heap allocator */
+
+typedef struct gbFreeListHeader {
+	isize size;
+	isize adjustment; /* TODO(bill): Should this be a different type? */
+} gbFreeListHeader;
+
+typedef struct gbFreeListBlock {
+	struct gbFreeListBlock *next;
+	isize size;
+} gbFreeListBlock;
+
+typedef struct gbFreeList {
+	void *           physical_start;
+	isize            total_size;
+
+	gbFreeListBlock *curr_block;
+
+	isize            total_allocated;
+	isize            allocation_count;
+} gbFreeList;
+
+GB_DEF void gb_free_list_init               (gbFreeList *fl, void *start, isize size);
+GB_DEF void gb_free_list_init_from_allocator(gbFreeList *fl, gbAllocator backing, isize size);
+
+GB_DEF gbAllocator gb_free_list_allocator(gbFreeList *fl);
+GB_DEF GB_ALLOCATOR_PROC(gb_free_list_allocator_proc);
+
+
+/* TODO(bill): Stack allocator */
+/* TODO(bill): Fixed heap allocator */
+/* TODO(bill): General heap allocator. Maybe a TCMalloc like clone? */
+
+
 /***************************************************************
  *
  * Sort & Search
@@ -892,6 +995,24 @@ GB_DEF GB_ALLOCATOR_PROC(gb_pool_allocator_proc);
 #define GB_COMPARE_PROC(name) int name(void const *a, void const *b)
 typedef GB_COMPARE_PROC(gbCompareProc);
 
+#define GB_COMPARE_PROC_PTR(def) GB_COMPARE_PROC((*def))
+
+/* Producure pointers */
+/* NOTE(bill): The offset parameter specifies the offset in the structure
+ * e.g. gb_i32_cmp(gb_offset_of(Thing, value))
+ * Use 0 if it's just the type instead.
+ */
+
+GB_DEF GB_COMPARE_PROC_PTR(gb_i16_cmp  (isize offset));
+GB_DEF GB_COMPARE_PROC_PTR(gb_i32_cmp  (isize offset));
+GB_DEF GB_COMPARE_PROC_PTR(gb_i64_cmp  (isize offset));
+GB_DEF GB_COMPARE_PROC_PTR(gb_isize_cmp(isize offset));
+GB_DEF GB_COMPARE_PROC_PTR(gb_str_cmp  (isize offset));
+GB_DEF GB_COMPARE_PROC_PTR(gb_f32_cmp  (isize offset));
+GB_DEF GB_COMPARE_PROC_PTR(gb_f64_cmp  (isize offset));
+GB_DEF GB_COMPARE_PROC_PTR(gb_char_cmp (isize offset));
+
+/* TODO(bill): Better sorting algorithms */
 
 #define gb_qsort_array(array, count, compare_proc) gb_qsort(array, count, gb_size_of(*(array)), compare_proc)
 GB_DEF void gb_qsort(void *base, isize count, isize size, gbCompareProc compare_proc);
@@ -905,6 +1026,7 @@ GB_DEF void gb_radix_sort_u64(u64 *gb_restrict items, u64 *gb_restrict temp, isi
 
 
 /* NOTE(bill): Returns index or -1 if not found */
+#define gb_binary_search_array(array, count, key, compare_proc) gb_binary_search(array, count, gb_size_of(*(array)), key, compare_proc)
 GB_DEF isize gb_binary_search(void const *base, isize count, isize size, void const *key, gbCompareProc compare_proc);
 
 
@@ -936,6 +1058,7 @@ GB_DEF i32   gb_strncmp(char const *s1, char const *s2, isize len);
 GB_DEF char *gb_strcpy (char *dest, char const *source);
 GB_DEF char *gb_strncpy(char *dest, char const *source, isize len);
 
+/* NOTE(bill): A less fucking crazy strtok! */
 GB_DEF char const *gb_strtok(char *output, char const *src, char const *delimit);
 
 GB_DEF b32 gb_str_has_prefix(char const *str, char const *prefix);
@@ -944,9 +1067,9 @@ GB_DEF b32 gb_str_has_suffix(char const *str, char const *suffix);
 GB_DEF char const *gb_char_first_occurence(char const *str, char c);
 GB_DEF char const *gb_char_last_occurence (char const *str, char c);
 
-GB_DEF void gb_cstr_concat(char *dest, isize dest_len,
-                           char const *src_a, isize src_a_len,
-                           char const *src_b, isize src_b_len);
+GB_DEF void gb_str_concat(char *dest, isize dest_len,
+                          char const *src_a, isize src_a_len,
+                          char const *src_b, isize src_b_len);
 
 
 /***************************************************************
@@ -1243,6 +1366,7 @@ GB_STATIC_ASSERT(GB_ARRAY_GROW_FORMULA(0) > 0);
 #define gb_array_count(x)     (GB_ARRAY_HEADER(x)->count)
 #define gb_array_capacity(x)  (GB_ARRAY_HEADER(x)->capacity)
 
+/* TODO(bill): Have proper alignment! */
 #define gb_array_init(x, allocator_) do { \
 	void **gb__array_ = cast(void **)&(x); \
 	gbArrayHeader *gb__ah = cast(gbArrayHeader *)gb_alloc(allocator_, gb_size_of(gbArrayHeader)+gb_size_of(*(x))*GB_ARRAY_GROW_FORMULA(0)); \
@@ -1259,12 +1383,12 @@ GB_STATIC_ASSERT(GB_ARRAY_GROW_FORMULA(0) > 0);
 #define gb_array_set_capacity(x, capacity) do { \
 	if (x) { \
 		void **gb__array_ = cast(void **)&(x); \
-		*gb__array_ = gb__set_array_capacity((x), (capacity), gb_size_of(*(x))); \
+		*gb__array_ = gb__array_set_capacity((x), (capacity), gb_size_of(*(x))); \
 	} \
 } while (0)
 
 /* NOTE(bill): Do not use the thing below directly, use the macro */
-GB_DEF void *gb__set_array_capacity(void *array, isize capacity, isize element_size);
+GB_DEF void *gb__array_set_capacity(void *array, isize capacity, isize element_size);
 
 
 /* TODO(bill): Decide on a decent growing formula for gbArray */
@@ -1297,14 +1421,14 @@ GB_DEF void *gb__set_array_capacity(void *array, isize capacity, isize element_s
 #define gb_array_clear(x) do { GB_ARRAY_HEADER(x)->count = 0; } while (0)
 
 #define gb_array_resize(x, new_count) do { \
-	if (GB_ARRAY_HEADER(x)->capacity < (new_count))       \
-		gb_array_grow(x, (new_count));     \
-	GB_ARRAY_HEADER(x)->count = (new_count);              \
+	if (GB_ARRAY_HEADER(x)->capacity < (new_count)) \
+		gb_array_grow(x, (new_count)); \
+	GB_ARRAY_HEADER(x)->count = (new_count); \
 } while (0)
 
 
-#define gb_array_reserve(x, new_capacity) do {   \
-	if (GB_ARRAY_HEADER(x)->capacity < (new_capacity))         \
+#define gb_array_reserve(x, new_capacity) do { \
+	if (GB_ARRAY_HEADER(x)->capacity < (new_capacity)) \
 		gb_array_set_capacity(x, new_capacity); \
 } while (0)
 
@@ -1378,8 +1502,8 @@ GB_DEF void  gb_multi_hash_table_insert      (gbHashTable *h, u64 key, void *val
 GB_DEF void  gb_multi_hash_table_remove_entry(gbHashTable *h, gbHashTableEntry const *e);
 GB_DEF void  gb_multi_hash_table_remove_all  (gbHashTable *h, u64 key);
 
-GB_DEF gbHashTableEntry const *gb_hash_table_find_first_entry(gbHashTable const *h, u64 key);
-GB_DEF gbHashTableEntry const *gb_hash_table_find_next_entry (gbHashTable const *h, gbHashTableEntry const *e);
+GB_DEF gbHashTableEntry const *gb_multi_hash_table_find_first_entry(gbHashTable const *h, u64 key);
+GB_DEF gbHashTableEntry const *gb_multi_hash_table_find_next_entry (gbHashTable const *h, gbHashTableEntry const *e);
 
 
 /***************************************************************
@@ -1553,7 +1677,7 @@ gb_global gbColour const GB_COLOUR_BLUE    = {0xffff0000};
 gb_global gbColour const GB_COLOUR_VIOLET  = {0xffff007f};
 gb_global gbColour const GB_COLOUR_MAGENTA = {0xffff00ff};
 
-#endif
+#endif /* !defined(GB_NO_COLOUR_TYPE) */
 
 #if defined(__cplusplus)
 }
@@ -1671,7 +1795,7 @@ gb_snprintf(char *str, isize n, char const *fmt, ...)
 }
 
 
-gb_inline i32 gb_printf_va(char const *fmt, va_list va) { return gb_fprintf_va(stdout, fmt, va); }
+gb_inline i32 gb_printf_va (char const *fmt, va_list va)          { return gb_fprintf_va(stdout, fmt, va); }
 gb_inline i32 gb_fprintf_va(FILE *f, char const *fmt, va_list va) { return vfprintf(f, fmt, va); }
 
 gb_inline char *
@@ -1727,6 +1851,14 @@ gb_assert_handler(char const *condition, char const *file, i32 line, char const 
 }
 
 
+gb_inline isize
+gb_is_power_of_two(isize x)
+{
+	return (x != 0) && !(x & (x-1));
+}
+
+
+
 
 gb_inline void *
 gb_align_forward(void *ptr, isize align)
@@ -1737,19 +1869,49 @@ gb_align_forward(void *ptr, isize align)
 	GB_ASSERT(gb_is_power_of_two(align));
 
 	p = cast(uintptr)ptr;
-	modulo = p % align;
+	modulo = p & (align-1);
 	if (modulo) p += (align - modulo);
 	return cast(void *)p;
 }
 
-gb_inline void *gb_pointer_add(void *ptr, isize bytes) { return cast(void *)(cast(u8 *)ptr + bytes); }
-gb_inline void *gb_pointer_sub(void *ptr, isize bytes) { return cast(void *)(cast(u8 *)ptr - bytes); }
+gb_inline isize
+gb_align_forward_adjustment(void *ptr, isize align)
+{
+	void *aligned_ptr = gb_align_forward(ptr, align);
+	isize adjustment = cast(u8 *)aligned_ptr - cast(u8 *)ptr;
+	return adjustment;
+}
+
+
+gb_inline isize
+gb_align_forward_adjustment_with_header(void *ptr, isize align, isize header_size)
+{
+	isize adjustment = gb_align_forward_adjustment(ptr, align);
+	isize needed_space = header_size;
+
+	if (adjustment < needed_space) {
+		needed_space -= adjustment;
+		adjustment += align * (needed_space/align); /* NOTE(bill): integer division trick */
+
+		if ((needed_space % align) > 0)
+			adjustment += align;
+	}
+
+	return adjustment;
+}
+
+
+
+gb_inline void *      gb_pointer_add      (void *ptr, isize bytes)       { return cast(void *)(cast(u8 *)ptr + bytes); }
+gb_inline void *      gb_pointer_sub      (void *ptr, isize bytes)       { return cast(void *)(cast(u8 *)ptr - bytes); }
+gb_inline void const *gb_pointer_add_const(void const *ptr, isize bytes) { return cast(void const *)(cast(u8 const *)ptr + bytes); }
+gb_inline void const *gb_pointer_sub_const(void const *ptr, isize bytes) { return cast(void const *)(cast(u8 const *)ptr - bytes); }
 
 gb_inline void gb_zero_size(void *ptr, isize size) { gb_memset(ptr, 0, size); }
 
-gb_inline void *gb_memcopy(void *dest, void const *source, isize size) { return memcpy(dest, source, size);     }
-gb_inline void *gb_memmove(void *dest, void const *source, isize size) { return memmove(dest, source, size);    }
-gb_inline void *gb_memset (void *data, u8 byte_value, isize size)      { return memset(data, byte_value, size); }
+gb_inline void *gb_memcopy(void *dest, void const *source, isize size) { return memcpy (dest, source, size);     }
+gb_inline void *gb_memmove(void *dest, void const *source, isize size) { return memmove(dest, source, size);     }
+gb_inline void *gb_memset (void *data, u8 byte_value, isize size)      { return memset (data, byte_value, size); }
 
 
 
@@ -2381,16 +2543,16 @@ gb_thread_destory(gbThread *t)
 
 
 gb_inline void
-gb__run_thread(gbThread *t)
+gb__thread_run(gbThread *t)
 {
 	gb_semaphore_post(&t->semaphore, 1);
 	t->proc(t->data);
 }
 
 #if defined(GB_SYSTEM_WINDOWS)
-	gb_inline DWORD WINAPI gb__thread_proc(void *arg) { gb__run_thread(cast(gbThread *)arg); return 0; }
+	gb_inline DWORD WINAPI gb__thread_proc(void *arg) { gb__thread_run(cast(gbThread *)arg); return 0; }
 #else
-	gb_inline void *gb__thread_proc(void *arg) { gb__run_thread(cast(gbThread *)arg); return NULL; }
+	gb_inline void *       gb__thread_proc(void *arg) { gb__thread_run(cast(gbThread *)arg); return NULL; }
 #endif
 
 gb_inline void gb_thread_start(gbThread *t, gbThreadProc *proc, void *data) { gb_thread_start_with_stack(t, proc, data, 0); }
@@ -2548,11 +2710,71 @@ GB_ALLOCATOR_PROC(gb_heap_allocator_proc)
 }
 
 
+/***************************************************************
+ *
+ * Virtual Memory
+ *
+ */
+
+#if defined(GB_SYSTEM_WINDOWS)
+gb_inline gbVirtualMemory
+gb_vm_alloc(void *addr, isize size)
+{
+	gbVirtualMemory vm;
+	GB_ASSERT(size > 0);
+	vm.data = VirtualAlloc(addr, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+	vm.size = size;
+	return vm;
+}
+
+gb_inline void
+gb_vm_free(gbVirtualMemory vm)
+{
+	VirtualFree(vm.data, vm.size, MEM_RELEASE);
+}
+
+gb_inline gbVirtualMemory
+gb_vm_trim(gbVirtualMemory vm, isize lead_size, isize size)
+{
+	gbVirtualMemory new_vm = {0};
+	void *ptr;
+	GB_ASSERT(vm.size >= lead_size + vm.size);
+
+	ptr = gb_pointer_add(vm.data, lead_size);
+
+	gb_vm_free(vm);
+	new_vm = gb_vm_alloc(ptr, size);
+	if (new_vm.data == ptr)
+		return new_vm;
+	if (new_vm.data)
+		gb_vm_free(new_vm);
+	return new_vm;
+}
+
+gb_inline b32
+gb_vm_purge(gbVirtualMemory vm)
+{
+	VirtualAlloc(vm.data, vm.size, MEM_RESET, PAGE_READWRITE);
+	/* NOTE(bill): Can this fail? */
+	return true;
+}
+#else
+#error Implement Virtual Memory Procs
+#endif
 
 
 
 
+/***************************************************************
+ *
+ * Custom Allocation
+ *
+ */
 
+
+/*
+ * Arena Allocator
+ */
 
 gb_inline void
 gb_arena_init_from_memory(gbArena *arena, void *start, isize size)
@@ -2636,22 +2858,23 @@ GB_ALLOCATOR_PROC(gb_arena_allocator_proc)
 
 	switch (type) {
 	case GB_ALLOCATION_ALLOC: {
-		void *ptr;
-		isize actual_size = size + alignment;
+		void *ptr = NULL;
+		void *end = gb_pointer_add(arena->physical_start, arena->total_allocated);
+		isize adjustment = gb_align_forward_adjustment(end, alignment);
+		isize total_size = size + adjustment;
 
 		/* NOTE(bill): Out of memory */
-		if (arena->total_allocated + actual_size > cast(isize)arena->total_size)
+		if (arena->total_allocated + total_size > cast(isize)arena->total_size)
 			return NULL;
 
-		ptr = gb_align_forward(gb_pointer_add(arena->physical_start, arena->total_allocated), alignment);
-		arena->total_allocated += actual_size;
+		ptr = gb_align_forward(end, alignment);
+		arena->total_allocated += total_size;
 		return ptr;
 	} break;
 
 	case GB_ALLOCATION_FREE:
-		/* NOTE(bill): Free all at once */
-		/* NOTE(bill): Use Temp_Arena_Memory if you want to free a block */
-		/* TODO(bill): Free it if it's on top of the stack */
+		/* NOTE(bill): Free all at once
+		 * Use Temp_Arena_Memory if you want to free a block */
 		break;
 
 	case GB_ALLOCATION_FREE_ALL:
@@ -2689,6 +2912,11 @@ gb_temp_arena_memory_end(gbTempArenaMemory tmp)
 }
 
 
+
+
+/*
+ * Pool Allocator
+ */
 
 
 gb_inline void
@@ -2794,10 +3022,228 @@ GB_ALLOCATOR_PROC(gb_pool_allocator_proc)
 }
 
 
+
+
+
+/*
+ * Free List Allocator
+ */
+
 gb_inline void
-gb_qsort(void *base, isize count, isize size, gbCompareProc compare_proc)
+gb_free_list_init(gbFreeList *fl, void *start, isize size)
 {
-	qsort(base, count, size, compare_proc);
+	GB_ASSERT(size > gb_size_of(gbFreeListBlock));
+
+	fl->physical_start   = start;
+	fl->total_size       = size;
+	fl->curr_block       = cast(gbFreeListBlock *)start;
+	fl->curr_block->size = size;
+	fl->curr_block->next = NULL;
+}
+
+
+gb_inline void
+gb_free_list_init_from_allocator(gbFreeList *fl, gbAllocator backing, isize size)
+{
+	void *start = gb_alloc(backing, size);
+	gb_free_list_init(fl, start, size);
+}
+
+
+
+gb_inline gbAllocator
+gb_free_list_allocator(gbFreeList *fl)
+{
+	gbAllocator a;
+	a.proc = gb_free_list_allocator_proc;
+	a.data = fl;
+	return a;
+}
+
+
+GB_ALLOCATOR_PROC(gb_free_list_allocator_proc)
+{
+	gbFreeList *fl = cast(gbFreeList *)allocator_data;
+	GB_ASSERT_NOT_NULL(fl);
+
+	switch (type) {
+	case GB_ALLOCATION_ALLOC: {
+		gbFreeListBlock *prev_block = NULL;
+		gbFreeListBlock *curr_block = fl->curr_block;
+
+		while (curr_block) {
+			void *ptr = NULL;
+			isize adjustment, total_size;
+
+			/* TODO(bill): Do I really need this proc gb_align_forward_adjustment_with_header? */
+			adjustment = gb_align_forward_adjustment_with_header(curr_block, alignment, gb_size_of(gbFreeListHeader));
+			total_size = size + adjustment;
+
+			if (curr_block->size < total_size) {
+				prev_block = curr_block;
+				curr_block = curr_block->next;
+				continue;
+			}
+
+			if (curr_block->size - total_size <= gb_size_of(gbFreeListHeader)) {
+				total_size = curr_block->size;
+
+				if (prev_block)
+					prev_block->next = curr_block->next;
+				else
+					fl->curr_block = curr_block->next;
+			} else {
+				// NOTE(bill): Create a new block for the remaining memory
+				gbFreeListBlock *next_block;
+				next_block = cast(gbFreeListBlock *)gb_pointer_add(curr_block, total_size);
+
+				GB_ASSERT(cast(void *)next_block < gb_pointer_add(fl->physical_start, fl->total_size));
+
+				next_block->size = curr_block->size - total_size;
+				next_block->next = curr_block->next;
+
+				if (prev_block)
+					prev_block->next = next_block;
+				else
+					fl->curr_block = next_block;
+			}
+
+			ptr = gb_pointer_add(curr_block, adjustment);
+
+			{ // Set Header Info
+				gbFreeListHeader *header = cast(gbFreeListHeader *)gb_pointer_sub(ptr, gb_size_of(gbFreeListHeader));
+				header->size             = total_size;
+				header->adjustment       = adjustment;
+			}
+
+			fl->total_allocated += total_size;
+			fl->allocation_count++;
+
+			GB_ASSERT(gb_align_forward_adjustment(ptr, alignment) == 0);
+
+			return ptr;
+		}
+
+		/* NOTE(bill): Ran out of free list memory! FUCK! */
+		return NULL;
+	} break;
+
+	case GB_ALLOCATION_FREE: {
+		gbFreeListHeader *header = cast(gbFreeListHeader *)gb_pointer_sub(old_memory, gb_size_of(gbFreeListHeader));
+		isize block_size = header->size;
+		uintptr block_start, block_end;
+		gbFreeListBlock *prev_block = NULL;
+		gbFreeListBlock *curr_block = fl->curr_block;
+
+		block_start = cast(uintptr)old_memory - header->adjustment;
+		block_end   = cast(uintptr)block_start + block_size;
+
+		while (curr_block) {
+			if (cast(uintptr)curr_block >= block_end)
+				break;
+			prev_block = curr_block;
+			curr_block = curr_block->next;
+		}
+
+		if (prev_block == NULL) {
+			prev_block = cast(gbFreeListBlock *)block_start;
+			prev_block->size = block_size;
+			prev_block->next = fl->curr_block;
+
+			fl->curr_block = prev_block;
+		} else if ((cast(uintptr)prev_block + prev_block->size) == block_start) {
+			prev_block->size += block_size;
+		} else {
+			gbFreeListBlock *tmp = cast(gbFreeListBlock *)block_start;
+			tmp->size = block_size;
+			tmp->next = prev_block->next;
+			prev_block->next = tmp;
+
+			prev_block = tmp;
+		}
+
+		if (curr_block && (cast(uintptr)curr_block == block_end)) {
+			prev_block->size += curr_block->size;
+			prev_block->next = curr_block->next;
+		}
+
+		fl->allocation_count--;
+		fl->total_allocated -= block_size;
+	} break;
+
+	case GB_ALLOCATION_FREE_ALL: {
+		gb_free_list_init(fl, fl->physical_start, fl->total_size);
+	} break;
+
+	case GB_ALLOCATION_RESIZE:
+		return gb_default_resize_align(gb_free_list_allocator(fl), old_memory, old_size, size, alignment);
+	}
+
+	return NULL;
+}
+
+
+
+
+
+
+
+
+/***************************************************************
+ *
+ * Sorting
+ *
+ */
+
+/* TODO(bill): Should I make all the macros local? */
+
+#define GB__COMPARE_PROC(Type) \
+gb_global isize gb__##Type##_cmp_offset; \
+GB_COMPARE_PROC(gb__##Type##_cmp) \
+{ \
+	Type const p = *cast(Type const *)gb_pointer_add_const(a, gb__##Type##_cmp_offset); \
+	Type const q = *cast(Type const *)gb_pointer_add_const(b, gb__##Type##_cmp_offset); \
+	return p < q ? -1 : p > q; \
+} \
+GB_COMPARE_PROC_PTR(gb_##Type##_cmp(isize offset)) \
+{ \
+	gb__##Type##_cmp_offset = offset; \
+	return &gb__##Type##_cmp; \
+}
+
+
+GB__COMPARE_PROC(i16);
+GB__COMPARE_PROC(i32);
+GB__COMPARE_PROC(i64);
+GB__COMPARE_PROC(isize);
+GB__COMPARE_PROC(f32);
+GB__COMPARE_PROC(f64);
+GB__COMPARE_PROC(char);
+
+/* NOTE(bill): str_cmp is special as it requires a funny type and funny comparison*/
+gb_global isize gb__str_cmp_offset;
+GB_COMPARE_PROC(gb__str_cmp)
+{
+	char const *p = *cast(char const **)gb_pointer_add_const(a, gb__str_cmp_offset);
+	char const *q = *cast(char const **)gb_pointer_add_const(b, gb__str_cmp_offset);
+	return gb_strcmp(p, q);
+}
+GB_COMPARE_PROC_PTR(gb_str_cmp(isize offset))
+{
+	gb__str_cmp_offset = offset;
+	return &gb__str_cmp;
+}
+
+#undef GB__COMPARE_PROC
+
+
+
+
+gb_inline void
+gb_qsort(void *base, isize count, isize size, gbCompareProc cmp)
+{
+	/* TODO(bill): Implement a custom sort */
+	qsort(base, count, size, cmp);
 }
 
 void
@@ -3181,9 +3627,8 @@ gb_strncmp(char const *s1, char const *s2, isize len)
 gb_inline char const *
 gb_strtok(char *output, char const *src, char const *delimit)
 {
-	while (*src && gb_char_first_occurence(delimit, *src) != NULL) {
+	while (*src && gb_char_first_occurence(delimit, *src) != NULL)
 		*output++ = *src++;
-	}
 
 	*output = 0;
 	return *src ? src+1 : src;
@@ -3239,9 +3684,9 @@ gb_char_last_occurence(char const *s, char c)
 
 
 gb_inline void
-gb_cstr_concat(char *dest, isize dest_len,
-               char const *src_a, isize src_a_len,
-               char const *src_b, isize src_b_len)
+gb_str_concat(char *dest, isize dest_len,
+              char const *src_a, isize src_a_len,
+              char const *src_b, isize src_b_len)
 {
 	GB_ASSERT(dest_len >= src_a_len+src_b_len+1);
 	if (dest) {
@@ -3375,12 +3820,15 @@ gb_string_make_space_for(gbString str, isize add_len)
 	if (available >= add_len) {
 		return str;
 	} else {
-		isize new_len = gb_string_length(str) + add_len;
-		void *ptr = GB_STRING_HEADER(str);
-		isize old_size = gb_size_of(gbStringHeader) + gb_string_length(str) + 1;
-		isize new_size = gb_size_of(gbStringHeader) + new_len + 1;
+		isize new_len, old_size, new_size;
+		void *ptr, *new_ptr;
 
-		void *new_ptr = gb_resize(GB_STRING_HEADER(str)->allocator, ptr, old_size, new_size);
+		new_len = gb_string_length(str) + add_len;
+		ptr = GB_STRING_HEADER(str);
+		old_size = gb_size_of(gbStringHeader) + gb_string_length(str) + 1;
+		new_size = gb_size_of(gbStringHeader) + new_len + 1;
+
+		new_ptr = gb_resize(GB_STRING_HEADER(str)->allocator, ptr, old_size, new_size);
 		if (new_ptr == NULL) return NULL;
 
 		str = cast(char *)(GB_STRING_HEADER(new_ptr) + 1);
@@ -3541,7 +3989,7 @@ gb_utf16_to_utf8(char *buffer, char16 *str, isize len)
 			if (i+4 > len)
 				return NULL;
 			c = ((str[0] - 0xd800) << 10) + ((str[1]) - 0xdc00) + 0x10000;
-			buffer[i++] = 0xf0 + (c >> 18);
+			buffer[i++] = 0xf0 +  (c >> 18);
 			buffer[i++] = 0x80 + ((c >> 12) & 0x3f);
 			buffer[i++] = 0x80 + ((c >>  6) & 0x3f);
 			buffer[i++] = 0x80 + ((c      ) & 0x3f);
@@ -3551,9 +3999,9 @@ gb_utf16_to_utf8(char *buffer, char16 *str, isize len)
 		} else {
 			if (i+3 > len)
 				return NULL;
-			buffer[i++] = 0xe0 + (*str >> 12);
-			buffer[i++] = 0x80 + ((*str >> 6) & 0x3f);
-			buffer[i++] = 0x80 + ((*str     ) & 0x3f);
+			buffer[i++] = 0xe0 +  (*str >> 12);
+			buffer[i++] = 0x80 + ((*str >>  6) & 0x3f);
+			buffer[i++] = 0x80 + ((*str      ) & 0x3f);
 			str += 1;
 		}
 	}
@@ -3603,7 +4051,7 @@ isize
 gb_utf8_decode_len(char const *s, isize str_len, char32 *c)
 {
 	isize i, j, len, type = 0;
-	char32 cd;
+	char32 cp;
 
 	GB_ASSERT_NOT_NULL(s);
 	GB_ASSERT_NOT_NULL(c);
@@ -3612,18 +4060,18 @@ gb_utf8_decode_len(char const *s, isize str_len, char32 *c)
 	if (!str_len) return 0;
 	*c = GB__UTF_INVALID;
 
-	cd = gb__utf_decode_byte(s[0], &len);
+	cp = gb__utf_decode_byte(s[0], &len);
 	if (!gb_is_between(len, 1, GB__UTF_SIZE))
 		return 1;
 
 	for (i = 1, j = 1; i < str_len && j < len; i++, j++) {
-		cd = (cd << 6) | gb__utf_decode_byte(s[i], &type);
+		cp = (cp << 6) | gb__utf_decode_byte(s[i], &type);
 		if (type != 0)
 			return j;
 	}
 	if (j < len)
 		return 0;
-	*c = cd;
+	*c = cp;
 	gb__utf_validate(c, len);
 	return len;
 }
@@ -3639,7 +4087,7 @@ gb_utf8_decode_len(char const *s, isize str_len, char32 *c)
 
 
 gb_no_inline void *
-gb__set_array_capacity(void *array, isize capacity, isize element_size)
+gb__array_set_capacity(void *array, isize capacity, isize element_size)
 {
 	gbArrayHeader *h = GB_ARRAY_HEADER(array);
 
@@ -3653,7 +4101,7 @@ gb__set_array_capacity(void *array, isize capacity, isize element_size)
 			isize new_capacity = GB_ARRAY_GROW_FORMULA(h->capacity);
 			if (new_capacity < capacity)
 				new_capacity = capacity;
-			gb__set_array_capacity(array, new_capacity, element_size);
+			gb__array_set_capacity(array, new_capacity, element_size);
 		}
 		h->count = capacity;
 	}
@@ -3661,7 +4109,7 @@ gb__set_array_capacity(void *array, isize capacity, isize element_size)
 	{
 		isize size = gb_size_of(gbArrayHeader) + element_size*capacity;
 		gbArrayHeader *nh = cast(gbArrayHeader *)gb_alloc(h->allocator, size);
-		gb_memcopy(nh, h, gb_size_of(gbArrayHeader) + element_size*h->count);
+		gb_memmove(nh, h, gb_size_of(gbArrayHeader) + element_size*h->count);
 		nh->allocator = h->allocator;
 		nh->count     = h->count;
 		nh->capacity  = capacity;
@@ -3761,77 +4209,77 @@ gb_global u32 const GB__CRC32_TABLE[256] = {
 };
 
 gb_global u64 const GB__CRC64_TABLE[256] = {
-	0x0000000000000000ull, 0x42F0E1EBA9EA3693ull, 0x85E1C3D753D46D26ull, 0xC711223CFA3E5BB5ull,
-	0x493366450E42ECDFull, 0x0BC387AEA7A8DA4Cull, 0xCCD2A5925D9681F9ull, 0x8E224479F47CB76Aull,
-	0x9266CC8A1C85D9BEull, 0xD0962D61B56FEF2Dull, 0x17870F5D4F51B498ull, 0x5577EEB6E6BB820Bull,
-	0xDB55AACF12C73561ull, 0x99A54B24BB2D03F2ull, 0x5EB4691841135847ull, 0x1C4488F3E8F96ED4ull,
-	0x663D78FF90E185EFull, 0x24CD9914390BB37Cull, 0xE3DCBB28C335E8C9ull, 0xA12C5AC36ADFDE5Aull,
-	0x2F0E1EBA9EA36930ull, 0x6DFEFF5137495FA3ull, 0xAAEFDD6DCD770416ull, 0xE81F3C86649D3285ull,
-	0xF45BB4758C645C51ull, 0xB6AB559E258E6AC2ull, 0x71BA77A2DFB03177ull, 0x334A9649765A07E4ull,
-	0xBD68D2308226B08Eull, 0xFF9833DB2BCC861Dull, 0x388911E7D1F2DDA8ull, 0x7A79F00C7818EB3Bull,
-	0xCC7AF1FF21C30BDEull, 0x8E8A101488293D4Dull, 0x499B3228721766F8ull, 0x0B6BD3C3DBFD506Bull,
-	0x854997BA2F81E701ull, 0xC7B97651866BD192ull, 0x00A8546D7C558A27ull, 0x4258B586D5BFBCB4ull,
-	0x5E1C3D753D46D260ull, 0x1CECDC9E94ACE4F3ull, 0xDBFDFEA26E92BF46ull, 0x990D1F49C77889D5ull,
-	0x172F5B3033043EBFull, 0x55DFBADB9AEE082Cull, 0x92CE98E760D05399ull, 0xD03E790CC93A650Aull,
-	0xAA478900B1228E31ull, 0xE8B768EB18C8B8A2ull, 0x2FA64AD7E2F6E317ull, 0x6D56AB3C4B1CD584ull,
-	0xE374EF45BF6062EEull, 0xA1840EAE168A547Dull, 0x66952C92ECB40FC8ull, 0x2465CD79455E395Bull,
-	0x3821458AADA7578Full, 0x7AD1A461044D611Cull, 0xBDC0865DFE733AA9ull, 0xFF3067B657990C3Aull,
-	0x711223CFA3E5BB50ull, 0x33E2C2240A0F8DC3ull, 0xF4F3E018F031D676ull, 0xB60301F359DBE0E5ull,
-	0xDA050215EA6C212Full, 0x98F5E3FE438617BCull, 0x5FE4C1C2B9B84C09ull, 0x1D14202910527A9Aull,
-	0x93366450E42ECDF0ull, 0xD1C685BB4DC4FB63ull, 0x16D7A787B7FAA0D6ull, 0x5427466C1E109645ull,
-	0x4863CE9FF6E9F891ull, 0x0A932F745F03CE02ull, 0xCD820D48A53D95B7ull, 0x8F72ECA30CD7A324ull,
-	0x0150A8DAF8AB144Eull, 0x43A04931514122DDull, 0x84B16B0DAB7F7968ull, 0xC6418AE602954FFBull,
-	0xBC387AEA7A8DA4C0ull, 0xFEC89B01D3679253ull, 0x39D9B93D2959C9E6ull, 0x7B2958D680B3FF75ull,
-	0xF50B1CAF74CF481Full, 0xB7FBFD44DD257E8Cull, 0x70EADF78271B2539ull, 0x321A3E938EF113AAull,
-	0x2E5EB66066087D7Eull, 0x6CAE578BCFE24BEDull, 0xABBF75B735DC1058ull, 0xE94F945C9C3626CBull,
-	0x676DD025684A91A1ull, 0x259D31CEC1A0A732ull, 0xE28C13F23B9EFC87ull, 0xA07CF2199274CA14ull,
-	0x167FF3EACBAF2AF1ull, 0x548F120162451C62ull, 0x939E303D987B47D7ull, 0xD16ED1D631917144ull,
-	0x5F4C95AFC5EDC62Eull, 0x1DBC74446C07F0BDull, 0xDAAD56789639AB08ull, 0x985DB7933FD39D9Bull,
-	0x84193F60D72AF34Full, 0xC6E9DE8B7EC0C5DCull, 0x01F8FCB784FE9E69ull, 0x43081D5C2D14A8FAull,
-	0xCD2A5925D9681F90ull, 0x8FDAB8CE70822903ull, 0x48CB9AF28ABC72B6ull, 0x0A3B7B1923564425ull,
-	0x70428B155B4EAF1Eull, 0x32B26AFEF2A4998Dull, 0xF5A348C2089AC238ull, 0xB753A929A170F4ABull,
-	0x3971ED50550C43C1ull, 0x7B810CBBFCE67552ull, 0xBC902E8706D82EE7ull, 0xFE60CF6CAF321874ull,
-	0xE224479F47CB76A0ull, 0xA0D4A674EE214033ull, 0x67C58448141F1B86ull, 0x253565A3BDF52D15ull,
-	0xAB1721DA49899A7Full, 0xE9E7C031E063ACECull, 0x2EF6E20D1A5DF759ull, 0x6C0603E6B3B7C1CAull,
-	0xF6FAE5C07D3274CDull, 0xB40A042BD4D8425Eull, 0x731B26172EE619EBull, 0x31EBC7FC870C2F78ull,
-	0xBFC9838573709812ull, 0xFD39626EDA9AAE81ull, 0x3A28405220A4F534ull, 0x78D8A1B9894EC3A7ull,
-	0x649C294A61B7AD73ull, 0x266CC8A1C85D9BE0ull, 0xE17DEA9D3263C055ull, 0xA38D0B769B89F6C6ull,
-	0x2DAF4F0F6FF541ACull, 0x6F5FAEE4C61F773Full, 0xA84E8CD83C212C8Aull, 0xEABE6D3395CB1A19ull,
-	0x90C79D3FEDD3F122ull, 0xD2377CD44439C7B1ull, 0x15265EE8BE079C04ull, 0x57D6BF0317EDAA97ull,
-	0xD9F4FB7AE3911DFDull, 0x9B041A914A7B2B6Eull, 0x5C1538ADB04570DBull, 0x1EE5D94619AF4648ull,
-	0x02A151B5F156289Cull, 0x4051B05E58BC1E0Full, 0x87409262A28245BAull, 0xC5B073890B687329ull,
-	0x4B9237F0FF14C443ull, 0x0962D61B56FEF2D0ull, 0xCE73F427ACC0A965ull, 0x8C8315CC052A9FF6ull,
-	0x3A80143F5CF17F13ull, 0x7870F5D4F51B4980ull, 0xBF61D7E80F251235ull, 0xFD913603A6CF24A6ull,
-	0x73B3727A52B393CCull, 0x31439391FB59A55Full, 0xF652B1AD0167FEEAull, 0xB4A25046A88DC879ull,
-	0xA8E6D8B54074A6ADull, 0xEA16395EE99E903Eull, 0x2D071B6213A0CB8Bull, 0x6FF7FA89BA4AFD18ull,
-	0xE1D5BEF04E364A72ull, 0xA3255F1BE7DC7CE1ull, 0x64347D271DE22754ull, 0x26C49CCCB40811C7ull,
-	0x5CBD6CC0CC10FAFCull, 0x1E4D8D2B65FACC6Full, 0xD95CAF179FC497DAull, 0x9BAC4EFC362EA149ull,
-	0x158E0A85C2521623ull, 0x577EEB6E6BB820B0ull, 0x906FC95291867B05ull, 0xD29F28B9386C4D96ull,
-	0xCEDBA04AD0952342ull, 0x8C2B41A1797F15D1ull, 0x4B3A639D83414E64ull, 0x09CA82762AAB78F7ull,
-	0x87E8C60FDED7CF9Dull, 0xC51827E4773DF90Eull, 0x020905D88D03A2BBull, 0x40F9E43324E99428ull,
-	0x2CFFE7D5975E55E2ull, 0x6E0F063E3EB46371ull, 0xA91E2402C48A38C4ull, 0xEBEEC5E96D600E57ull,
-	0x65CC8190991CB93Dull, 0x273C607B30F68FAEull, 0xE02D4247CAC8D41Bull, 0xA2DDA3AC6322E288ull,
-	0xBE992B5F8BDB8C5Cull, 0xFC69CAB42231BACFull, 0x3B78E888D80FE17Aull, 0x7988096371E5D7E9ull,
-	0xF7AA4D1A85996083ull, 0xB55AACF12C735610ull, 0x724B8ECDD64D0DA5ull, 0x30BB6F267FA73B36ull,
-	0x4AC29F2A07BFD00Dull, 0x08327EC1AE55E69Eull, 0xCF235CFD546BBD2Bull, 0x8DD3BD16FD818BB8ull,
-	0x03F1F96F09FD3CD2ull, 0x41011884A0170A41ull, 0x86103AB85A2951F4ull, 0xC4E0DB53F3C36767ull,
-	0xD8A453A01B3A09B3ull, 0x9A54B24BB2D03F20ull, 0x5D45907748EE6495ull, 0x1FB5719CE1045206ull,
-	0x919735E51578E56Cull, 0xD367D40EBC92D3FFull, 0x1476F63246AC884Aull, 0x568617D9EF46BED9ull,
-	0xE085162AB69D5E3Cull, 0xA275F7C11F7768AFull, 0x6564D5FDE549331Aull, 0x279434164CA30589ull,
-	0xA9B6706FB8DFB2E3ull, 0xEB46918411358470ull, 0x2C57B3B8EB0BDFC5ull, 0x6EA7525342E1E956ull,
-	0x72E3DAA0AA188782ull, 0x30133B4B03F2B111ull, 0xF7021977F9CCEAA4ull, 0xB5F2F89C5026DC37ull,
-	0x3BD0BCE5A45A6B5Dull, 0x79205D0E0DB05DCEull, 0xBE317F32F78E067Bull, 0xFCC19ED95E6430E8ull,
-	0x86B86ED5267CDBD3ull, 0xC4488F3E8F96ED40ull, 0x0359AD0275A8B6F5ull, 0x41A94CE9DC428066ull,
-	0xCF8B0890283E370Cull, 0x8D7BE97B81D4019Full, 0x4A6ACB477BEA5A2Aull, 0x089A2AACD2006CB9ull,
-	0x14DEA25F3AF9026Dull, 0x562E43B4931334FEull, 0x913F6188692D6F4Bull, 0xD3CF8063C0C759D8ull,
-	0x5DEDC41A34BBEEB2ull, 0x1F1D25F19D51D821ull, 0xD80C07CD676F8394ull, 0x9AFCE626CE85B507ull,
+	0x0000000000000000ull, 0x42f0e1eba9ea3693ull, 0x85e1c3d753d46d26ull, 0xc711223cfa3e5bb5ull,
+	0x493366450e42ecdfull, 0x0bc387aea7a8da4cull, 0xccd2a5925d9681f9ull, 0x8e224479f47cb76aull,
+	0x9266cc8a1c85d9beull, 0xd0962d61b56fef2dull, 0x17870f5d4f51b498ull, 0x5577eeb6e6bb820bull,
+	0xdb55aacf12c73561ull, 0x99a54b24bb2d03f2ull, 0x5eb4691841135847ull, 0x1c4488f3e8f96ed4ull,
+	0x663d78ff90e185efull, 0x24cd9914390bb37cull, 0xe3dcbb28c335e8c9ull, 0xa12c5ac36adfde5aull,
+	0x2f0e1eba9ea36930ull, 0x6dfeff5137495fa3ull, 0xaaefdd6dcd770416ull, 0xe81f3c86649d3285ull,
+	0xf45bb4758c645c51ull, 0xb6ab559e258e6ac2ull, 0x71ba77a2dfb03177ull, 0x334a9649765a07e4ull,
+	0xbd68d2308226b08eull, 0xff9833db2bcc861dull, 0x388911e7d1f2dda8ull, 0x7a79f00c7818eb3bull,
+	0xcc7af1ff21c30bdeull, 0x8e8a101488293d4dull, 0x499b3228721766f8ull, 0x0b6bd3c3dbfd506bull,
+	0x854997ba2f81e701ull, 0xc7b97651866bd192ull, 0x00a8546d7c558a27ull, 0x4258b586d5bfbcb4ull,
+	0x5e1c3d753d46d260ull, 0x1cecdc9e94ace4f3ull, 0xdbfdfea26e92bf46ull, 0x990d1f49c77889d5ull,
+	0x172f5b3033043ebfull, 0x55dfbadb9aee082cull, 0x92ce98e760d05399ull, 0xd03e790cc93a650aull,
+	0xaa478900b1228e31ull, 0xe8b768eb18c8b8a2ull, 0x2fa64ad7e2f6e317ull, 0x6d56ab3c4b1cd584ull,
+	0xe374ef45bf6062eeull, 0xa1840eae168a547dull, 0x66952c92ecb40fc8ull, 0x2465cd79455e395bull,
+	0x3821458aada7578full, 0x7ad1a461044d611cull, 0xbdc0865dfe733aa9ull, 0xff3067b657990c3aull,
+	0x711223cfa3e5bb50ull, 0x33e2c2240a0f8dc3ull, 0xf4f3e018f031d676ull, 0xb60301f359dbe0e5ull,
+	0xda050215ea6c212full, 0x98f5e3fe438617bcull, 0x5fe4c1c2b9b84c09ull, 0x1d14202910527a9aull,
+	0x93366450e42ecdf0ull, 0xd1c685bb4dc4fb63ull, 0x16d7a787b7faa0d6ull, 0x5427466c1e109645ull,
+	0x4863ce9ff6e9f891ull, 0x0a932f745f03ce02ull, 0xcd820d48a53d95b7ull, 0x8f72eca30cd7a324ull,
+	0x0150a8daf8ab144eull, 0x43a04931514122ddull, 0x84b16b0dab7f7968ull, 0xc6418ae602954ffbull,
+	0xbc387aea7a8da4c0ull, 0xfec89b01d3679253ull, 0x39d9b93d2959c9e6ull, 0x7b2958d680b3ff75ull,
+	0xf50b1caf74cf481full, 0xb7fbfd44dd257e8cull, 0x70eadf78271b2539ull, 0x321a3e938ef113aaull,
+	0x2e5eb66066087d7eull, 0x6cae578bcfe24bedull, 0xabbf75b735dc1058ull, 0xe94f945c9c3626cbull,
+	0x676dd025684a91a1ull, 0x259d31cec1a0a732ull, 0xe28c13f23b9efc87ull, 0xa07cf2199274ca14ull,
+	0x167ff3eacbaf2af1ull, 0x548f120162451c62ull, 0x939e303d987b47d7ull, 0xd16ed1d631917144ull,
+	0x5f4c95afc5edc62eull, 0x1dbc74446c07f0bdull, 0xdaad56789639ab08ull, 0x985db7933fd39d9bull,
+	0x84193f60d72af34full, 0xc6e9de8b7ec0c5dcull, 0x01f8fcb784fe9e69ull, 0x43081d5c2d14a8faull,
+	0xcd2a5925d9681f90ull, 0x8fdab8ce70822903ull, 0x48cb9af28abc72b6ull, 0x0a3b7b1923564425ull,
+	0x70428b155b4eaf1eull, 0x32b26afef2a4998dull, 0xf5a348c2089ac238ull, 0xb753a929a170f4abull,
+	0x3971ed50550c43c1ull, 0x7b810cbbfce67552ull, 0xbc902e8706d82ee7ull, 0xfe60cf6caf321874ull,
+	0xe224479f47cb76a0ull, 0xa0d4a674ee214033ull, 0x67c58448141f1b86ull, 0x253565a3bdf52d15ull,
+	0xab1721da49899a7full, 0xe9e7c031e063acecull, 0x2ef6e20d1a5df759ull, 0x6c0603e6b3b7c1caull,
+	0xf6fae5c07d3274cdull, 0xb40a042bd4d8425eull, 0x731b26172ee619ebull, 0x31ebc7fc870c2f78ull,
+	0xbfc9838573709812ull, 0xfd39626eda9aae81ull, 0x3a28405220a4f534ull, 0x78d8a1b9894ec3a7ull,
+	0x649c294a61b7ad73ull, 0x266cc8a1c85d9be0ull, 0xe17dea9d3263c055ull, 0xa38d0b769b89f6c6ull,
+	0x2daf4f0f6ff541acull, 0x6f5faee4c61f773full, 0xa84e8cd83c212c8aull, 0xeabe6d3395cb1a19ull,
+	0x90c79d3fedd3f122ull, 0xd2377cd44439c7b1ull, 0x15265ee8be079c04ull, 0x57d6bf0317edaa97ull,
+	0xd9f4fb7ae3911dfdull, 0x9b041a914a7b2b6eull, 0x5c1538adb04570dbull, 0x1ee5d94619af4648ull,
+	0x02a151b5f156289cull, 0x4051b05e58bc1e0full, 0x87409262a28245baull, 0xc5b073890b687329ull,
+	0x4b9237f0ff14c443ull, 0x0962d61b56fef2d0ull, 0xce73f427acc0a965ull, 0x8c8315cc052a9ff6ull,
+	0x3a80143f5cf17f13ull, 0x7870f5d4f51b4980ull, 0xbf61d7e80f251235ull, 0xfd913603a6cf24a6ull,
+	0x73b3727a52b393ccull, 0x31439391fb59a55full, 0xf652b1ad0167feeaull, 0xb4a25046a88dc879ull,
+	0xa8e6d8b54074a6adull, 0xea16395ee99e903eull, 0x2d071b6213a0cb8bull, 0x6ff7fa89ba4afd18ull,
+	0xe1d5bef04e364a72ull, 0xa3255f1be7dc7ce1ull, 0x64347d271de22754ull, 0x26c49cccb40811c7ull,
+	0x5cbd6cc0cc10fafcull, 0x1e4d8d2b65facc6full, 0xd95caf179fc497daull, 0x9bac4efc362ea149ull,
+	0x158e0a85c2521623ull, 0x577eeb6e6bb820b0ull, 0x906fc95291867b05ull, 0xd29f28b9386c4d96ull,
+	0xcedba04ad0952342ull, 0x8c2b41a1797f15d1ull, 0x4b3a639d83414e64ull, 0x09ca82762aab78f7ull,
+	0x87e8c60fded7cf9dull, 0xc51827e4773df90eull, 0x020905d88d03a2bbull, 0x40f9e43324e99428ull,
+	0x2cffe7d5975e55e2ull, 0x6e0f063e3eb46371ull, 0xa91e2402c48a38c4ull, 0xebeec5e96d600e57ull,
+	0x65cc8190991cb93dull, 0x273c607b30f68faeull, 0xe02d4247cac8d41bull, 0xa2dda3ac6322e288ull,
+	0xbe992b5f8bdb8c5cull, 0xfc69cab42231bacfull, 0x3b78e888d80fe17aull, 0x7988096371e5d7e9ull,
+	0xf7aa4d1a85996083ull, 0xb55aacf12c735610ull, 0x724b8ecdd64d0da5ull, 0x30bb6f267fa73b36ull,
+	0x4ac29f2a07bfd00dull, 0x08327ec1ae55e69eull, 0xcf235cfd546bbd2bull, 0x8dd3bd16fd818bb8ull,
+	0x03f1f96f09fd3cd2ull, 0x41011884a0170a41ull, 0x86103ab85a2951f4ull, 0xc4e0db53f3c36767ull,
+	0xd8a453a01b3a09b3ull, 0x9a54b24bb2d03f20ull, 0x5d45907748ee6495ull, 0x1fb5719ce1045206ull,
+	0x919735e51578e56cull, 0xd367d40ebc92d3ffull, 0x1476f63246ac884aull, 0x568617d9ef46bed9ull,
+	0xe085162ab69d5e3cull, 0xa275f7c11f7768afull, 0x6564d5fde549331aull, 0x279434164ca30589ull,
+	0xa9b6706fb8dfb2e3ull, 0xeb46918411358470ull, 0x2c57b3b8eb0bdfc5ull, 0x6ea7525342e1e956ull,
+	0x72e3daa0aa188782ull, 0x30133b4b03f2b111ull, 0xf7021977f9cceaa4ull, 0xb5f2f89c5026dc37ull,
+	0x3bd0bce5a45a6b5dull, 0x79205d0e0db05dceull, 0xbe317f32f78e067bull, 0xfcc19ed95e6430e8ull,
+	0x86b86ed5267cdbd3ull, 0xc4488f3e8f96ed40ull, 0x0359ad0275a8b6f5ull, 0x41a94ce9dc428066ull,
+	0xcf8b0890283e370cull, 0x8d7be97b81d4019full, 0x4a6acb477bea5a2aull, 0x089a2aacd2006cb9ull,
+	0x14dea25f3af9026dull, 0x562e43b4931334feull, 0x913f6188692d6f4bull, 0xd3cf8063c0c759d8ull,
+	0x5dedc41a34bbeeb2ull, 0x1f1d25f19d51d821ull, 0xd80c07cd676f8394ull, 0x9afce626ce85b507ull,
 };
 
 u32
 gb_crc32(void const *data, isize len)
 {
 	isize remaining;
-	u32 result = cast(u32)(~0);
+	u32 result = ~(cast(u32)0);
 	u8 const *c = cast(u8 const *)data;
 	for (remaining = len; remaining--; c++)
 		result = (result >> 8) ^ (GB__CRC32_TABLE[(result ^ *c) & 0xff]);
@@ -3842,7 +4290,7 @@ u64
 gb_crc64(void const *data, isize len)
 {
 	isize remaining;
-	u64 result = cast(u64)(~0);
+	u64 result = ~(cast(u64)0);
 	u8 const *c = cast(u8 const *)data;
 	for (remaining = len; remaining--; c++)
 		result = (result >> 8) ^ (GB__CRC64_TABLE[(result ^ *c) & 0xff]);
@@ -3911,8 +4359,8 @@ gb_murmur32_seed(void const *data, isize len, u32 seed)
 	u32 const c2 = 0x1b873593;
 	u32 const r1 = 15;
 	u32 const r2 = 13;
-	u32 const m = 5;
-	u32 const n = 0xe6546b64;
+	u32 const m  = 5;
+	u32 const n  = 0xe6546b64;
 
 	isize i, nblocks = len / 4;
 	u32 hash = seed, k1 = 0;
@@ -4105,22 +4553,16 @@ gb__find_result_from_key(gbHashTable const *h, u64 key)
 	return fr;
 }
 
-gb_internal gb_inline isize
-gb__find_entry_of_fail(gbHashTable const *h, u64 key)
-{
-	return gb__find_result_from_key(h, key).entry_index;
-}
-
 gb_inline b32
 gb_hash_table_has(gbHashTable const *h, u64 key)
 {
-	return gb__find_entry_of_fail(h, key) >= 0;
+	return gb__find_result_from_key(h, key).entry_index >= 0;
 }
 
 gb_inline void *
 gb_hash_table_get(gbHashTable const *h, u64 key, void *default_value)
 {
-	isize index = gb__find_entry_of_fail(h, key);
+	isize index = gb__find_result_from_key(h, key).entry_index;
 
 	if (index < 0)
 		return default_value;
@@ -4174,10 +4616,10 @@ gb_inline void
 gb_multi_hash_table_get(gbHashTable const *h, u64 key, void **values, isize count)
 {
 	isize i = 0;
-	gbHashTableEntry const *e = gb_hash_table_find_first_entry(h, key);
+	gbHashTableEntry const *e = gb_multi_hash_table_find_first_entry(h, key);
 	while (e && count --> 0) {
 		values[i++] = e->value;
-		e = gb_hash_table_find_next_entry(h, e);
+		e = gb_multi_hash_table_find_next_entry(h, e);
 	}
 }
 
@@ -4185,24 +4627,24 @@ gb_inline isize
 gb_multi_hash_table_count(gbHashTable const *h, u64 key)
 {
 	isize count = 0;
-	gbHashTableEntry const *e = gb_hash_table_find_first_entry(h, key);
+	gbHashTableEntry const *e = gb_multi_hash_table_find_first_entry(h, key);
 	while (e) {
 		count++;
-		e = gb_hash_table_find_next_entry(h, e);
+		e = gb_multi_hash_table_find_next_entry(h, e);
 	}
 	return count;
 }
 
 gbHashTableEntry const *
-gb_hash_table_find_first_entry(gbHashTable const *h, u64 key)
+gb_multi_hash_table_find_first_entry(gbHashTable const *h, u64 key)
 {
-	isize index = gb__find_entry_of_fail(h, key);
+	isize index = gb__find_result_from_key(h, key).entry_index;
 	if (index < 0) return NULL;
 	return &h->entries[index];
 }
 
 gbHashTableEntry const *
-gb_hash_table_find_next_entry(gbHashTable const *h, gbHashTableEntry const *e)
+gb_multi_hash_table_find_next_entry(gbHashTable const *h, gbHashTableEntry const *e)
 {
 	if (e) {
 		isize index = e->next;
@@ -4216,7 +4658,7 @@ gb_hash_table_find_next_entry(gbHashTable const *h, gbHashTableEntry const *e)
 }
 
 gb_internal void
-gb__erase_hash_table_find_result(gbHashTable *h, gbprivFindResult fr)
+gb__hash_table_erase_find_result(gbHashTable *h, gbprivFindResult fr)
 {
 	if (fr.data_prev < 0)
 		h->hashes[fr.hash_index] = h->entries[fr.entry_index].next;
@@ -4253,7 +4695,7 @@ gb_multi_hash_table_remove_entry(gbHashTable *h, gbHashTableEntry const *e)
 	}
 
 	if (fr.entry_index >= 0)
-		gb__erase_hash_table_find_result(h, fr);
+		gb__hash_table_erase_find_result(h, fr);
 }
 
 gb_inline void
@@ -4291,7 +4733,7 @@ gb__rehash(gbHashTable *h, isize new_capacity)
 gb_internal gb_inline void
 gb__hash_table_grow(gbHashTable *h)
 {
-	isize new_capacity = 2*gb_array_count(h->entries) + 8;
+	isize new_capacity = GB_ARRAY_GROW_FORMULA(gb_array_count(h->entries));
 	gb__rehash(h, new_capacity);
 }
 
@@ -4327,7 +4769,7 @@ gb_hash_table_remove(gbHashTable *h, u64 key)
 {
 	gbprivFindResult fr = gb__find_result_from_key(h, key);
 	if (fr.entry_index >= 0)
-		gb__erase_hash_table_find_result(h, fr);
+		gb__hash_table_erase_find_result(h, fr);
 }
 
 gb_inline void
@@ -4935,9 +5377,6 @@ gb_endian_swap64(u64 i)
  * It's quite useful
  */
 
-
-
-
 #if !defined(GB_NO_COLOUR_TYPE)
 gb_inline gbColour
 gb_colour(f32 r, f32 g, f32 b, f32 a)
@@ -4959,4 +5398,5 @@ gb_colour(f32 r, f32 g, f32 b, f32 a)
 #if defined(__cplusplus)
 }
 #endif
+
 #endif /* GB_IMPLEMENTATION */

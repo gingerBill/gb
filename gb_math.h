@@ -1,8 +1,9 @@
-/* gb_math.h - v0.06b - public domain C math library - no warranty implied; use at your own risk
+/* gb_math.h - v0.06c - public domain C math library - no warranty implied; use at your own risk
    A C math library geared towards game development
    use '#define GB_MATH_IMPLEMENTATION' before including to create the implementation in _ONE_ file
 
 Version History:
+	0.06c - Remove extra needed define for C++ and inline all operators
 	0.06b - Just formatting
 	0.06a - Implement rough versions of mod, remainder, copy_sign
 	0.06  - Windows GCC Support and C90-ish Support
@@ -473,83 +474,84 @@ GB_MATH_DEF int   gb_random_range_int  (int min_inc, int max_inc);
 }
 #endif
 
-#if defined(__cplusplus) && defined(GB_MATH_USE_OPERATOR_OVERLOADS)
+#if defined(__cplusplus)
 
 /* TODO(bill): How should I apply GB_MATH_DEF to these operator overloads? */
 
-bool operator==(gbVec2 a, gbVec2 b) { return (a.x == b.x) && (a.y == b.y); }
-bool operator!=(gbVec2 a, gbVec2 b) { return !operator==(a, b); }
+inline bool operator==(gbVec2 a, gbVec2 b) { return (a.x == b.x) && (a.y == b.y); }
+inline bool operator!=(gbVec2 a, gbVec2 b) { return !operator==(a, b); }
 
-gbVec2 operator+(gbVec2 a) { return a; }
-gbVec2 operator-(gbVec2 a) { gbVec2 r = {-a.x, -a.y}; return r; }
+inline gbVec2 operator+(gbVec2 a) { return a; }
+inline gbVec2 operator-(gbVec2 a) { gbVec2 r = {-a.x, -a.y}; return r; }
 
-gbVec2 operator+(gbVec2 a, gbVec2 b) { gbVec2 r; gb_vec2_add(&r, a, b); return r; }
-gbVec2 operator-(gbVec2 a, gbVec2 b) { gbVec2 r; gb_vec2_sub(&r, a, b); return r; }
+inline gbVec2 operator+(gbVec2 a, gbVec2 b) { gbVec2 r; gb_vec2_add(&r, a, b); return r; }
+inline gbVec2 operator-(gbVec2 a, gbVec2 b) { gbVec2 r; gb_vec2_sub(&r, a, b); return r; }
 
-gbVec2 operator*(gbVec2 a, float scalar) { gbVec2 r; gb_vec2_mul(&r, a, scalar); return r; }
-gbVec2 operator*(float scalar, gbVec2 a) { return operator*(a, scalar); }
+inline gbVec2 operator*(gbVec2 a, float scalar) { gbVec2 r; gb_vec2_mul(&r, a, scalar); return r; }
+inline gbVec2 operator*(float scalar, gbVec2 a) { return operator*(a, scalar); }
 
-gbVec2 operator/(gbVec2 a, float scalar) { return operator*(a, 1.0f/scalar); }
-
-/* Hadamard Product */
-gbVec2 operator*(gbVec2 a, gbVec2 b) { gbVec2 r = {a.x*b.x, a.y*b.y}; return r; }
-gbVec2 operator/(gbVec2 a, gbVec2 b) { gbVec2 r = {a.x/b.x, a.y/b.y}; return r; }
-
-gbVec2 &operator+=(gbVec2 &a, gbVec2 b)       { return (a = a + b); }
-gbVec2 &operator-=(gbVec2 &a, gbVec2 b)       { return (a = a - b); }
-gbVec2 &operator*=(gbVec2 &a, float scalar) { return (a = a * scalar); }
-gbVec2 &operator/=(gbVec2 &a, float scalar) { return (a = a / scalar); }
-
-
-bool operator==(gbVec3 a, gbVec3 b) { return (a.x == b.x) && (a.y == b.y) && (a.z == b.z); }
-bool operator!=(gbVec3 a, gbVec3 b) { return !operator==(a, b); }
-
-gbVec3 operator+(gbVec3 a) { return a; }
-gbVec3 operator-(gbVec3 a) { gbVec3 r = {-a.x, -a.y, -a.z}; return r; }
-
-gbVec3 operator+(gbVec3 a, gbVec3 b) { gbVec3 r; gb_vec3_add(&r, a, b); return r; }
-gbVec3 operator-(gbVec3 a, gbVec3 b) { gbVec3 r; gb_vec3_sub(&r, a, b); return r; }
-
-gbVec3 operator*(gbVec3 a, float scalar) { gbVec3 r; gb_vec3_mul(&r, a, scalar); return r; }
-gbVec3 operator*(float scalar, gbVec3 a) { return operator*(a, scalar); }
-
-gbVec3 operator/(gbVec3 a, float scalar) { return operator*(a, 1.0f/scalar); }
+inline gbVec2 operator/(gbVec2 a, float scalar) { return operator*(a, 1.0f/scalar); }
 
 /* Hadamard Product */
-gbVec3 operator*(gbVec3 a, gbVec3 b) { gbVec3 r = {a.x*b.x, a.y*b.y, a.z*b.z}; return r; }
-gbVec3 operator/(gbVec3 a, gbVec3 b) { gbVec3 r = {a.x/b.x, a.y/b.y, a.z/b.z}; return r; }
+inline gbVec2 operator*(gbVec2 a, gbVec2 b) { gbVec2 r = {a.x*b.x, a.y*b.y}; return r; }
+inline gbVec2 operator/(gbVec2 a, gbVec2 b) { gbVec2 r = {a.x/b.x, a.y/b.y}; return r; }
 
-gbVec3 &operator+=(gbVec3 &a, gbVec3 b)       { return (a = a + b); }
-gbVec3 &operator-=(gbVec3 &a, gbVec3 b)       { return (a = a - b); }
-gbVec3 &operator*=(gbVec3 &a, float scalar) { return (a = a * scalar); }
-gbVec3 &operator/=(gbVec3 &a, float scalar) { return (a = a / scalar); }
+inline gbVec2 &operator+=(gbVec2 &a, gbVec2 b)       { return (a = a + b); }
+inline gbVec2 &operator-=(gbVec2 &a, gbVec2 b)       { return (a = a - b); }
+inline gbVec2 &operator*=(gbVec2 &a, float scalar) { return (a = a * scalar); }
+inline gbVec2 &operator/=(gbVec2 &a, float scalar) { return (a = a / scalar); }
 
 
-bool operator==(gbVec4 a, gbVec4 b) { return (a.x == b.x) && (a.y == b.y) && (a.z == b.z) && (a.w == b.w); }
-bool operator!=(gbVec4 a, gbVec4 b) { return !operator==(a, b); }
+inline bool operator==(gbVec3 a, gbVec3 b) { return (a.x == b.x) && (a.y == b.y) && (a.z == b.z); }
+inline bool operator!=(gbVec3 a, gbVec3 b) { return !operator==(a, b); }
 
-gbVec4 operator+(gbVec4 a) { return a; }
-gbVec4 operator-(gbVec4 a) { gbVec4 r = {-a.x, -a.y, -a.z, -a.w}; return r; }
+inline gbVec3 operator+(gbVec3 a) { return a; }
+inline gbVec3 operator-(gbVec3 a) { gbVec3 r = {-a.x, -a.y, -a.z}; return r; }
 
-gbVec4 operator+(gbVec4 a, gbVec4 b) { gbVec4 r; gb_vec4_add(&r, a, b); return r; }
-gbVec4 operator-(gbVec4 a, gbVec4 b) { gbVec4 r; gb_vec4_sub(&r, a, b); return r; }
+inline gbVec3 operator+(gbVec3 a, gbVec3 b) { gbVec3 r; gb_vec3_add(&r, a, b); return r; }
+inline gbVec3 operator-(gbVec3 a, gbVec3 b) { gbVec3 r; gb_vec3_sub(&r, a, b); return r; }
 
-gbVec4 operator*(gbVec4 a, float scalar) { gbVec4 r; gb_vec4_mul(&r, a, scalar); return r; }
-gbVec4 operator*(float scalar, gbVec4 a) { return operator*(a, scalar); }
+inline gbVec3 operator*(gbVec3 a, float scalar) { gbVec3 r; gb_vec3_mul(&r, a, scalar); return r; }
+inline gbVec3 operator*(float scalar, gbVec3 a) { return operator*(a, scalar); }
 
-gbVec4 operator/(gbVec4 a, float scalar) { return operator*(a, 1.0f/scalar); }
+inline gbVec3 operator/(gbVec3 a, float scalar) { return operator*(a, 1.0f/scalar); }
 
 /* Hadamard Product */
-gbVec4 operator*(gbVec4 a, gbVec4 b) { gbVec4 r = {a.x*b.x, a.y*b.y, a.z*b.z, a.w*b.w}; return r; }
-gbVec4 operator/(gbVec4 a, gbVec4 b) { gbVec4 r = {a.x/b.x, a.y/b.y, a.z/b.z, a.w/b.w}; return r; }
+inline gbVec3 operator*(gbVec3 a, gbVec3 b) { gbVec3 r = {a.x*b.x, a.y*b.y, a.z*b.z}; return r; }
+inline gbVec3 operator/(gbVec3 a, gbVec3 b) { gbVec3 r = {a.x/b.x, a.y/b.y, a.z/b.z}; return r; }
 
-gbVec4 &operator+=(gbVec4 &a, gbVec4 b)       { return (a = a + b); }
-gbVec4 &operator-=(gbVec4 &a, gbVec4 b)       { return (a = a - b); }
-gbVec4 &operator*=(gbVec4 &a, float scalar) { return (a = a * scalar); }
-gbVec4 &operator/=(gbVec4 &a, float scalar) { return (a = a / scalar); }
+inline gbVec3 &operator+=(gbVec3 &a, gbVec3 b)       { return (a = a + b); }
+inline gbVec3 &operator-=(gbVec3 &a, gbVec3 b)       { return (a = a - b); }
+inline gbVec3 &operator*=(gbVec3 &a, float scalar) { return (a = a * scalar); }
+inline gbVec3 &operator/=(gbVec3 &a, float scalar) { return (a = a / scalar); }
 
 
-gbMat2 operator+(gbMat2 const &a, gbMat2 const &b)
+inline bool operator==(gbVec4 a, gbVec4 b) { return (a.x == b.x) && (a.y == b.y) && (a.z == b.z) && (a.w == b.w); }
+inline bool operator!=(gbVec4 a, gbVec4 b) { return !operator==(a, b); }
+
+inline gbVec4 operator+(gbVec4 a) { return a; }
+inline gbVec4 operator-(gbVec4 a) { gbVec4 r = {-a.x, -a.y, -a.z, -a.w}; return r; }
+
+inline gbVec4 operator+(gbVec4 a, gbVec4 b) { gbVec4 r; gb_vec4_add(&r, a, b); return r; }
+inline gbVec4 operator-(gbVec4 a, gbVec4 b) { gbVec4 r; gb_vec4_sub(&r, a, b); return r; }
+
+inline gbVec4 operator*(gbVec4 a, float scalar) { gbVec4 r; gb_vec4_mul(&r, a, scalar); return r; }
+inline gbVec4 operator*(float scalar, gbVec4 a) { return operator*(a, scalar); }
+
+inline gbVec4 operator/(gbVec4 a, float scalar) { return operator*(a, 1.0f/scalar); }
+
+/* Hadamard Product */
+inline gbVec4 operator*(gbVec4 a, gbVec4 b) { gbVec4 r = {a.x*b.x, a.y*b.y, a.z*b.z, a.w*b.w}; return r; }
+inline gbVec4 operator/(gbVec4 a, gbVec4 b) { gbVec4 r = {a.x/b.x, a.y/b.y, a.z/b.z, a.w/b.w}; return r; }
+
+inline gbVec4 &operator+=(gbVec4 &a, gbVec4 b)       { return (a = a + b); }
+inline gbVec4 &operator-=(gbVec4 &a, gbVec4 b)       { return (a = a - b); }
+inline gbVec4 &operator*=(gbVec4 &a, float scalar) { return (a = a * scalar); }
+inline gbVec4 &operator/=(gbVec4 &a, float scalar) { return (a = a / scalar); }
+
+
+inline gbMat2
+operator+(gbMat2 const &a, gbMat2 const &b)
 {
 	int i, j;
 	gbMat2 r = {0};
@@ -560,7 +562,8 @@ gbMat2 operator+(gbMat2 const &a, gbMat2 const &b)
 	return r;
 }
 
-gbMat2 operator-(gbMat2 const &a, gbMat2 const &b)
+inline gbMat2
+operator-(gbMat2 const &a, gbMat2 const &b)
 {
 	int i, j;
 	gbMat2 r = {0};
@@ -571,25 +574,27 @@ gbMat2 operator-(gbMat2 const &a, gbMat2 const &b)
 	return r;
 }
 
-gbMat2 operator*(gbMat2 const &a, gbMat2 const &b) { gbMat2 r; gb_mat2_mul(&r, (gbMat2 *)&a, (gbMat2 *)&b); return r; }
-gbVec2 operator*(gbMat2 const &a, gbVec2 v) { gbVec2 r; gb_mat2_mul_vec2(&r, (gbMat2 *)&a, v); return r; }
-gbMat2 operator*(gbMat2 const &a, float scalar)
+inline gbMat2 operator*(gbMat2 const &a, gbMat2 const &b) { gbMat2 r; gb_mat2_mul(&r, (gbMat2 *)&a, (gbMat2 *)&b); return r; }
+inline gbVec2 operator*(gbMat2 const &a, gbVec2 v) { gbVec2 r; gb_mat2_mul_vec2(&r, (gbMat2 *)&a, v); return r; }
+inline gbMat2
+operator*(gbMat2 const &a, float scalar)
 {
 	gbMat2 r = {0};
 	int i;
 	for (i = 0; i < 2*2; i++) r.e[i] = a.e[i] * scalar;
 	return r;
 }
-gbMat2 operator*(float scalar, gbMat2 const &a) { return operator*(a, scalar); }
-gbMat2 operator/(gbMat2 const &a, float scalar) { return operator*(a, 1.0f/scalar); }
+inline gbMat2 operator*(float scalar, gbMat2 const &a) { return operator*(a, scalar); }
+inline gbMat2 operator/(gbMat2 const &a, float scalar) { return operator*(a, 1.0f/scalar); }
 
-gbMat2& operator+=(gbMat2& a, gbMat2 const &b) { return (a = a + b); }
-gbMat2& operator-=(gbMat2& a, gbMat2 const &b) { return (a = a - b); }
-gbMat2& operator*=(gbMat2& a, gbMat2 const &b) { return (a = a * b); }
+inline gbMat2& operator+=(gbMat2& a, gbMat2 const &b) { return (a = a + b); }
+inline gbMat2& operator-=(gbMat2& a, gbMat2 const &b) { return (a = a - b); }
+inline gbMat2& operator*=(gbMat2& a, gbMat2 const &b) { return (a = a * b); }
 
 
 
-gbMat3 operator+(gbMat3 const &a, gbMat3 const &b)
+inline gbMat3
+operator+(gbMat3 const &a, gbMat3 const &b)
 {
 	int i, j;
 	gbMat3 r = {0};
@@ -600,7 +605,8 @@ gbMat3 operator+(gbMat3 const &a, gbMat3 const &b)
 	return r;
 }
 
-gbMat3 operator-(gbMat3 const &a, gbMat3 const &b)
+inline gbMat3
+operator-(gbMat3 const &a, gbMat3 const &b)
 {
 	int i, j;
 	gbMat3 r = {0};
@@ -611,25 +617,26 @@ gbMat3 operator-(gbMat3 const &a, gbMat3 const &b)
 	return r;
 }
 
-gbMat3 operator*(gbMat3 const &a, gbMat3 const &b) { gbMat3 r; gb_mat3_mul(&r, (gbMat3 *)&a, (gbMat3 *)&b); return r; }
-gbVec3 operator*(gbMat3 const &a, gbVec3 v) { gbVec3 r; gb_mat3_mul_vec3(&r, (gbMat3 *)&a, v); return r; }
-gbMat3 operator*(gbMat3 const &a, float scalar)
+inline gbMat3 operator*(gbMat3 const &a, gbMat3 const &b) { gbMat3 r; gb_mat3_mul(&r, (gbMat3 *)&a, (gbMat3 *)&b); return r; }
+inline gbVec3 operator*(gbMat3 const &a, gbVec3 v) { gbVec3 r; gb_mat3_mul_vec3(&r, (gbMat3 *)&a, v); return r; }
+inline gbMat3 operator*(gbMat3 const &a, float scalar)
 {
 	gbMat3 r = {0};
 	int i;
 	for (i = 0; i < 3*3; i++) r.e[i] = a.e[i] * scalar;
 	return r;
 }
-gbMat3 operator*(float scalar, gbMat3 const &a) { return operator*(a, scalar); }
-gbMat3 operator/(gbMat3 const &a, float scalar) { return operator*(a, 1.0f/scalar); }
+inline gbMat3 operator*(float scalar, gbMat3 const &a) { return operator*(a, scalar); }
+inline gbMat3 operator/(gbMat3 const &a, float scalar) { return operator*(a, 1.0f/scalar); }
 
-gbMat3& operator+=(gbMat3& a, gbMat3 const &b) { return (a = a + b); }
-gbMat3& operator-=(gbMat3& a, gbMat3 const &b) { return (a = a - b); }
-gbMat3& operator*=(gbMat3& a, gbMat3 const &b) { return (a = a * b); }
+inline gbMat3& operator+=(gbMat3& a, gbMat3 const &b) { return (a = a + b); }
+inline gbMat3& operator-=(gbMat3& a, gbMat3 const &b) { return (a = a - b); }
+inline gbMat3& operator*=(gbMat3& a, gbMat3 const &b) { return (a = a * b); }
 
 
 
-gbMat4 operator+(gbMat4 const &a, gbMat4 const &b)
+inline gbMat4
+operator+(gbMat4 const &a, gbMat4 const &b)
 {
 	int i, j;
 	gbMat4 r = {0};
@@ -640,7 +647,8 @@ gbMat4 operator+(gbMat4 const &a, gbMat4 const &b)
 	return r;
 }
 
-gbMat4 operator-(gbMat4 const &a, gbMat4 const &b)
+inline gbMat4
+operator-(gbMat4 const &a, gbMat4 const &b)
 {
 	int i, j;
 	gbMat4 r = {0};
@@ -651,48 +659,49 @@ gbMat4 operator-(gbMat4 const &a, gbMat4 const &b)
 	return r;
 }
 
-gbMat4 operator*(gbMat4 const &a, gbMat4 const &b) { gbMat4 r; gb_mat4_mul(&r, (gbMat4 *)&a, (gbMat4 *)&b); return r; }
-gbVec4 operator*(gbMat4 const &a, gbVec4 v) { gbVec4 r; gb_mat4_mul_vec4(&r, (gbMat4 *)&a, v); return r; }
-gbMat4 operator*(gbMat4 const &a, float scalar)
+inline gbMat4 operator*(gbMat4 const &a, gbMat4 const &b) { gbMat4 r; gb_mat4_mul(&r, (gbMat4 *)&a, (gbMat4 *)&b); return r; }
+inline gbVec4 operator*(gbMat4 const &a, gbVec4 v) { gbVec4 r; gb_mat4_mul_vec4(&r, (gbMat4 *)&a, v); return r; }
+inline gbMat4
+operator*(gbMat4 const &a, float scalar)
 {
 	gbMat4 r = {0};
 	int i;
 	for (i = 0; i < 4*4; i++) r.e[i] = a.e[i] * scalar;
 	return r;
 }
-gbMat4 operator*(float scalar, gbMat4 const &a) { return operator*(a, scalar); }
-gbMat4 operator/(gbMat4 const &a, float scalar) { return operator*(a, 1.0f/scalar); }
+inline gbMat4 operator*(float scalar, gbMat4 const &a) { return operator*(a, scalar); }
+inline gbMat4 operator/(gbMat4 const &a, float scalar) { return operator*(a, 1.0f/scalar); }
 
-gbMat4& operator+=(gbMat4 &a, gbMat4 const &b) { return (a = a + b); }
-gbMat4& operator-=(gbMat4 &a, gbMat4 const &b) { return (a = a - b); }
-gbMat4& operator*=(gbMat4 &a, gbMat4 const &b) { return (a = a * b); }
+inline gbMat4& operator+=(gbMat4 &a, gbMat4 const &b) { return (a = a + b); }
+inline gbMat4& operator-=(gbMat4 &a, gbMat4 const &b) { return (a = a - b); }
+inline gbMat4& operator*=(gbMat4 &a, gbMat4 const &b) { return (a = a * b); }
 
 
 
-bool operator==(gbQuat a, gbQuat b) { return a.xyzw == b.xyzw; }
-bool operator!=(gbQuat a, gbQuat b) { return !operator==(a, b); }
+inline bool operator==(gbQuat a, gbQuat b) { return a.xyzw == b.xyzw; }
+inline bool operator!=(gbQuat a, gbQuat b) { return !operator==(a, b); }
 
-gbQuat operator+(gbQuat q) { return q; }
-gbQuat operator-(gbQuat q) { return gb_quat(-q.x, -q.y, -q.z, -q.w); }
+inline gbQuat operator+(gbQuat q) { return q; }
+inline gbQuat operator-(gbQuat q) { return gb_quat(-q.x, -q.y, -q.z, -q.w); }
 
-gbQuat operator+(gbQuat a, gbQuat b) { gbQuat r; gb_quat_add(&r, a, b); return r; }
-gbQuat operator-(gbQuat a, gbQuat b) { gbQuat r; gb_quat_sub(&r, a, b); return r; }
+inline gbQuat operator+(gbQuat a, gbQuat b) { gbQuat r; gb_quat_add(&r, a, b); return r; }
+inline gbQuat operator-(gbQuat a, gbQuat b) { gbQuat r; gb_quat_sub(&r, a, b); return r; }
 
-gbQuat operator*(gbQuat a, gbQuat b)  { gbQuat r; gb_quat_mul(&r, a, b); return r; }
-gbQuat operator*(gbQuat q, float s) { gbQuat r; gb_quat_mulf(&r, q, s); return r; }
-gbQuat operator*(float s, gbQuat q) { return operator*(q, s); }
-gbQuat operator/(gbQuat q, float s) { gbQuat r; gb_quat_divf(&r, q, s); return r; }
+inline gbQuat operator*(gbQuat a, gbQuat b)  { gbQuat r; gb_quat_mul(&r, a, b); return r; }
+inline gbQuat operator*(gbQuat q, float s) { gbQuat r; gb_quat_mulf(&r, q, s); return r; }
+inline gbQuat operator*(float s, gbQuat q) { return operator*(q, s); }
+inline gbQuat operator/(gbQuat q, float s) { gbQuat r; gb_quat_divf(&r, q, s); return r; }
 
-gbQuat &operator+=(gbQuat &a, gbQuat b) { gb_quat_addeq(&a, b); return a; }
-gbQuat &operator-=(gbQuat &a, gbQuat b) { gb_quat_subeq(&a, b); return a; }
-gbQuat &operator*=(gbQuat &a, gbQuat b) { gb_quat_muleq(&a, b); return a; }
-gbQuat &operator/=(gbQuat &a, gbQuat b) { gb_quat_diveq(&a, b); return a; }
+inline gbQuat &operator+=(gbQuat &a, gbQuat b) { gb_quat_addeq(&a, b); return a; }
+inline gbQuat &operator-=(gbQuat &a, gbQuat b) { gb_quat_subeq(&a, b); return a; }
+inline gbQuat &operator*=(gbQuat &a, gbQuat b) { gb_quat_muleq(&a, b); return a; }
+inline gbQuat &operator/=(gbQuat &a, gbQuat b) { gb_quat_diveq(&a, b); return a; }
 
-gbQuat &operator*=(gbQuat &a, float b) { gb_quat_muleqf(&a, b); return a; }
-gbQuat &operator/=(gbQuat &a, float b) { gb_quat_diveqf(&a, b); return a; }
+inline gbQuat &operator*=(gbQuat &a, float b) { gb_quat_muleqf(&a, b); return a; }
+inline gbQuat &operator/=(gbQuat &a, float b) { gb_quat_diveqf(&a, b); return a; }
 
 /* Rotate v by a */
-gbVec3 operator*(gbQuat q, gbVec3 v) { gbVec3 r; gb_quat_rotate_vec3(&r, q, v); return r; }
+inline gbVec3 operator*(gbQuat q, gbVec3 v) { gbVec3 r; gb_quat_rotate_vec3(&r, q, v); return r; }
 
 #endif
 

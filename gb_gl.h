@@ -1765,7 +1765,7 @@ GB_COMPARE_PROC(gbgl__font_glyph_map_search_proc)
 gb_inline gbglGlyphInfo *
 gbgl_get_glyph_info(gbglFont *font, char32 codepoint, isize *out_index)
 {
-	isize index = gb_binary_search(font->glyph_map, font->glyph_count, gb_size_of(*font->glyph_map), &codepoint, gbgl__font_glyph_map_search_proc);
+	isize index = gb_binary_search_array(font->glyph_map, font->glyph_count, &codepoint, gbgl__font_glyph_map_search_proc);
 	if (index >= 0) {
 		GB_ASSERT(codepoint == font->glyph_map[index].codepoint);
 		if (out_index)
