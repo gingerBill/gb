@@ -1,4 +1,4 @@
-/* gb.h - v0.10a - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.10b - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -26,6 +26,7 @@ Conventions used:
 
 
 Version History:
+	0.10b - Probable timing bug for gb_time_now()
 	0.10a - Work on multiple compilers
 	0.10  - Scratch Memory Allocator
 	0.09a - Faster Mutex and the Free List is slightly improved
@@ -5371,11 +5372,11 @@ gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) 
 		u64 result = 0;
 		u32 upper, lower,tmp;
 		__asm__ volatile(
-			"0:                  \n"
-			"\tmftbu   %0           \n"
-			"\tmftb    %1           \n"
-			"\tmftbu   %2           \n"
-			"\tcmpw    %2,%0        \n"
+			"0:                   \n"
+			"\tmftbu   %0         \n"
+			"\tmftb    %1         \n"
+			"\tmftbu   %2         \n"
+			"\tcmpw    %2,%0      \n"
 			"\tbne     0b         \n"
 			: "=r"(upper),"=r"(lower),"=r"(tmp)
 		);
@@ -5419,7 +5420,7 @@ gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) 
 		struct timespec t;
 		f64 result;
 
-		if (gb__timestart) {
+		if (!gb__timestart) {
 			mach_timebase_info_data_t tb = {0};
 			mach_timebase_info(&tb);
 			gb__timebase = tb.numer;
