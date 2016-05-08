@@ -1,4 +1,4 @@
-/* gb.h - v0.09a - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.10  - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -26,6 +26,7 @@ Conventions used:
 
 
 Version History:
+	0.10  - Scratch Memory Allocator
 	0.09a - Faster Mutex and the Free List is slightly improved
 	0.09  - Basic Virtual Memory System and Dreadful Free List allocator
 	0.08a - Fix *_appendv bug
@@ -575,7 +576,7 @@ namespace gb {
 #ifndef GB_DEBUG_TRAP
 	#if defined(_MSC_VER)
 	 	#if _MSC_VER < 1300
-		#define GB_DEBUG_TRAP() __asm int 3; // Trap to debugger!
+		#define GB_DEBUG_TRAP() __asm int 3; /* Trap to debugger! */
 		#else
 		#define GB_DEBUG_TRAP() __debugbreak()
 		#endif
@@ -655,6 +656,8 @@ GB_DEF void *      gb_pointer_add      (void *ptr, isize bytes);
 GB_DEF void *      gb_pointer_sub      (void *ptr, isize bytes);
 GB_DEF void const *gb_pointer_add_const(void const *ptr, isize bytes);
 GB_DEF void const *gb_pointer_sub_const(void const *ptr, isize bytes);
+GB_DEF isize       gb_pointer_diff     (void const *begin, void const *end);
+
 
 GB_DEF void gb_zero_size(void *ptr, isize size);
 #ifndef     gb_zero_struct
@@ -746,11 +749,11 @@ gb_mutex_init(&m);
 
 /* TODO(bill): Should I create a Condition Type? (gbCond vs gbCondition) */
 
-
 typedef struct gbSemaphore {
 #if defined(GB_SYSTEM_WINDOWS)
 	void *win32_handle;
 #else
+	/* TODO(bill): Use a "native" semaphore rather than this mutex/condition pair */
 	gbMutex        mutex;
 	pthread_cond_t cond;
 	i32            count;
@@ -951,6 +954,18 @@ GB_DEF GB_ALLOCATOR_PROC(gb_pool_allocator_proc);
 
 
 
+/* NOTE(bill): Used for allocators to keep track of sizes */
+typedef struct gbAllocationHeader {
+	isize size;
+} gbAllocationHeader;
+
+
+#define GB_ISIZE_HIGH_BIT (~(cast(isize)(-1)))
+
+GB_DEF gbAllocationHeader *gb_allocation_header     (void *data);
+GB_DEF void                gb_allocation_header_fill(gbAllocationHeader *header, void *data, isize size);
+
+
 
 /*
  * Free List Allocator
@@ -962,9 +977,6 @@ GB_DEF GB_ALLOCATOR_PROC(gb_pool_allocator_proc);
  */
 /* NOTE(bill): I may also complete remove this if I completely implement a fixed heap allocator */
 
-typedef struct gbFreeListHeader {
-	isize size;
-} gbFreeListHeader;
 
 typedef struct gbFreeListBlock {
 	struct gbFreeListBlock *next;
@@ -988,6 +1000,25 @@ GB_DEF void gb_free_list_init_from_allocator(gbFreeList *fl, gbAllocator backing
 GB_DEF gbAllocator gb_free_list_allocator(gbFreeList *fl);
 GB_DEF GB_ALLOCATOR_PROC(gb_free_list_allocator_proc);
 
+
+
+/*
+ * Scratch Memory Allocator - Ring Buffer Based Arena
+ */
+
+typedef struct gbScratchMemory {
+	void *physical_start;
+	isize total_size;
+	void *alloc_point, *free_point;
+} gbScratchMemory;
+
+GB_DEF void gb_scratch_memory_init     (gbScratchMemory *s, void *start, isize size);
+GB_DEF b32  gb_scratch_memory_is_in_use(gbScratchMemory *s, void *ptr);
+
+
+/* Allocation Types: alloc, free, free_all, resize */
+GB_DEF gbAllocator gb_scratch_allocator(gbScratchMemory *s);
+GB_DEF GB_ALLOCATOR_PROC(gb_scratch_allocator_proc);
 
 /* TODO(bill): Stack allocator */
 /* TODO(bill): Fixed heap allocator */
@@ -1748,7 +1779,6 @@ extern "C" {
  */
 
 #include <process.h>
-	// #include <direct.h>
 
 #ifndef _WINDOWS_  /* check windows.h guard */
 #define INFINITE              0xffffffff
@@ -1764,23 +1794,23 @@ typedef u32 ULONG_PTR;
 
 typedef union _ULARGE_INTEGER {
 	struct {
-		unsigned long LowPart;
-		unsigned long HighPart;
+		DWORD LowPart;
+		DWORD HighPart;
 	};
 	struct {
-		unsigned long LowPart;
-		unsigned long HighPart;
+		DWORD LowPart;
+		DWORD HighPart;
 	} u;
-	unsigned long long QuadPart;
+	DWORD long QuadPart;
 } ULARGE_INTEGER;
 
 typedef union _LARGE_INTEGER {
 	struct {
-		unsigned long LowPart;
+		DWORD LowPart;
 		long  HighPart;
 	};
 	struct {
-		unsigned long LowPart;
+		DWORD LowPart;
 		long  HighPart;
 	} u;
 	long long QuadPart;
@@ -1792,33 +1822,33 @@ typedef enum _GET_FILEEX_INFO_LEVELS {
 } GET_FILEEX_INFO_LEVELS;
 
 typedef struct _FILETIME {
-	unsigned long dwLowDateTime;
-	unsigned long dwHighDateTime;
+	DWORD dwLowDateTime;
+	DWORD dwHighDateTime;
 } FILETIME;
 
 typedef struct _WIN32_FILE_ATTRIBUTE_DATA {
-	unsigned long    dwFileAttributes;
+	DWORD    dwFileAttributes;
 	FILETIME ftCreationTime;
 	FILETIME ftLastAccessTime;
 	FILETIME ftLastWriteTime;
-	unsigned long    nFileSizeHigh;
-	unsigned long    nFileSizeLow;
+	DWORD    nFileSizeHigh;
+	DWORD    nFileSizeLow;
 } WIN32_FILE_ATTRIBUTE_DATA;
 
-typedef unsigned long (__stdcall *gb__Win32ThreadProc)(void *arg);
+typedef DWORD (__stdcall *gb__Win32ThreadProc)(void *arg);
 
 GB_DLL_IMPORT b32    __stdcall CloseHandle(void *);
-GB_DLL_IMPORT void   __stdcall Sleep(unsigned long);
+GB_DLL_IMPORT void   __stdcall Sleep(DWORD);
 GB_DLL_IMPORT void * __stdcall CreateSemaphoreA(void *sec, long,long,char*);
-GB_DLL_IMPORT unsigned long  __stdcall WaitForSingleObject(void *, unsigned long);
+GB_DLL_IMPORT DWORD  __stdcall WaitForSingleObject(void *, DWORD);
 GB_DLL_IMPORT b32    __stdcall ReleaseSemaphore(void *, long, long *);
-GB_DLL_IMPORT void * __stdcall CreateThread(void *, size_t, gb__Win32ThreadProc, void *, unsigned long, unsigned long *);
-GB_DLL_IMPORT b32    __stdcall TerminateThread(void *, unsigned long);
-GB_DLL_IMPORT unsigned long  __stdcall GetCurrentThreadId(void);
-GB_DLL_IMPORT unsigned long  __stdcall GetThreadId(void *);
-GB_DLL_IMPORT void   __stdcall RaiseException(unsigned long, unsigned long, unsigned long, ULONG_PTR const *);
-GB_DLL_IMPORT void * __stdcall VirtualAlloc(void *base_address, size_t size, unsigned long type, unsigned long protect);
-GB_DLL_IMPORT b32    __stdcall VirtualFree(void *base_address, size_t size, unsigned long freetype);
+GB_DLL_IMPORT void * __stdcall CreateThread(void *, size_t, gb__Win32ThreadProc, void *, DWORD, DWORD *);
+GB_DLL_IMPORT b32    __stdcall TerminateThread(void *, DWORD);
+GB_DLL_IMPORT DWORD  __stdcall GetCurrentThreadId(void);
+GB_DLL_IMPORT DWORD  __stdcall GetThreadId(void *);
+GB_DLL_IMPORT void   __stdcall RaiseException(DWORD, DWORD, DWORD, ULONG_PTR const *);
+GB_DLL_IMPORT void * __stdcall VirtualAlloc(void *base_address, size_t size, DWORD type, DWORD protect);
+GB_DLL_IMPORT b32    __stdcall VirtualFree(void *base_address, size_t size, DWORD freetype);
 
 
 GB_DLL_IMPORT b32    __stdcall GetFileAttributesExA(char const *filename, GET_FILEEX_INFO_LEVELS info_level_id, void *file_info);
@@ -1981,10 +2011,11 @@ gb_align_forward(void *ptr, isize alignment)
 
 
 
-gb_inline void *      gb_pointer_add      (void *ptr, isize bytes)       { return cast(void *)(cast(u8 *)ptr + bytes); }
-gb_inline void *      gb_pointer_sub      (void *ptr, isize bytes)       { return cast(void *)(cast(u8 *)ptr - bytes); }
-gb_inline void const *gb_pointer_add_const(void const *ptr, isize bytes) { return cast(void const *)(cast(u8 const *)ptr + bytes); }
-gb_inline void const *gb_pointer_sub_const(void const *ptr, isize bytes) { return cast(void const *)(cast(u8 const *)ptr - bytes); }
+gb_inline void *      gb_pointer_add      (void *ptr, isize bytes)             { return cast(void *)(cast(u8 *)ptr + bytes); }
+gb_inline void *      gb_pointer_sub      (void *ptr, isize bytes)             { return cast(void *)(cast(u8 *)ptr - bytes); }
+gb_inline void const *gb_pointer_add_const(void const *ptr, isize bytes)       { return cast(void const *)(cast(u8 const *)ptr + bytes); }
+gb_inline void const *gb_pointer_sub_const(void const *ptr, isize bytes)       { return cast(void const *)(cast(u8 const *)ptr - bytes); }
+gb_inline isize       gb_pointer_diff     (void const *begin, void const *end) { return cast(isize)(cast(u8 const *)end - cast(u8 const *)begin); }
 
 gb_inline void gb_zero_size(void *ptr, isize size) { gb_memset(ptr, 0, size); }
 
@@ -2043,42 +2074,28 @@ gb_default_resize_align(gbAllocator a, void *old_memory, isize old_size, isize n
  *
  */
 #if defined(_MSC_VER)
-gb_inline i32
-gb_atomic32_load(gbAtomic32 const volatile *a)
-{
-	return a->value;
-}
-
-gb_inline void
-gb_atomic32_store(gbAtomic32 volatile *a, i32 value)
-{
-	a->value = value;
-}
-
+gb_inline i32  gb_atomic32_load (gbAtomic32 const volatile *a)      { return a->value;  }
+gb_inline void gb_atomic32_store(gbAtomic32 volatile *a, i32 value) { a->value = value; }
 gb_inline i32
 gb_atomic32_compare_exchange(gbAtomic32 volatile *a, i32 expected, i32 desired)
 {
 	return _InterlockedCompareExchange(cast(long volatile *)a, desired, expected);
 }
-
 gb_inline i32
 gb_atomic32_exchanged(gbAtomic32 volatile *a, i32 desired)
 {
 	return _InterlockedExchange(cast(long volatile *)a, desired);
 }
-
 gb_inline i32
 gb_atomic32_fetch_add(gbAtomic32 volatile *a, i32 operand)
 {
 	return _InterlockedExchangeAdd(cast(long volatile *)a, operand);
 }
-
 gb_inline i32
 gb_atomic32_fetch_and(gbAtomic32 volatile *a, i32 operand)
 {
 	return _InterlockedAnd(cast(long volatile *)a, operand);
 }
-
 gb_inline i32
 gb_atomic32_fetch_or(gbAtomic32 volatile *a, i32 operand)
 {
@@ -2199,21 +2216,8 @@ gb_atomic64_fetch_or(gbAtomic64 volatile *a, i64 operand)
 #else /* GCC */
 
 
-gb_inline i32
-gb_atomic32_load(gbAtomic32 const volatile *a)
-{
-#if defined(GB_ARCH_64_BIT)
-	return a->value;
-#else
-
-#endif
-}
-
-gb_inline void
-gb_atomic32_store(gbAtomic32 volatile *a, i32 value)
-{
-	a->value = value;
-}
+gb_inline i32  gb_atomic32_load (gbAtomic32 const volatile *a)      { return a->value;  }
+gb_inline void gb_atomic32_store(gbAtomic32 volatile *a, i32 value) { a->value = value; }
 
 gb_inline i32
 gb_atomic32_compare_exchange(gbAtomic32 volatile *a, i32 expected, i32 desired)
@@ -2463,8 +2467,8 @@ gb_mutex_lock(gbMutex *m)
 gb_inline b32
 gb_mutex_try_lock(gbMutex *m)
 {
-	b32 result = 0 == gb_atomic32_compare_exchange(&m->counter, 1, 0);
-	return result;
+	i32 result = gb_atomic32_compare_exchange(&m->counter, 1, 0);
+	return (result == 0);
 }
 
 gb_inline void
@@ -2539,7 +2543,7 @@ gb_semaphore_post(gbSemaphore *s, i32 count)
 gb_inline void
 gb_semaphore_wait(gbSemaphore *s)
 {
-	unsigned long result = WaitForSingleObject(s->win32_handle, INFINITE);
+	DWORD result = WaitForSingleObject(s->win32_handle, INFINITE);
 	GB_ASSERT_MSG(result == 0, "WaitForSingleObject: GetLastError");
 }
 
@@ -2614,7 +2618,7 @@ gb__thread_run(gbThread *t)
 }
 
 #if defined(GB_SYSTEM_WINDOWS)
-	gb_inline unsigned long __stdcall gb__thread_proc(void *arg) { gb__thread_run(cast(gbThread *)arg); return 0; }
+	gb_inline DWORD __stdcall gb__thread_proc(void *arg) { gb__thread_run(cast(gbThread *)arg); return 0; }
 #else
 	gb_inline void *           gb__thread_proc(void *arg) { gb__thread_run(cast(gbThread *)arg); return NULL; }
 #endif
@@ -2695,10 +2699,10 @@ gb_thread_set_name(gbThread *t, char const *name)
 	/* TODO(bill): Bloody Windows!!! */
 	#pragma pack(push, 8)
 		struct gbprivThreadName {
-			unsigned long      type;
+			DWORD      type;
 			char const *name;
-			unsigned long      id;
-			unsigned long      flags;
+			DWORD      id;
+			DWORD      flags;
 		};
 	#pragma pack(pop)
 		struct gbprivThreadName tn;
@@ -3092,6 +3096,26 @@ GB_ALLOCATOR_PROC(gb_pool_allocator_proc)
 
 
 
+gb_inline gbAllocationHeader *
+gb_allocation_header(void *data)
+{
+	isize *p = cast(isize *)data;
+	while (p[-1] == cast(isize)(-1))
+		p--;
+	return cast(gbAllocationHeader *)p - 1;
+}
+
+gb_inline void gb_allocation_header_fill(gbAllocationHeader *header, void *data, isize size)
+{
+	isize *ptr;
+	header->size = size;
+	ptr = cast(isize *)(header + 1);
+	while (cast(void *)ptr < data)
+		*ptr++ = cast(isize)(-1);
+}
+
+
+
 /*
  * Free List Allocator
  */
@@ -3127,15 +3151,6 @@ gb_free_list_allocator(gbFreeList *fl)
 	return a;
 }
 
-gb_inline gb_internal gbFreeListHeader *
-gb__free_list_header(void *data)
-{
-	isize *p = cast(isize *)data;
-	while (p[-1] == cast(isize)(-1))
-		p--;
-	return cast(gbFreeListHeader *)p - 1;
-}
-
 
 GB_ALLOCATOR_PROC(gb_free_list_allocator_proc)
 {
@@ -3150,9 +3165,9 @@ GB_ALLOCATOR_PROC(gb_free_list_allocator_proc)
 		while (curr_block) {
 			void *ptr = NULL;
 			isize total_size;
-			gbFreeListHeader *header;
+			gbAllocationHeader *header;
 
-			total_size = size + alignment + gb_size_of(gbFreeListHeader);
+			total_size = size + alignment + gb_size_of(gbAllocationHeader);
 
 			if (curr_block->size < total_size) {
 				prev_block = curr_block;
@@ -3160,7 +3175,7 @@ GB_ALLOCATOR_PROC(gb_free_list_allocator_proc)
 				continue;
 			}
 
-			if (curr_block->size - total_size <= gb_size_of(gbFreeListHeader)) {
+			if (curr_block->size - total_size <= gb_size_of(gbAllocationHeader)) {
 				total_size = curr_block->size;
 
 				if (prev_block)
@@ -3168,7 +3183,7 @@ GB_ALLOCATOR_PROC(gb_free_list_allocator_proc)
 				else
 					fl->curr_block = curr_block->next;
 			} else {
-				// NOTE(bill): Create a new block for the remaining memory
+				/* NOTE(bill): Create a new block for the remaining memory */
 				gbFreeListBlock *next_block;
 				next_block = cast(gbFreeListBlock *)gb_pointer_add(curr_block, total_size);
 
@@ -3185,14 +3200,9 @@ GB_ALLOCATOR_PROC(gb_free_list_allocator_proc)
 
 
 			/* TODO(bill): Set Header Info */
-			header = cast(gbFreeListHeader *)curr_block;
+			header = cast(gbAllocationHeader *)curr_block;
 			ptr = gb_align_forward(header+1, alignment);
-			header->size = total_size;
-			{
-				isize *p = cast(isize *)(header+1);
-				while (cast(void *)p < cast(void *)ptr)
-					*p++ = cast(isize)(-1);
-			}
+			gb_allocation_header_fill(header, ptr, size);
 
 			fl->total_allocated += total_size;
 			fl->allocation_count++;
@@ -3206,7 +3216,7 @@ GB_ALLOCATOR_PROC(gb_free_list_allocator_proc)
 	} break;
 
 	case GB_ALLOCATION_FREE: {
-		gbFreeListHeader *header = gb__free_list_header(old_memory);
+		gbAllocationHeader *header = gb_allocation_header(old_memory);
 		isize block_size = header->size;
 		uintptr block_start, block_end;
 		gbFreeListBlock *prev_block = NULL;
@@ -3260,6 +3270,103 @@ GB_ALLOCATOR_PROC(gb_free_list_allocator_proc)
 }
 
 
+
+void
+gb_scratch_memory_init(gbScratchMemory *s, void *start, isize size)
+{
+	s->physical_start = start;
+	s->total_size     = size;
+	s->alloc_point    = start;
+	s->free_point     = start;
+}
+
+
+b32
+gb_scratch_memory_is_in_use(gbScratchMemory *s, void *ptr)
+{
+	if (s->free_point == s->alloc_point) return false;
+	if (s->alloc_point > s->free_point)
+		return ptr >= s->free_point && ptr < s->alloc_point;
+	return ptr >= s->free_point || ptr < s->alloc_point;
+}
+
+
+gbAllocator
+gb_scratch_allocator(gbScratchMemory *s)
+{
+	gbAllocator a;
+	a.proc = gb_scratch_allocator_proc;
+	a.data = s;
+	return a;
+}
+
+GB_ALLOCATOR_PROC(gb_scratch_allocator_proc)
+{
+	gbScratchMemory *s = cast(gbScratchMemory *)allocator_data;
+	GB_ASSERT_NOT_NULL(s);
+
+	switch (type) {
+	case GB_ALLOCATION_ALLOC: {
+		void *ptr = s->alloc_point;
+		gbAllocationHeader *header = cast(gbAllocationHeader *)ptr;
+		void *data = gb_align_forward(header+1, alignment);
+		void *end = gb_pointer_add(s->physical_start, s->total_size);
+
+		GB_ASSERT(alignment % 4 == 0);
+		size = ((size + 3)/4)*4;
+		ptr = gb_pointer_add(ptr, size);
+
+		/* NOTE(bill): Wrap around */
+		if (ptr > end) {
+			header->size = gb_pointer_diff(header, end) | GB_ISIZE_HIGH_BIT;
+			ptr = s->physical_start;
+			header = cast(gbAllocationHeader *)ptr;
+			data = gb_align_forward(header+1, alignment);
+			ptr = gb_pointer_add(ptr, size);
+		}
+
+		if (!gb_scratch_memory_is_in_use(s, ptr)) {
+			gb_allocation_header_fill(header, ptr, gb_pointer_diff(header, ptr));
+			s->alloc_point = cast(u8 *)ptr;
+			return data;
+		}
+	} break;
+
+	case GB_ALLOCATION_FREE: {
+		if (old_memory) {
+			void *end = gb_pointer_add(s->physical_start, s->total_size);
+			if (old_memory < s->physical_start || old_memory >= end) {
+				GB_ASSERT(false);
+			} else {
+				/* NOTE(bill): Mark as free */
+				gbAllocationHeader *h = gb_allocation_header(old_memory);
+				GB_ASSERT((h->size & GB_ISIZE_HIGH_BIT) == 0);
+				h->size = h->size | GB_ISIZE_HIGH_BIT;
+
+				while (s->free_point != s->alloc_point) {
+					gbAllocationHeader *header = cast(gbAllocationHeader *)s->free_point;
+					if ((header->size & GB_ISIZE_HIGH_BIT) == 0)
+						break;
+
+					s->free_point = gb_pointer_add(s->free_point, h->size & (~GB_ISIZE_HIGH_BIT));
+					if (s->free_point == end)
+						s->free_point = s->physical_start;
+				}
+			}
+		}
+	} break;
+
+	case GB_ALLOCATION_FREE_ALL: {
+		s->alloc_point = s->physical_start;
+		s->free_point  = s->physical_start;
+	} break;
+
+	case GB_ALLOCATION_RESIZE:
+		return gb_default_resize_align(gb_scratch_allocator(s), old_memory, old_size, size, alignment);
+	}
+
+	return NULL;
+}
 
 
 
@@ -5398,6 +5505,8 @@ gb_get_working_cmd(char *buffer, isize len)
 	getcwd(buffer, len);
 #endif
 }
+
+
 
 gb_inline u16
 gb_endian_swap16(u16 i)
