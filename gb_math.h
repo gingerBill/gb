@@ -768,8 +768,8 @@ gb__memcpy_4byte(void *dest, void const *src, size_t size)
 static void
 gb__memzero_byte4(void *dest, size_t size)
 {
-	int *d = (int *)dest;
-	int i;
+	unsigned *d = (unsigned *)dest;
+	unsigned i;
 	for (i = 0; i < size/4; i++)
 		*d++ = 0;
 }
