@@ -1,4 +1,4 @@
-/* gb.h - v0.10  - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.10a - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -26,6 +26,7 @@ Conventions used:
 
 
 Version History:
+	0.10a - Work on multiple compilers
 	0.10  - Scratch Memory Allocator
 	0.09a - Faster Mutex and the Free List is slightly improved
 	0.09  - Basic Virtual Memory System and Dreadful Free List allocator
@@ -185,6 +186,7 @@ extern "C" {
 #include <stdlib.h>
 #include <string.h>   /* NOTE(bill): For memcpy, memmove, memcmp, etc. */
 #include <sys/stat.h> /* NOTE(bill): File info */
+#include <intrin.h>
 
 #if defined(GB_SYSTEM_WINDOWS)
 	#define NOMINMAX            1
@@ -382,11 +384,13 @@ typedef i32 b32; /* NOTE(bill): Prefer this!!! */
 #endif
 
 
-#if !defined(gb_inline)
+#if !defined(gb_restrict)
 	#if defined(_MSC_VER)
 		#define gb_restrict __restrict
-	#else
+	#elif defined(__STDC_VERSION__)
 		#define gb_restrict restrict
+	#else
+		#define gb_restrict
 	#endif
 #endif
 
@@ -479,7 +483,7 @@ extern "C++" {
  *
  * NOTE: C++11 (and above) only!
  */
-#if defined(__cplusplus)
+#if defined(__cplusplus) && __cplusplus >= 201103L
 extern "C++" {
 namespace gb {
 
@@ -959,13 +963,17 @@ typedef struct gbAllocationHeader {
 	isize size;
 } gbAllocationHeader;
 
-
-#define GB_ISIZE_HIGH_BIT (~(cast(isize)(-1)))
-
 GB_DEF gbAllocationHeader *gb_allocation_header     (void *data);
 GB_DEF void                gb_allocation_header_fill(gbAllocationHeader *header, void *data, isize size);
 
-
+/* TODO(bill): Find better way of doing this without #if #elif etc. */
+#if defined(GB_ARCH_32_BIT)
+#define GB_ISIZE_HIGH_BIT 0x80000000
+#elif defined(GB_ARCH_64_BIT)
+#define GB_ISIZE_HIGH_BIT 0x8000000000000000ll
+#else
+#error
+#endif
 
 /*
  * Free List Allocator
@@ -2073,7 +2081,7 @@ gb_default_resize_align(gbAllocator a, void *old_memory, isize old_size, isize n
  * Concurrency
  *
  */
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && !defined(__clang__)
 gb_inline i32  gb_atomic32_load (gbAtomic32 const volatile *a)      { return a->value;  }
 gb_inline void gb_atomic32_store(gbAtomic32 volatile *a, i32 value) { a->value = value; }
 gb_inline i32
@@ -2716,6 +2724,9 @@ gb_thread_set_name(gbThread *t, char const *name)
 		} __except(EXCEPTION_EXECUTE_HANDLER) {
 		}
 
+#elif defined(GB_SYSTEM_WINDOWS) && !defined(_MSC_VER)
+	/* TODO(bill): Set thread name for GCC/Clang on windows */
+	return;
 #elif defined(GB_SYSTEM_OSX)
 	/* TODO(bill): Test if this works */
 	pthread_setname_np(name);
@@ -2744,25 +2755,16 @@ GB_ALLOCATOR_PROC(gb_heap_allocator_proc)
 /* TODO(bill): Throughly test! */
 	switch (type) {
 	case GB_ALLOCATION_ALLOC: {
-#if defined(_MSC_VER)
-		void *p1, **p2;
-		isize offset = alignment-1 + gb_size_of(void *);
-		p1 = malloc(size + offset);
-		p2 = cast(void **)((cast(isize)(p1)+offset)&~(alignment-1));
-		p2[-1] = p1;
-		return cast(void *)p2;
-#else
-		return aligned_alloc(alignment, size);
-#endif
+		isize total_size = size + alignment + gb_size_of(gbAllocationHeader);
+		void *ptr = malloc(total_size);
+		gbAllocationHeader *header = cast(gbAllocationHeader *)ptr;
+		ptr = gb_align_forward(header+1, alignment);
+		gb_allocation_header_fill(header, ptr, size);
+		return ptr;
 	} break;
 
 	case GB_ALLOCATION_FREE: {
-#if defined(_MSC_VER)
-		void *p1 = (cast(void **)old_memory)[-1];
-		free(p1);
-#else
-		free(old_memory);
-#endif
+		free(gb_allocation_header(old_memory));
 	} break;
 
 	case GB_ALLOCATION_FREE_ALL:
@@ -4735,9 +4737,9 @@ typedef struct gbprivFindResult {
 	isize entry_index;
 } gbprivFindResult;
 
-gb_global gbprivFindResult const GB__INVALID_FIND_RESULT = {-1, -1, -1};
+gbprivFindResult const GB__INVALID_FIND_RESULT = {-1, -1, -1};
 
-gb_internal gbprivFindResult
+gbprivFindResult
 gb__find_result_from_key(gbHashTable const *h, u64 key)
 {
 	gbprivFindResult fr = GB__INVALID_FIND_RESULT;
@@ -4861,7 +4863,7 @@ gb_multi_hash_table_find_next_entry(gbHashTable const *h, gbHashTableEntry const
 	return NULL;
 }
 
-gb_internal void
+void
 gb__hash_table_erase_find_result(gbHashTable *h, gbprivFindResult fr)
 {
 	if (fr.data_prev < 0)
@@ -4909,7 +4911,7 @@ gb_multi_hash_table_remove_all(gbHashTable *h, u64 key)
 		gb_hash_table_remove(h, key);
 }
 
-gb_internal void
+void
 gb__rehash(gbHashTable *h, isize new_capacity)
 {
 	gbHashTable nh, empty;
@@ -4941,7 +4943,7 @@ gb__hash_table_grow(gbHashTable *h)
 	gb__rehash(h, new_capacity);
 }
 
-gb_internal isize
+isize
 gb__find_or_make_entry(gbHashTable *h, u64 key)
 {
 	isize index;
@@ -5015,7 +5017,7 @@ gb_file_create(gbFile *file, char const *filepath, ...)
 		file->size = gb_file_size(file);
 		file->is_open = true;
 		file->access = GB_FILE_ACCESS_WRITE;
-		file->last_write_time = gb_file_last_write_time(file->path);
+		file->last_write_time = gb_file_last_write_time("%s", file->path);
 		return true;
 	}
 	return false;
@@ -5062,7 +5064,7 @@ gb_file_open(gbFile *file, char const *filepath, ...)
 			}
 		}
 	#endif
-		file->last_write_time = gb_file_last_write_time(file->path);
+		file->last_write_time = gb_file_last_write_time("%s", file->path);
 		return true;
 	}
 	return false;
@@ -5131,7 +5133,7 @@ b32
 gb_file_has_changed(gbFile *file)
 {
 	b32 result = false;
-	gbFileTime last_write_time = gb_file_last_write_time(file->path);
+	gbFileTime last_write_time = gb_file_last_write_time("%s", file->path);
 	if (file->last_write_time != last_write_time) {
 		result = true;
 		file->last_write_time = last_write_time;
@@ -5226,7 +5228,7 @@ gb_file_read_contents(gbAllocator a, b32 zero_terminate, char const *filepath, .
 	path = gb_sprintf_va(filepath, va);
 	va_end(va);
 
-	if (gb_file_open(&file, path)) {
+	if (gb_file_open(&file, "%s", path)) {
 		i64 file_size = gb_file_size(&file);
 		if (file_size > 0) {
 			result.data = gb_alloc(a, zero_terminate ? file_size+1 : file_size);
@@ -5344,7 +5346,7 @@ gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) 
  *
  */
 
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && !defined(__clang__)
 	gb_inline u64 gb_rdtsc(void) { return __rdtsc(); }
 #elif defined(__i386__)
 	gb_inline u64
