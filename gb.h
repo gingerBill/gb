@@ -1,4 +1,4 @@
-/* gb.h - v0.10b - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.10c - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -26,6 +26,7 @@ Conventions used:
 
 
 Version History:
+	0.10c - Fix gb_endian_swap32()
 	0.10b - Probable timing bug for gb_time_now()
 	0.10a - Work on multiple compilers
 	0.10  - Scratch Memory Allocator
@@ -5521,7 +5522,7 @@ gb_inline u32
 gb_endian_swap32(u32 i)
 {
 	return (i>>24) |(i<<24) |
-	       ((i&0x00ff0000)>>8)  | ((i&0x00ff0000)<<8);
+	       ((i&0x00ff0000)>>8)  | ((i&0x0000ff00)<<8);
 }
 
 gb_inline u64
