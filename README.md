@@ -4,7 +4,7 @@ gb single-file public domain libraries for C &amp; C++
 
 library         | latest version | category | description
 ----------------|----------------|----------|-------------
-**gb.h**        | 0.09           | misc     | A helper library for C & C++
+**gb.h**        | 0.10c           | misc     | A helper library for C & C++
 **gb_math.h**   | 0.06c          | math     | A C/C++ vector math library geared towards game development
 **gb_gl.h**     | 0.04b          | graphics | A C/C++ OpenGL Helper Library
 **gb_string.h** | 0.95           | strings  | A better string library for C & C++ (this is built into gb.h too with custom allocator support!)
