@@ -1,4 +1,4 @@
-/* gb.h - v0.11  - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.11a - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -26,6 +26,7 @@ Conventions used:
 
 
 Version History:
+	0.11a - Add string precision and width (experimental)
 	0.11  - Started making stdio & stdlib optional (Not tested much)
 	0.10c - Fix gb_endian_swap32()
 	0.10b - Probable timing bug for gb_time_now()
@@ -2005,9 +2006,14 @@ typedef struct {
 gb_internal isize
 gb__print_string(char *text, isize max_len, gb__FmtInfo *info, char const *string)
 {
+	/* TODO(bill): Get precision and width to work correctly
+	 * How does it actually work?!
+	 */
 	isize len = 0;
+	isize str_len = gb_strlen(string);
+	isize precision = str_len;
 
-	if (info && info->width && info->width > gb_strlen(string)) {
+	if (info && info->width && info->width > str_len) {
 		char fill = info->pad_zeroes ? '0' : ' ';
 		isize width = info->width - gb_strlen(string);
 		while (width-- > 0 && max_len > 0) {
@@ -2016,7 +2022,9 @@ gb__print_string(char *text, isize max_len, gb__FmtInfo *info, char const *strin
 		}
 	}
 
-	len += gb_strlcpy(text, string, max_len);
+	if (info && info->precision > 0) precision = gb_min(info->precision, precision);
+
+	len += gb_strlcpy(text, string, gb_min(max_len, precision));
 
 	if (info) {
 		if (info->force_case == GB__LETTER_CASE_UPPER)
@@ -2026,7 +2034,6 @@ gb__print_string(char *text, isize max_len, gb__FmtInfo *info, char const *strin
 	}
 
 	return len;
-
 }
 
 gb_internal isize
@@ -2143,7 +2150,7 @@ gb__print_f64(char *text, isize max_len, gb__FmtInfo *info, f64 arg)
 gb_no_inline isize
 gb_snprintf_va(char *text, isize max_len, char const *fmt, va_list va)
 {
-#if !defined(GB_NO_STDIO)
+#if 0 && !defined(GB_NO_STDIO)
 	i32 res;
 #if defined(_WIN32)
 	res = _vsnprintf(text, max_len, fmt, va);
@@ -2186,13 +2193,21 @@ gb_snprintf_va(char *text, isize max_len, char const *fmt, va_list va)
 
 			if (*fmt >= '0' && *fmt <= '9')
 				info.width = gb_str_to_i64(fmt, cast(char **)&fmt, 0);
+			if (*fmt == '*') {
+				info.width = cast(isize)va_arg(va, int);
+				if (fmt[1] == '.') fmt++;
+			}
 
 			if (*fmt == '.') {
 				fmt++;
-				if (*fmt >= '0' && *fmt <= '9')
+				if (*fmt >= '0' && *fmt <= '9') {
 					info.precision = cast(i32)gb_str_to_i64(fmt, cast(char **)&fmt, 0);
-				else
+				} else if (*fmt == '*') {
+					info.precision = cast(i32)va_arg(va, int);
+				} else {
 					info.precision = 0;
+				}
+				fmt++;
 			}
 
 			while (!finish_parse) {
