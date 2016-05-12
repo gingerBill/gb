@@ -9,7 +9,7 @@ library         | latest version | category | description
 **gb_gl.h**     | 0.04b          | graphics | OpenGL Helper Library
 **gb_string.h** | 0.95           | strings  | A better string library (this is built into gb.h too with custom allocator support!)
 **gb_ini.h**    | 0.93           | misc     | Simple ini file loader library
-**gb_regex.h**  | 0.01a          | regex    | Highly experimental regular expressions library
+**gb_regex.h**  | 0.01b          | regex    | Highly experimental regular expressions library
 
 
 ## FAQ

@@ -1,4 +1,4 @@
-/* gb_regex.h - v0.01a - Regular Expressions Library - public domain
+/* gb_regex.h - v0.01b - Regular Expressions Library - public domain
                        - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -20,6 +20,7 @@
 
 
 Version History:
+	0.01b - Code readjustment
 	0.01a - New \ codes and bug fixes
 	0.01  - Initial Version
 
@@ -119,17 +120,17 @@ typedef int       gbreBool;
 #define GBRE_FALSE (0 != 0)
 
 
-typedef struct gbreCapture {
-	char *str;
-	isize len;
-} gbreCapture;
-
 typedef struct gbRegex {
 	isize capture_count;
 	unsigned char *buf;
 	isize          buf_len, buf_cap;
-	gbreBool       used_malloc;
+	gbreBool       can_realloc;
 } gbRegex;
+
+typedef struct gbreCapture {
+	char const *str;
+	isize len;
+} gbreCapture;
 
 typedef enum gbreError {
 	GBRE_ERROR_NONE,
@@ -144,11 +145,11 @@ typedef enum gbreError {
 
 
 #if !defined(GBRE_NO_MALLOC)
-GBRE_DEF gbreError gbre_compile            (gbRegex *re, char *pattern, isize pattern_len);
+GBRE_DEF gbreError gbre_compile            (gbRegex *re, char const *pattern, isize pattern_len);
 #endif
-GBRE_DEF gbreError gbre_compile_from_buffer(gbRegex *re, char *pattern, isize pattern_len, void *buffer, isize buffer_len);
+GBRE_DEF gbreError gbre_compile_from_buffer(gbRegex *re, char const *pattern, isize pattern_len, void *buffer, isize buffer_len);
 GBRE_DEF void      gbre_destroy            (gbRegex *re);
-GBRE_DEF gbreBool  gbre_match              (gbRegex *re, char *str, isize str_len, gbreCapture *captures, isize max_capture_count);
+GBRE_DEF gbreBool  gbre_match              (gbRegex *re, char const *str, isize str_len, gbreCapture *captures, isize max_capture_count);
 
 
 #if defined(__cplusplus)
@@ -238,7 +239,7 @@ typedef struct gbreContext {
 	isize op, offset;
 } gbreContext;
 
-enum {
+enum { /* TODO(bill): Should these be defines or is an enum good enough? */
 	GBRE__NO_MATCH = -1,
 	GBRE__INTERNAL_FAILURE = -2
 };
@@ -248,27 +249,27 @@ static char const GBRE__WHITESPACE[] = " \r\t\n\v\f";
 #define GBRE__LITERAL(str) (str), sizeof(str)-1
 
 
-static gbreContext gbre__exec_single(gbRegex *re, isize op, char *str, isize str_len, isize offset,
+static gbreContext gbre__exec_single(gbRegex *re, isize op, char const *str, isize str_len, isize offset,
                                      gbreCapture *captures, isize max_capture_count);
 
-static gbreContext gbre__exec(gbRegex *re, isize op, char *str, isize str_len, isize offset,
+static gbreContext gbre__exec(gbRegex *re, isize op, char const *str, isize str_len, isize offset,
                               gbreCapture *captures, isize max_capture_count);
 
 static gbreContext
-gbre__context_no_match(isize next_op)
+gbre__context_no_match(isize op)
 {
 	gbreContext c;
-	c.op = next_op;
+	c.op = op;
 	c.offset = GBRE__NO_MATCH;
 	return c;
 }
 
 
 static gbreContext
-gbre__context_internal_failure(isize next_op)
+gbre__context_internal_failure(isize op)
 {
 	gbreContext c;
-	c.op = next_op;
+	c.op = op;
 	c.offset = GBRE__INTERNAL_FAILURE;
 	return c;
 }
@@ -325,13 +326,13 @@ gbre__match_escape(char c, int code)
 	case GBRE_CODE_NULL:           return c == 0;
 	case GBRE_CODE_WHITESPACE:     return gbre__strfind(GBRE__LITERAL(GBRE__WHITESPACE), c, 0) >= 0;
 	case GBRE_CODE_NOT_WHITESPACE: return gbre__strfind(GBRE__LITERAL(GBRE__WHITESPACE), c, 0) < 0;
-	case GBRE_CODE_DIGIT:          return gbre__strfind(GBRE__LITERAL("0123456789"), c, 0) >= 0;
-	case GBRE_CODE_NOT_DIGIT:      return gbre__strfind(GBRE__LITERAL("0123456789"), c, 0) < 0;
+	case GBRE_CODE_DIGIT:          return (c >= '0' && c <= '9');
+	case GBRE_CODE_NOT_DIGIT:      return !(c >= '0' && c <= '9');
 	case GBRE_CODE_ALPHA:          return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
 	case GBRE_CODE_LOWER:          return (c >= 'a' && c <= 'z');
 	case GBRE_CODE_UPPER:          return (c >= 'A' && c <= 'Z');
 
-	/* TODO(bill): Make better */
+	/* TODO(bill): Make better? */
 	case GBRE_CODE_WORD:           return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_';
 	case GBRE_CODE_NOT_WORD:       return !((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_');
 
@@ -344,8 +345,9 @@ gbre__match_escape(char c, int code)
 
 
 static gbreContext
-gbre__greedy_consume(gbRegex *re, isize op, char *str, isize str_len, isize offset,
-                     gbreCapture *captures, isize max_capture_count)
+gbre__consume(gbRegex *re, isize op, char const *str, isize str_len, isize offset,
+              gbreCapture *captures, isize max_capture_count,
+              gbreBool is_greedy)
 {
 	gbreContext c, best_c, next_c;
 
@@ -367,42 +369,7 @@ gbre__greedy_consume(gbRegex *re, isize op, char *str, isize str_len, isize offs
 			if (captures)
 				gbre__exec(re, c.op, str, str_len, c.offset, captures, max_capture_count);
 			best_c = next_c;
-			/* NOTE(bill): Break would be here for shortest consumption */
-		}
-	}
-
-	if (best_c.op > re->buf_len)
-		best_c.op = c.op;
-
-	return best_c;
-}
-
-
-static gbreContext
-gbre__non_greedy_consume(gbRegex *re, isize op, char *str, isize str_len, isize offset,
-                          gbreCapture *captures, isize max_capture_count)
-{
-	gbreContext c, best_c, next_c;
-
-	c.op = op;
-	c.offset = offset;
-
-	best_c.op = GBRE__NO_MATCH;
-	best_c.offset = offset;
-
-	next_c;
-
-	for (;;) {
-		c = gbre__exec_single(re, op, str, str_len, c.offset, 0, 0);
-		if (c.offset > str_len) break;
-		if (c.op >= re->buf_len) return c;
-
-		next_c = gbre__exec_single(re, c.op, str, str_len, c.offset, 0, 0);
-		if (next_c.offset <= str_len) {
-			if (captures)
-				gbre__exec(re, c.op, str, str_len, c.offset, captures, max_capture_count);
-			best_c = next_c;
-			break; /* NOTE(bill): Break early!!! */
+			if (!is_greedy) break;
 		}
 	}
 
@@ -413,7 +380,7 @@ gbre__non_greedy_consume(gbRegex *re, isize op, char *str, isize str_len, isize 
 }
 
 static gbreContext
-gbre__exec_single(gbRegex *re, isize op, char *str, isize str_len, isize offset,
+gbre__exec_single(gbRegex *re, isize op, char const *str, isize str_len, isize offset,
                   gbreCapture *captures, isize max_capture_count)
 {
 	gbreContext context;
@@ -443,6 +410,24 @@ gbre__exec_single(gbRegex *re, isize op, char *str, isize str_len, isize offset,
 	case GBRE_OP_END_OF_LINE: {
 		if (offset != str_len)
 			return gbre__context_no_match(op);
+	} break;
+
+	case GBRE_OP_BRANCH_START: {
+		skip = re->buf[op++];
+		context = gbre__exec(re, op, str, str_len, offset, captures, max_capture_count);
+		if (context.offset <= str_len) {
+			offset = context.offset;
+			op = context.op;
+		} else {
+			context = gbre__exec(re, op + skip, str, str_len, offset, captures, max_capture_count);
+			offset = context.offset;
+			op = context.op;
+		}
+	} break;
+
+	case GBRE_OP_BRANCH_END: {
+		skip = re->buf[op++];
+		op += skip;
 	} break;
 
 	case GBRE_OP_ANY_OF: {
@@ -524,7 +509,7 @@ gbre__exec_single(gbRegex *re, isize op, char *str, isize str_len, isize offset,
 	} break;
 
 	case GBRE_OP_ZERO_OR_MORE: {
-		context = gbre__greedy_consume(re, op, str, str_len, offset, captures, max_capture_count);
+		context = gbre__consume(re, op, str, str_len, offset, captures, max_capture_count, GBRE_TRUE);
 		offset = context.offset;
 		op = context.op;
 	} break;
@@ -533,13 +518,13 @@ gbre__exec_single(gbRegex *re, isize op, char *str, isize str_len, isize offset,
 		context = gbre__exec_single(re, op, str, str_len, offset, captures, max_capture_count);
 		if (context.offset > str_len)
 			return context;
-		context = gbre__greedy_consume(re, op, str, str_len, context.offset, captures, max_capture_count);
+		context = gbre__consume(re, op, str, str_len, context.offset, captures, max_capture_count, GBRE_TRUE);
 		offset = context.offset;
 		op = context.op;
 	} break;
 
 	case GBRE_OP_ZERO_OR_MORE_SHORTEST: {
-		context = gbre__non_greedy_consume(re, op, str, str_len, offset, captures, max_capture_count);
+		context = gbre__consume(re, op, str, str_len, offset, captures, max_capture_count, GBRE_FALSE);
 		offset = context.offset;
 		op = context.op;
 	} break;
@@ -548,8 +533,7 @@ gbre__exec_single(gbRegex *re, isize op, char *str, isize str_len, isize offset,
 		context = gbre__exec_single(re, op, str, str_len, offset, captures, max_capture_count);
 		if (context.offset > str_len)
 			return context;
-		context = gbre__non_greedy_consume(re, op, str, str_len, context.offset, captures,
-		                                 max_capture_count);
+		context = gbre__consume(re, op, str, str_len, context.offset, captures, max_capture_count, GBRE_FALSE);
 		offset = context.offset;
 		op = context.op;
 	} break;
@@ -576,24 +560,6 @@ gbre__exec_single(gbRegex *re, isize op, char *str, isize str_len, isize offset,
 		return gbre__context_no_match(next_op);
 	} break;
 
-	case GBRE_OP_BRANCH_START: {
-		skip = re->buf[op++];
-		context = gbre__exec(re, op, str, str_len, offset, captures, max_capture_count);
-		if (context.offset <= str_len) {
-			offset = context.offset;
-			op = context.op;
-		} else {
-			context = gbre__exec(re, op + skip, str, str_len, offset, captures, max_capture_count);
-			offset = context.offset;
-			op = context.op;
-		}
-	} break;
-
-	case GBRE_OP_BRANCH_END: {
-		skip = re->buf[op++];
-		op += skip;
-	} break;
-
 	default: {
 		/* NOTE(bill): Not supported, FUCK!!! */
 		return gbre__context_internal_failure(op);
@@ -607,7 +573,7 @@ gbre__exec_single(gbRegex *re, isize op, char *str, isize str_len, isize offset,
 }
 
 static gbreContext
-gbre__exec(gbRegex *re, isize op, char *str, isize str_len, isize offset,
+gbre__exec(gbRegex *re, isize op, char const *str, isize str_len, isize offset,
            gbreCapture *captures, isize max_capture_count)
 {
 	gbreContext c;
@@ -624,13 +590,13 @@ gbre__exec(gbRegex *re, isize op, char *str, isize str_len, isize offset,
 
 
 static gbreError
-gbre__emit(gbRegex *re, gbreBool allow_grow, isize op_count, ...)
+gbre__emit_ops(gbRegex *re, isize op_count, ...)
 {
 	isize i;
 	va_list va;
 
 	if (re->buf_len + op_count > re->buf_cap) {
-		if (!allow_grow) {
+		if (!re->can_realloc) {
 			return GBRE_ERROR_TOO_LONG;
 		} else {
 #if !defined(GBRE_NO_MALLOC)
@@ -656,12 +622,12 @@ gbre__emit(gbRegex *re, gbreBool allow_grow, isize op_count, ...)
 }
 
 static gbreError
-gbre__emit_buffer(gbRegex *re, gbreBool allow_grow, isize op_count, unsigned char const *buffer)
+gbre__emit_ops_buffer(gbRegex *re, isize op_count, unsigned char const *buffer)
 {
 	isize i;
 
 	if (re->buf_len + op_count > re->buf_cap) {
-		if (!allow_grow) {
+		if (!re->can_realloc) {
 			return GBRE_ERROR_TOO_LONG;
 		} else {
 #if !defined(GBRE_NO_MALLOC)
@@ -715,7 +681,7 @@ gbre__encode_espace(char code)
 }
 
 static gbreError
-gbre__parse_group(gbRegex *re, char *pattern, isize len, isize offset, gbreBool allow_grow, isize *new_offset)
+gbre__parse_group(gbRegex *re, char const *pattern, isize len, isize offset, isize *new_offset)
 {
 	gbreError err = GBRE_ERROR_NONE;
 	unsigned char buffer[256] = {0}; /* NOTE(bill): ascii is only 7/8 bits */
@@ -728,12 +694,14 @@ gbre__parse_group(gbRegex *re, char *pattern, isize len, isize offset, gbreBool 
 		op = GBRE_OP_ANY_BUT;
 	}
 
-	while (!closed && err == GBRE_ERROR_NONE && (offset < len)) {
+	while (!closed &&
+	       err == GBRE_ERROR_NONE &&
+	       offset < len) {
 		if (pattern[offset] == ']') {
-			err = gbre__emit(re, allow_grow, 2, (int)op, (int)buffer_len);
+			err = gbre__emit_ops(re, 2, (int)op, (int)buffer_len);
 			if (err) break;
 
-			err = gbre__emit_buffer(re, allow_grow, buffer_len, buffer);
+			err = gbre__emit_ops_buffer(re, buffer_len, buffer);
 			if (buffer && err) break;
 			offset++;
 			closed = GBRE_TRUE;
@@ -773,7 +741,7 @@ gbre__parse_group(gbRegex *re, char *pattern, isize len, isize offset, gbreBool 
 }
 
 static gbreError
-gbre__compile_quantifier(gbRegex *re, gbreBool allow_grow, isize last_buf_len, unsigned char quantifier)
+gbre__compile_quantifier(gbRegex *re, isize last_buf_len, unsigned char quantifier)
 {
 	gbreError err;
 	isize move_size;
@@ -783,14 +751,14 @@ gbre__compile_quantifier(gbRegex *re, gbreBool allow_grow, isize last_buf_len, u
 
 		re->buf[last_buf_len+1]--;
 		re->buf_len--;
-		err = gbre__emit(re, allow_grow, 4, (int)quantifier, (int)GBRE_OP_EXACT_MATCH, 1, (int)last_char);
+		err = gbre__emit_ops(re, 4, (int)quantifier, (int)GBRE_OP_EXACT_MATCH, 1, (int)last_char);
 		if (err) return err;
 		return GBRE_ERROR_NONE;
 	}
 
 	move_size = re->buf_len - last_buf_len + 1;
 
-	err = gbre__emit(re, allow_grow, 1, 0);
+	err = gbre__emit_ops(re, 1, 0);
 	if (err) return err;
 
 	memmove(re->buf+last_buf_len+1, re->buf+last_buf_len, move_size);
@@ -802,7 +770,7 @@ gbre__compile_quantifier(gbRegex *re, gbreBool allow_grow, isize last_buf_len, u
 
 /* NOTE(bill): Either returns error (-ve value) or offset (+ve value) */
 static gbreError
-gbre__parse(gbRegex *re, char *pattern, isize len, isize offset, gbreBool allow_grow, isize level, isize *new_offset)
+gbre__parse(gbRegex *re, char const *pattern, isize len, isize offset, isize level, isize *new_offset)
 {
 	gbreError err = GBRE_ERROR_NONE;
 	isize last_buf_len = re->buf_len;
@@ -812,27 +780,27 @@ gbre__parse(gbRegex *re, char *pattern, isize len, isize offset, gbreBool allow_
 	while (offset < len) {
 		switch (pattern[offset++]) {
 		case '^': {
-			err = gbre__emit(re, allow_grow, 1, GBRE_OP_BEGINNING_OF_LINE);
+			err = gbre__emit_ops(re, 1, GBRE_OP_BEGINNING_OF_LINE);
 			if (err) return err;
 		} break;
 
 		case '$': {
-			err = gbre__emit(re, allow_grow, 1, GBRE_OP_END_OF_LINE);
+			err = gbre__emit_ops(re, 1, GBRE_OP_END_OF_LINE);
 			if (err) return err;
 		} break;
 
 		case '(': {
 			isize capture = re->capture_count++;
 			last_buf_len = re->buf_len;
-			err = gbre__emit(re, allow_grow, 2, GBRE_OP_BEGIN_CAPTURE, (int)capture);
+			err = gbre__emit_ops(re, 2, GBRE_OP_BEGIN_CAPTURE, (int)capture);
 			if (err) return err;
 
-			err = gbre__parse(re, pattern, len, offset, allow_grow, level+1, &offset);
+			err = gbre__parse(re, pattern, len, offset, level+1, &offset);
 
 			if ((offset > len) || (pattern[offset-1] != ')'))
 				return GBRE_ERROR_MISMATCHED_CAPTURES;
 
-			err = gbre__emit(re, allow_grow, 2, GBRE_OP_END_CAPTURE, (int)capture);
+			err = gbre__emit_ops(re, 2, GBRE_OP_END_CAPTURE, (int)capture);
 			if (err) return err;
 		} break;
 
@@ -848,7 +816,7 @@ gbre__parse(gbRegex *re, char *pattern, isize len, isize offset, gbreBool allow_
 
 		case '[': {
 			last_buf_len = re->buf_len;
-			err = gbre__parse_group(re, pattern, len, offset, allow_grow, &offset);
+			err = gbre__parse_group(re, pattern, len, offset, &offset);
 			if (offset > len)
 				return err;
 		} break;
@@ -859,7 +827,7 @@ gbre__parse(gbRegex *re, char *pattern, isize len, isize offset, gbreBool allow_
 				return GBRE_ERROR_BRANCH_FAILURE;
 			} else {
 				isize size = re->buf_len - branch_begin;
-				err = gbre__emit(re, allow_grow, 4, 0, 0, GBRE_OP_BRANCH_END, 0);
+				err = gbre__emit_ops(re, 4, 0, 0, GBRE_OP_BRANCH_END, 0);
 				if (err) return err;
 
 				memmove(re->buf + branch_begin + 2, re->buf + branch_begin, size);
@@ -871,7 +839,7 @@ gbre__parse(gbRegex *re, char *pattern, isize len, isize offset, gbreBool allow_
 
 		case '.': {
 			last_buf_len = re->buf_len;
-			err = gbre__emit(re, allow_grow, 1, GBRE_OP_ANY);
+			err = gbre__emit_ops(re, 1, GBRE_OP_ANY);
 			if (err) return err;
 		} break;
 
@@ -895,7 +863,7 @@ gbre__parse(gbRegex *re, char *pattern, isize len, isize offset, gbreBool allow_
 				offset++;
 			}
 
-			err = gbre__compile_quantifier(re, allow_grow, last_buf_len, quantifier);
+			err = gbre__compile_quantifier(re, last_buf_len, quantifier);
 			if (err) return err;
 		} break;
 
@@ -906,7 +874,7 @@ gbre__parse(gbRegex *re, char *pattern, isize len, isize offset, gbreBool allow_
 			        (re->buf[last_buf_len] > GBRE_OP_ANY_BUT))
 				return GBRE_ERROR_INVALID_QUANTIFIER;
 
-			err = gbre__compile_quantifier(re, allow_grow, last_buf_len,
+			err = gbre__compile_quantifier(re, last_buf_len,
 			                               (unsigned char)GBRE_OP_ZERO_OR_ONE);
 			if (err) return err;
 		} break;
@@ -916,15 +884,15 @@ gbre__parse(gbRegex *re, char *pattern, isize len, isize offset, gbreBool allow_
 			if ((offset+1 < len) && gbre__is_hex(pattern+offset)) {
 				unsigned char hex_value = gbre__hex(pattern+offset);
 				offset += 2;
-				err = gbre__emit(re, allow_grow, 2, GBRE_OP_META_MATCH, (int)hex_value);
+				err = gbre__emit_ops(re, 2, GBRE_OP_META_MATCH, (int)hex_value);
 				if (err) return err;
 			} else if (offset < len) {
 				int code = gbre__encode_espace(pattern[offset++]);
 				if (!code || (code > 0xff)) {
-					err = gbre__emit(re, allow_grow, 3, GBRE_OP_META_MATCH, 0, (int)((code >> 8) & 0xff));
+					err = gbre__emit_ops(re, 3, GBRE_OP_META_MATCH, 0, (int)((code >> 8) & 0xff));
 					if (err) return err;
 				} else {
-					err = gbre__emit(re, allow_grow, 2, GBRE_OP_META_MATCH, (int)code);
+					err = gbre__emit_ops(re, 2, GBRE_OP_META_MATCH, (int)code);
 					if (err) return err;
 				}
 			}
@@ -942,9 +910,9 @@ gbre__parse(gbRegex *re, char *pattern, isize len, isize offset, gbreBool allow_
 			}
 
 			last_buf_len = re->buf_len;
-			err = gbre__emit(re, allow_grow, 2, GBRE_OP_EXACT_MATCH, (int)size);
+			err = gbre__emit_ops(re, 2, GBRE_OP_EXACT_MATCH, (int)size);
 			if (err) return err;
-			err = gbre__emit_buffer(re, allow_grow, size, (unsigned char const *)match_start);
+			err = gbre__emit_ops_buffer(re, size, (unsigned char const *)match_start);
 			if (err) return err;
 		} break;
 		}
@@ -955,22 +923,22 @@ gbre__parse(gbRegex *re, char *pattern, isize len, isize offset, gbreBool allow_
 }
 
 gbreError
-gbre_compile_from_buffer(gbRegex *re, char *pattern, isize pattern_len, void *buffer, isize buffer_len)
+gbre_compile_from_buffer(gbRegex *re, char const *pattern, isize pattern_len, void *buffer, isize buffer_len)
 {
 	gbreError err;
 	re->capture_count = 0;
 	re->buf           = (unsigned char *)buffer;
 	re->buf_len       = 0;
 	re->buf_cap       = buffer_len;
-	re->used_malloc   = GBRE_FALSE;
+	re->can_realloc   = GBRE_FALSE;
 
-	err = gbre__parse(re, pattern, pattern_len, 0, GBRE_FALSE, 0, 0);
+	err = gbre__parse(re, pattern, pattern_len, 0, 0, 0);
 	return err;
 }
 
 #if !defined(GBRE_NO_MALLOC)
 gbreError
-gbre_compile(gbRegex *re, char *pattern, isize len)
+gbre_compile(gbRegex *re, char const *pattern, isize len)
 {
 	gbreError err = GBRE_ERROR_NONE;
 	isize cap = len+128;
@@ -980,10 +948,10 @@ gbre_compile(gbRegex *re, char *pattern, isize len)
 	re->buf           = (unsigned char *)GBRE_MALLOC(cap);
 	re->buf_len       = 0;
 	re->buf_cap       = cap;
-	re->used_malloc   = GBRE_TRUE;
+	re->can_realloc   = GBRE_TRUE;
 
 
-	err = gbre__parse(re, pattern, len, 0, GBRE_TRUE, 0, &offset);
+	err = gbre__parse(re, pattern, len, 0, 0, &offset);
 	if (offset != len)
 		GBRE_FREE(re->buf);
 	return err;
@@ -995,7 +963,7 @@ void gbre_destroy(gbRegex *re)
 	(void)sizeof(re);
 
 #if !defined(GBRE_NO_MALLOC)
-	if (re->used_malloc && re->buf) {
+	if (re->can_realloc && re->buf) {
 		GBRE_FREE(re->buf);
 		re->buf = NULL;
 	}
@@ -1003,7 +971,7 @@ void gbre_destroy(gbRegex *re)
 }
 
 gbreBool
-gbre_match(gbRegex *re, char *str, isize len, gbreCapture *captures, isize max_capture_count)
+gbre_match(gbRegex *re, char const *str, isize len, gbreCapture *captures, isize max_capture_count)
 {
 	if (re && re->buf_len > 0) {
 		if (re->buf[0] == GBRE_OP_BEGINNING_OF_LINE) {
