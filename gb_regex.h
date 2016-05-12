@@ -1,4 +1,4 @@
-/* gb_regex.h - v0.01  - Regular Expressions Library - public domain
+/* gb_regex.h - v0.01a - Regular Expressions Library - public domain
                        - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -20,6 +20,7 @@
 
 
 Version History:
+	0.01a - New \ codes and bug fixes
 	0.01  - Initial Version
 
 LICENSE
@@ -39,10 +40,6 @@ NOTES
 		()
 		[]
 		[^]
-		\s
-		\S
-		\d
-		\D
 		+
 		+?
 		*
@@ -51,12 +48,28 @@ NOTES
 		\XX
 		\meta
 
+		\s
+		\S
+		\d
+		\D
+		\a
+		\l
+		\u
+		\w
+		\W
+		\x
+		\p
+
 		--Whitespace--
 		\t
 		\n
 		\r
 		\v
 		\f
+
+TODO
+	{m,n}
+	(?:)
 
 
 CREDITS
@@ -206,11 +219,19 @@ typedef enum gbreOp {
 } gbreOp;
 
 typedef enum gbreCode {
-	GBRE_CODE_NULL           = 0x0000,
-	GBRE_CODE_WHITESPACE     = 0x0100,
-	GBRE_CODE_NOT_WHITESPACE = 0x0200,
-	GBRE_CODE_DIGIT          = 0x0300,
-	GBRE_CODE_NOT_DIGIT      = 0x0400
+	GBRE_CODE_NULL              = 0x0000,
+	GBRE_CODE_WHITESPACE        = 0x0100,
+	GBRE_CODE_NOT_WHITESPACE    = 0x0200,
+	GBRE_CODE_DIGIT             = 0x0300,
+	GBRE_CODE_NOT_DIGIT         = 0x0400,
+	GBRE_CODE_ALPHA             = 0x0500,
+	GBRE_CODE_LOWER             = 0x0600,
+	GBRE_CODE_UPPER             = 0x0700,
+	GBRE_CODE_WORD              = 0x0800,
+	GBRE_CODE_NOT_WORD          = 0x0900,
+
+	GBRE_CODE_XDIGIT            = 0x0a00,
+	GBRE_CODE_PRINTABLE         = 0x0b00,
 } gbreCode;
 
 typedef struct gbreContext {
@@ -297,7 +318,6 @@ gbre__strfind(char const *str, isize len, char c, isize offset)
 	return -1;
 }
 
-
 static gbreBool
 gbre__match_escape(char c, int code)
 {
@@ -307,6 +327,16 @@ gbre__match_escape(char c, int code)
 	case GBRE_CODE_NOT_WHITESPACE: return gbre__strfind(GBRE__LITERAL(GBRE__WHITESPACE), c, 0) < 0;
 	case GBRE_CODE_DIGIT:          return gbre__strfind(GBRE__LITERAL("0123456789"), c, 0) >= 0;
 	case GBRE_CODE_NOT_DIGIT:      return gbre__strfind(GBRE__LITERAL("0123456789"), c, 0) < 0;
+	case GBRE_CODE_ALPHA:          return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+	case GBRE_CODE_LOWER:          return (c >= 'a' && c <= 'z');
+	case GBRE_CODE_UPPER:          return (c >= 'A' && c <= 'Z');
+
+	/* TODO(bill): Make better */
+	case GBRE_CODE_WORD:           return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_';
+	case GBRE_CODE_NOT_WORD:       return !((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_');
+
+	case GBRE_CODE_XDIGIT:         return gbre__strfind(GBRE__LITERAL("0123456789ABCDEFabcdef"), c, 0) >= 0;
+	case GBRE_CODE_PRINTABLE:      return c >= 0x20 && c <= 0x7e;
 	default: break;
 	}
 	return GBRE_FALSE;
@@ -314,8 +344,8 @@ gbre__match_escape(char c, int code)
 
 
 static gbreContext
-gbre__consume_longest(gbRegex *re, isize op, char *str, isize str_len, isize offset,
-                      gbreCapture *captures, isize max_capture_count)
+gbre__greedy_consume(gbRegex *re, isize op, char *str, isize str_len, isize offset,
+                     gbreCapture *captures, isize max_capture_count)
 {
 	gbreContext c, best_c, next_c;
 
@@ -349,8 +379,8 @@ gbre__consume_longest(gbRegex *re, isize op, char *str, isize str_len, isize off
 
 
 static gbreContext
-gbre__consume_shortest(gbRegex *re, isize op, char *str, isize str_len, isize offset,
-                       gbreCapture *captures, isize max_capture_count)
+gbre__non_greedy_consume(gbRegex *re, isize op, char *str, isize str_len, isize offset,
+                          gbreCapture *captures, isize max_capture_count)
 {
 	gbreContext c, best_c, next_c;
 
@@ -494,7 +524,7 @@ gbre__exec_single(gbRegex *re, isize op, char *str, isize str_len, isize offset,
 	} break;
 
 	case GBRE_OP_ZERO_OR_MORE: {
-		context = gbre__consume_longest(re, op, str, str_len, offset, captures, max_capture_count);
+		context = gbre__greedy_consume(re, op, str, str_len, offset, captures, max_capture_count);
 		offset = context.offset;
 		op = context.op;
 	} break;
@@ -503,13 +533,13 @@ gbre__exec_single(gbRegex *re, isize op, char *str, isize str_len, isize offset,
 		context = gbre__exec_single(re, op, str, str_len, offset, captures, max_capture_count);
 		if (context.offset > str_len)
 			return context;
-		context = gbre__consume_longest(re, op, str, str_len, context.offset, captures, max_capture_count);
+		context = gbre__greedy_consume(re, op, str, str_len, context.offset, captures, max_capture_count);
 		offset = context.offset;
 		op = context.op;
 	} break;
 
 	case GBRE_OP_ZERO_OR_MORE_SHORTEST: {
-		context = gbre__consume_shortest(re, op, str, str_len, offset, captures, max_capture_count);
+		context = gbre__non_greedy_consume(re, op, str, str_len, offset, captures, max_capture_count);
 		offset = context.offset;
 		op = context.op;
 	} break;
@@ -518,7 +548,7 @@ gbre__exec_single(gbRegex *re, isize op, char *str, isize str_len, isize offset,
 		context = gbre__exec_single(re, op, str, str_len, offset, captures, max_capture_count);
 		if (context.offset > str_len)
 			return context;
-		context = gbre__consume_shortest(re, op, str, str_len, context.offset, captures,
+		context = gbre__non_greedy_consume(re, op, str, str_len, context.offset, captures,
 		                                 max_capture_count);
 		offset = context.offset;
 		op = context.op;
@@ -664,16 +694,28 @@ gbre__encode_espace(char code)
 	case 'v':  return '\v';
 
 	case '0':  return GBRE_CODE_NULL;
+
 	case 's':  return GBRE_CODE_WHITESPACE;
 	case 'S':  return GBRE_CODE_NOT_WHITESPACE;
+
 	case 'd':  return GBRE_CODE_DIGIT;
 	case 'D':  return GBRE_CODE_NOT_DIGIT;
+
+	case 'a':  return GBRE_CODE_ALPHA;
+	case 'l':  return GBRE_CODE_LOWER;
+	case 'u':  return GBRE_CODE_UPPER;
+
+	case 'w':  return GBRE_CODE_WORD;
+	case 'W':  return GBRE_CODE_NOT_WORD;
+
+	case 'x':  return GBRE_CODE_XDIGIT;
+	case 'p':  return GBRE_CODE_PRINTABLE;
 	}
 	return code;
 }
 
 static gbreError
-gbre__parse_group(gbRegex *re, char *pattern, isize len, isize offset, gbreBool allow_grow)
+gbre__parse_group(gbRegex *re, char *pattern, isize len, isize offset, gbreBool allow_grow, isize *new_offset)
 {
 	gbreError err = GBRE_ERROR_NONE;
 	unsigned char buffer[256] = {0}; /* NOTE(bill): ascii is only 7/8 bits */
@@ -726,7 +768,8 @@ gbre__parse_group(gbRegex *re, char *pattern, isize len, isize offset, gbreBool 
 
 	if (err) return err;
 	if (!closed) return GBRE_ERROR_MISMATCHED_BLOCKS;
-	return (offset == len) ? GBRE_ERROR_NONE : GBRE_ERROR_NO_MATCH;
+	if (new_offset) *new_offset = offset;
+	return GBRE_ERROR_NONE;
 }
 
 static gbreError
@@ -784,7 +827,7 @@ gbre__parse(gbRegex *re, char *pattern, isize len, isize offset, gbreBool allow_
 			err = gbre__emit(re, allow_grow, 2, GBRE_OP_BEGIN_CAPTURE, (int)capture);
 			if (err) return err;
 
-			gbre__parse(re, pattern, len, offset, allow_grow, level+1, &offset);
+			err = gbre__parse(re, pattern, len, offset, allow_grow, level+1, &offset);
 
 			if ((offset > len) || (pattern[offset-1] != ')'))
 				return GBRE_ERROR_MISMATCHED_CAPTURES;
@@ -805,7 +848,7 @@ gbre__parse(gbRegex *re, char *pattern, isize len, isize offset, gbreBool allow_
 
 		case '[': {
 			last_buf_len = re->buf_len;
-			offset = gbre__parse_group(re, pattern, len, offset, allow_grow);
+			err = gbre__parse_group(re, pattern, len, offset, allow_grow, &offset);
 			if (offset > len)
 				return err;
 		} break;
