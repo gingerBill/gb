@@ -1,4 +1,4 @@
-/* gb_regex.h - v0.01b - Regular Expressions Library - public domain
+/* gb_regex.h - v0.01c - Regular Expressions Library - public domain
                        - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -20,6 +20,7 @@
 
 
 Version History:
+	0.01c - Capture length fix and little more documentation
 	0.01b - Code readjustment
 	0.01a - New \ codes and bug fixes
 	0.01  - Initial Version
@@ -35,42 +36,44 @@ WARNING
 
 NOTES
 	Supported Matching:
-		^
-		$
-		.
-		()
-		[]
-		[^]
-		+
-		+?
-		*
-		*?
-		?
-		\XX
-		\meta
+		^       - Beginning of string
+		$       - End of string
+		.       - Match one (anything)
+		|       - Branch (or)
+		()      - Capturing group
+		[]      - Any character included in set
+		[^]     - Any character excluded from set
+		+       - One or more  (greedy)
+		+?      - One or more  (non-greedy)
+		*       - Zero or more (greedy)
+		*?      - Zero or more (non-greedy)
+		?       - Zero or once
+		\XX     - Hex decimal digit (must be 2 digits)
+		\meta   - Meta character
 
-		\s
-		\S
-		\d
-		\D
-		\a
-		\l
-		\u
-		\w
-		\W
-		\x
-		\p
+		\s      - Whitespace
+		\S      - Not whitespace
+		\d      - Digit
+		\D      - Not digit
+		\a      - Alphabetic character
+		\l      - Lower case letter
+		\u      - Upper case letter
+		\w      - Word
+		\W      - Not word
+		\x      - Hex Digit
+		\p      - Printable ASCII character
 
 		--Whitespace--
-		\t
-		\n
-		\r
-		\v
-		\f
+		\t      - Tab
+		\n      - New line
+		\r      - Return carriage
+		\v      - Vertical Tab
+		\f      - Form feed
 
 TODO
-	{m,n}
-	(?:)
+	{m,n}       - Ranges
+	(?:)        - Non capturing groups
+	UTF-8 Support (or is ASCII good enough?)
 
 
 CREDITS
@@ -116,9 +119,10 @@ extern "C" {
 typedef ptrdiff_t isize; /* TODO(bill): Should this be replaced with int? */
 typedef int       gbreBool;
 
+#define gbre_size_of(x) ((isize)sizeof(x))
+
 #define GBRE_TRUE  (0 == 0)
 #define GBRE_FALSE (0 != 0)
-
 
 typedef struct gbRegex {
 	isize capture_count;
@@ -149,6 +153,8 @@ GBRE_DEF gbreError gbre_compile            (gbRegex *re, char const *pattern, is
 #endif
 GBRE_DEF gbreError gbre_compile_from_buffer(gbRegex *re, char const *pattern, isize pattern_len, void *buffer, isize buffer_len);
 GBRE_DEF void      gbre_destroy            (gbRegex *re);
+
+GBRE_DEF isize     gbre_capture_count      (gbRegex *re); /* TODO(bill): Should this be a function or just get the "raw" variable? */
 GBRE_DEF gbreBool  gbre_match              (gbRegex *re, char const *str, isize str_len, gbreCapture *captures, isize max_capture_count);
 
 
@@ -246,8 +252,7 @@ enum { /* TODO(bill): Should these be defines or is an enum good enough? */
 
 static char const GBRE__META_CHARS[]  = "^$()[].*+?|\\";
 static char const GBRE__WHITESPACE[] = " \r\t\n\v\f";
-#define GBRE__LITERAL(str) (str), sizeof(str)-1
-
+#define GBRE__LITERAL(str) (str), gbre_size_of(str)-1
 
 static gbreContext gbre__exec_single(gbRegex *re, isize op, char const *str, isize str_len, isize offset,
                                      gbreCapture *captures, isize max_capture_count);
@@ -312,9 +317,9 @@ static isize
 gbre__strfind(char const *str, isize len, char c, isize offset)
 {
 	if (offset < len) {
-		void const *found = memchr(str+offset, c, len-offset);
+		char const *found = (char const *)memchr(str+offset, c, len-offset);
 		if (found)
-			return (char const*)found-(char const*)str;
+			return found-str;
 	}
 	return -1;
 }
@@ -336,6 +341,7 @@ gbre__match_escape(char c, int code)
 	case GBRE_CODE_WORD:           return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_';
 	case GBRE_CODE_NOT_WORD:       return !((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_');
 
+	/* TODO(bill): Maybe replace with between tests? */
 	case GBRE_CODE_XDIGIT:         return gbre__strfind(GBRE__LITERAL("0123456789ABCDEFabcdef"), c, 0) >= 0;
 	case GBRE_CODE_PRINTABLE:      return c >= 0x20 && c <= 0x7e;
 	default: break;
@@ -399,7 +405,7 @@ gbre__exec_single(gbRegex *re, isize op, char const *str, isize str_len, isize o
 	case GBRE_OP_END_CAPTURE: {
 		unsigned char capture = re->buf[op++];
 		if (captures && (capture < max_capture_count))
-			captures[capture].len = (char const *)captures[capture].str - (char const *)(str + offset);
+			captures[capture].len = (str+offset) - captures[capture].str;
 	} break;
 
 	case GBRE_OP_BEGINNING_OF_LINE: {
@@ -430,6 +436,14 @@ gbre__exec_single(gbRegex *re, isize op, char const *str, isize str_len, isize o
 		op += skip;
 	} break;
 
+	case GBRE_OP_ANY: {
+		if (offset < str_len) {
+			offset++;
+			break;
+		}
+		return gbre__context_no_match(op);
+	} break;
+
 	case GBRE_OP_ANY_OF: {
 		isize i;
 		char cin = str[offset];
@@ -439,7 +453,7 @@ gbre__exec_single(gbRegex *re, isize op, char const *str, isize str_len, isize o
 			return gbre__context_no_match(op + buffer_len);
 
 		for (i = 0; i < buffer_len; i++) {
-			char cmatch = (char)re->buf[op + i];
+			char cmatch = (char)re->buf[op+i];
 			if (!cmatch) {
 				i++;
 				if (gbre__match_escape(cin, re->buf[op+i] << 8))
@@ -477,14 +491,6 @@ gbre__exec_single(gbRegex *re, isize op, char const *str, isize str_len, isize o
 
 		offset++;
 		op += buffer_len;
-	} break;
-
-	case GBRE_OP_ANY: {
-		if (offset < str_len) {
-			offset++;
-			break;
-		}
-		return gbre__context_no_match(op);
 	} break;
 
 	case GBRE_OP_EXACT_MATCH: {
@@ -653,6 +659,7 @@ gbre__encode_espace(char code)
 	switch (code) {
 	default:   break; /* NOTE(bill): It's a normal character */
 
+	/* TODO(bill): Are there anymore? */
 	case 't':  return '\t';
 	case 'n':  return '\n';
 	case 'r':  return '\r';
@@ -685,7 +692,7 @@ gbre__parse_group(gbRegex *re, char const *pattern, isize len, isize offset, isi
 {
 	gbreError err = GBRE_ERROR_NONE;
 	unsigned char buffer[256] = {0}; /* NOTE(bill): ascii is only 7/8 bits */
-	isize buffer_len = 0, buffer_cap = sizeof(buffer);
+	isize buffer_len = 0, buffer_cap = gbre_size_of(buffer);
 	gbreBool closed = GBRE_FALSE;
 	gbreOp op = GBRE_OP_ANY_OF;
 
@@ -768,7 +775,6 @@ gbre__compile_quantifier(gbRegex *re, isize last_buf_len, unsigned char quantifi
 }
 
 
-/* NOTE(bill): Either returns error (-ve value) or offset (+ve value) */
 static gbreError
 gbre__parse(gbRegex *re, char const *pattern, isize len, isize offset, isize level, isize *new_offset)
 {
@@ -832,8 +838,8 @@ gbre__parse(gbRegex *re, char const *pattern, isize len, isize offset, isize lev
 
 				memmove(re->buf + branch_begin + 2, re->buf + branch_begin, size);
 				re->buf[branch_begin] = GBRE_OP_BRANCH_START;
-				re->buf[branch_begin + 1] = (size+2) & 0xff;
-				branch_op = re->buf_len - 2;
+				re->buf[branch_begin+1] = (size+2) & 0xff;
+				branch_op = re->buf_len-2;
 			}
 		} break;
 
@@ -898,8 +904,8 @@ gbre__parse(gbRegex *re, char const *pattern, isize len, isize offset, isize lev
 			}
 		} break;
 
+		/* NOTE(bill): Exact match */
 		default: {
-			/* NOTE(bill): Exact match */
 			char const *match_start;
 			isize size = 0;
 			offset--;
@@ -940,7 +946,7 @@ gbre_compile_from_buffer(gbRegex *re, char const *pattern, isize pattern_len, vo
 gbreError
 gbre_compile(gbRegex *re, char const *pattern, isize len)
 {
-	gbreError err = GBRE_ERROR_NONE;
+	gbreError err;
 	isize cap = len+128;
 	isize offset = 0;
 
@@ -960,7 +966,7 @@ gbre_compile(gbRegex *re, char const *pattern, isize len)
 
 void gbre_destroy(gbRegex *re)
 {
-	(void)sizeof(re);
+	(void)gbre_size_of(re);
 
 #if !defined(GBRE_NO_MALLOC)
 	if (re->can_realloc && re->buf) {
@@ -969,6 +975,9 @@ void gbre_destroy(gbRegex *re)
 	}
 #endif
 }
+
+isize gbre_capture_count(gbRegex *re) { return re->capture_count; }
+
 
 gbreBool
 gbre_match(gbRegex *re, char const *str, isize len, gbreCapture *captures, isize max_capture_count)
