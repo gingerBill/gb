@@ -1,4 +1,4 @@
-/* gb.h - v0.12a - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.12b - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -26,6 +26,7 @@ Conventions used:
 
 
 Version History:
+	0.12b - Fix file minor bugs
 	0.12a - Compile as C++
 	0.12  - New File Handing System! No stdio or stdlib! (WIN32 Only)
 	0.11a - Add string precision and width (experimental)
@@ -199,7 +200,7 @@ extern "C" {
 	#include <windows.h>
 	#include <direct.h>
 	#include <malloc.h> /* NOTE(bill): _aligned_*() */
-	#include <io.h> /* NOTE(bill): File functions */
+	#include <io.h>     /* NOTE(bill): File functions */
 #else
 	#include <dlfcn.h>
 	#include <mach/mach_time.h>
@@ -210,6 +211,7 @@ extern "C" {
 #endif
 
 #include <sys/stat.h> /* NOTE(bill): File info */
+#include <sys/locking.h>
 
 
 
@@ -577,6 +579,12 @@ namespace gb {
 #endif
 
 
+/* NOTE(bill): Some compilers support applying printf-style warnings to user functions. */
+#if defined(__clang__) || defined(__GNUC__)
+#define GB_PRINTF_ARGS(FMT) __attribute__((format(printf, FMT, (FMT+1))))
+#else
+#define GB_PRINTF_ARGS(FMT)
+#endif
 
 /***************************************************************
  *
@@ -622,40 +630,6 @@ namespace gb {
 GB_DEF void gb_assert_handler(char const *condition, char const *file, i32 line, char const *msg);
 
 
-
-
-
-/***************************************************************
- *
- * Printing
- *
- */
-
-/* NOTE(bill): Some compilers support applying printf-style warnings to user functions. */
-#if defined(__clang__) || defined(__GNUC__)
-#define GB_PRINTF_ARGS(FMT) __attribute__((format(printf, FMT, (FMT+1))))
-#else
-#define GB_PRINTF_ARGS(FMT)
-#endif
-
-/* TODO(bill): Allow printf-ing to a gbFile!!! */
-
-GB_DEF isize gb_printf        (char const *fmt, ...) GB_PRINTF_ARGS(1);
-GB_DEF isize gb_printf_va     (char const *fmt, va_list va);
-GB_DEF isize gb_printf_err    (char const *fmt, ...) GB_PRINTF_ARGS(2);
-GB_DEF isize gb_printf_err_va (char const *fmt, va_list va);
-
-GB_DEF char *gb_sprintf    (char const *fmt, ...) GB_PRINTF_ARGS(1); /* NOTE(bill): A locally persisting buffer is used internally */
-GB_DEF char *gb_sprintf_va (char const *fmt, va_list va);            /* NOTE(bill): A locally persisting buffer is used internally */
-GB_DEF isize gb_snprintf   (char *str, isize n, char const *fmt, ...) GB_PRINTF_ARGS(3);
-GB_DEF isize gb_snprintf_va(char *str, isize n, char const *fmt, va_list va);
-
-/* NOTE(bill): If you need an fprintf equivalent, you will need to but write to the file directly e.g.
- * char buf[...];
- * isize len = gb_snprintf(buf, gb_size_of(buf), "", ...);
- * isize offset = ...;
- * gb_file_write_at(&file, buf, len, offset);
- */
 
 /***************************************************************
  *
@@ -1597,7 +1571,9 @@ typedef struct gbFile {
 	char *name;
 	gbDirInfo *dir_info;
 	gbFileTime last_write_time;
-	gbMutex mutex; /* TODO(bill): Need a mutex? */
+#if defined(GB_SYSTEM_WINDOWS)
+	HFILE win32_file;
+#endif
 } gbFile;
 
 typedef struct gbFileContents {
@@ -1625,8 +1601,9 @@ typedef u32 gbFileMode;
                           GB_FILE_MODE_NAMED_PIPE | GB_FILE_MODE_SOCKET | \
                           GB_FILE_MODE_DEVICE
 
-#define GB_FILE_MODE_PERM cast(gbFileMode)0777 /* UNIX Permission bits */
+#define GB_FILE_MODE_PERM cast(gbFileMode)0777 /* NOTE(bill): UNIX Permission bits */
 
+/* TODO(bill): Should these be renamed to "proper english"? */
 typedef enum gbFileFlag {
 	GB_O_RDONLY = 0x0000,
 	GB_O_WRONLY = 0x0001,
@@ -1652,7 +1629,10 @@ typedef enum gbFileError {
 	GB_FILE_ERR_TRUNCATION_FAILURE
 } gbFileError;
 
-/* TODO(bill): std(in|out|err) files */
+
+extern gbFile *gb_stdin;
+extern gbFile *gb_stdout;
+extern gbFile *gb_stderr;
 
 
 GB_DEF gbFileError gb_file_create     (gbFile *file, char const *filename, ...) GB_PRINTF_ARGS(2);
@@ -1665,12 +1645,13 @@ GB_DEF b32         gb_file_write      (gbFile *file, void const *buffer, isize s
 GB_DEF b32         gb_file_read_at    (gbFile *file, void *buffer, isize size, i64 offset);
 GB_DEF b32         gb_file_write_at   (gbFile *file, void const *buffer, isize size, i64 offset);
 GB_DEF i64         gb_file_seek       (gbFile *file, i64 offset, gbSeekWhence whence);
+GB_DEF i64         gb_file_tell       (gbFile *file);
 GB_DEF i64         gb_file_size       (gbFile *file);
 GB_DEF uintptr     gb_file_fd         (gbFile *file);
 GB_DEF char const *gb_file_name       (gbFile *file);
 GB_DEF gbFileError gb_file_truncate   (gbFile *file, i64 size);
-
 GB_DEF b32         gb_file_has_changed(gbFile *file);
+
 
 
 /* TODO(bill): read_dir and read_dir_names */
@@ -1709,6 +1690,34 @@ GB_DEF b32         gb_path_is_root    (char const *path);
 GB_DEF char const *gb_path_base_name  (char const *path);
 GB_DEF char const *gb_path_extension  (char const *path);
 
+
+/***************************************************************
+ *
+ * Printing
+ *
+ */
+
+
+/* TODO(bill): Allow printf-ing to a gbFile!!! */
+
+GB_DEF isize gb_printf        (char const *fmt, ...) GB_PRINTF_ARGS(1);
+GB_DEF isize gb_printf_va     (char const *fmt, va_list va);
+GB_DEF isize gb_printf_err    (char const *fmt, ...) GB_PRINTF_ARGS(1);
+GB_DEF isize gb_printf_err_va (char const *fmt, va_list va);
+GB_DEF isize gb_fprintf       (gbFile *f, char const *fmt, ...) GB_PRINTF_ARGS(2);
+GB_DEF isize gb_fprintf_va    (gbFile *f, char const *fmt, va_list va);
+
+GB_DEF char *gb_sprintf    (char const *fmt, ...) GB_PRINTF_ARGS(1); /* NOTE(bill): A locally persisting buffer is used internally */
+GB_DEF char *gb_sprintf_va (char const *fmt, va_list va);            /* NOTE(bill): A locally persisting buffer is used internally */
+GB_DEF isize gb_snprintf   (char *str, isize n, char const *fmt, ...) GB_PRINTF_ARGS(3);
+GB_DEF isize gb_snprintf_va(char *str, isize n, char const *fmt, va_list va);
+
+/* NOTE(bill): If you need an fprintf equivalent, you will need to but write to the file directly e.g.
+ * char buf[...];
+ * isize len = gb_snprintf(buf, gb_size_of(buf), "", ...);
+ * isize offset = ...;
+ * gb_file_write_at(&file, buf, len, offset);
+ */
 
 
 
@@ -1989,7 +1998,6 @@ GB_DLL_IMPORT i32  __stdcall _chdir (char const *path);
 #pragma warning(disable:4127)
 #endif
 
-#if !defined(GB_NO_STDIO)
 isize
 gb_printf(char const *fmt, ...)
 {
@@ -2012,7 +2020,17 @@ gb_printf_err(char const *fmt, ...)
 	va_end(va);
 	return res;
 }
-#endif
+
+isize
+gb_fprintf(struct gbFile *f, char const *fmt, ...)
+{
+	isize res;
+	va_list va;
+	va_start(va, fmt);
+	res = gb_fprintf_va(f, fmt, va);
+	va_end(va);
+	return res;
+}
 
 char *
 gb_sprintf(char const *fmt, ...)
@@ -2037,40 +2055,28 @@ gb_snprintf(char *str, isize n, char const *fmt, ...)
 }
 
 
-#if !defined(GB_NO_STDIO)
+
 gb_inline isize
 gb_printf_va(char const *fmt, va_list va)
 {
-	gb_local_persist char buf[4096];
-	isize len = gb_snprintf_va(buf, gb_size_of(buf), fmt, va);
-#if defined(_MSC_VER)
-	{
-		HANDLE std_out_handle = GetStdHandle(STD_OUTPUT_HANDLE);
-		DWORD written_bytes = 0;
-		WriteFile(std_out_handle, buf, cast(DWORD)len, &written_bytes, NULL);
-	}
-#else
-#error Implementation gb_printf_va
-#endif
-	return len;
+	return gb_fprintf_va(gb_stdout, fmt, va);
 }
+
 gb_inline isize
 gb_printf_err_va(char const *fmt, va_list va)
 {
+	return gb_fprintf_va(gb_stderr, fmt, va);
+}
+
+gb_inline isize
+gb_fprintf_va(struct gbFile *f, char const *fmt, va_list va)
+{
 	gb_local_persist char buf[4096];
 	isize len = gb_snprintf_va(buf, gb_size_of(buf), fmt, va);
-#if defined(_MSC_VER)
-	{
-		HANDLE std_err_handle = GetStdHandle(STD_ERROR_HANDLE);
-		DWORD written_bytes = 0;
-		WriteFile(std_err_handle, buf, cast(DWORD)len, &written_bytes, NULL);
-	}
-#else
-#error Implementation gb_printf_va
-#endif
+	gb_file_write(f, buf, len);
 	return len;
 }
-#endif
+
 
 gb_inline char *
 gb_sprintf_va(char const *fmt, va_list va)
@@ -5820,18 +5826,127 @@ gb_hash_table_clear(gbHashTable *h)
  * File Handling
  *
  */
+#if defined(GB_SYSTEM_WINDOWS)
+#define GB__FILE_STD(i) {i, NULL, NULL, 0}
+#else
+#define GB__FILE_STD(i) {i, NULL, NULL, 0}
+#endif
 
+gb_global gbFile gb__stdin  = GB__FILE_STD(0);
+gb_global gbFile gb__stdout = GB__FILE_STD(1);
+gb_global gbFile gb__stderr = GB__FILE_STD(2);
 
-
-/* TODO(bill): std(in|out|err) files */
+gbFile *gb_stdin = &gb__stdin;
+gbFile *gb_stdout = &gb__stdout;
+gbFile *gb_stderr = &gb__stderr;
 
 #if defined(GB_SYSTEM_WINDOWS)
 
-i32
+/* IMPORTANT TODO(bill): REMOVE THE STUPID FUCKING POSIX CODE! */
+
+gb_inline i32
 gb_chmod(char const *name, gbFileMode perm)
 {
 	return _chmod(name, perm & GB_FILE_MODE_PERM);
 }
+
+gbFileError
+gb_file_open_file_va(gbFile *file, u32 flag, gbFileMode perm, char const *filename, va_list va)
+{
+	b32 chmod = false;
+	int fd = 0; /* NOTE(bill): Must be an int on windows */
+	char const *name = gb_sprintf_va(filename, va);
+	LPOFSTRUCT buffer = {0};
+
+	if ((flag & GB_O_CREATE) != 0 &&
+	    (perm & GB_FILE_MODE_STICKY) != 0) {
+		if (gb_file_is_not_exist(name))
+			chmod = true;
+	}
+
+	fd = _open(name, flag|0x8000, perm);
+
+	if (chmod) gb_chmod(name, perm);
+
+	gb_file_new(file, fd, "%s", name);
+	return GB_FILE_ERR_NONE;
+}
+
+gbFileError
+gb_file_close(gbFile *file)
+{
+	if (!file)
+		return GB_FILE_ERR_INVALID;
+
+	if (file->name) gb_free(gb_heap_allocator(), file->name);
+
+	if (file->fd == cast(intptr)INVALID_HANDLE_VALUE)
+		return GB_FILE_ERR_INVALID;
+
+	_close(file->fd);
+
+	return GB_FILE_ERR_NONE;
+}
+
+b32
+gb_file_read(gbFile *f, void *buffer, isize size)
+{
+	int bytes_read;
+	int fd = f->fd;
+	/* TODO(bill): Do I _need_ this locking or is something else better? */
+	// _locking(fd, _LK_LOCK, size);
+	bytes_read = _read(fd, buffer, cast(unsigned int)size);
+	// _locking(fd, _LK_UNLCK, size);
+	return bytes_read == size;
+}
+
+b32
+gb_file_write(gbFile *f, void const *buffer, isize size)
+{
+	int bytes_written;
+	int fd = f->fd;
+	/* TODO(bill): Do I _need_ this locking or is something else better? */
+	// _locking(fd, _LK_LOCK, size);
+	bytes_written = _write(fd, buffer, cast(unsigned int)size);
+	// _locking(fd, _LK_UNLCK, size);
+	return bytes_written == size;
+}
+
+gb_inline i64
+gb_file_seek(gbFile *file, i64 offset, gbSeekWhence whence)
+{
+	return _lseeki64(cast(int)file->fd, offset, whence);
+}
+
+gb_inline i64
+gb_file_tell(gbFile *file)
+{
+	return _telli64(cast(int)file->fd);
+}
+
+gb_inline i64
+gb_file_size(gbFile *file)
+{
+	return _filelengthi64(cast(int)file->fd);
+}
+
+gb_inline uintptr
+gb_file_fd(gbFile *file)
+{
+	if (file) return cast(uintptr)file->fd;
+	return cast(uintptr)INVALID_HANDLE_VALUE;
+}
+
+gb_inline gbFileError
+gb_file_truncate(gbFile *file, i64 size)
+{
+	gbFileError err = GB_FILE_ERR_NONE;
+	int i = _chsize_s(cast(int)file->fd, size);
+	if (i != 0)
+		err = GB_FILE_ERR_TRUNCATION_FAILURE;
+	return err;
+}
+
 
 b32
 gb_file_is_exist(char const *name)
@@ -5843,51 +5958,12 @@ gb_file_is_exist(char const *name)
 	return found;
 }
 
-b32
-gb_file_is_not_exist(char const *name)
-{
-	return !gb_file_is_exist(name);
-}
+#else
+#error Implement File System
+#endif
 
 
-/* NOTE(bill): Who thought errno was a good idea, really?! */
-#include <errno.h>
-
-
-gbFileError
-gb_file_open_file_va(gbFile *file, u32 flag, gbFileMode perm, char const *filename, va_list va)
-{
-	b32 chmod = false;
-	int fd = 0; /* NOTE(bill): Must be an int on windows */
-	char const *name = gb_sprintf_va(filename, va);
-
-	if ((flag&GB_O_CREATE) != 0  && (perm&GB_FILE_MODE_STICKY) != 0) {
-		if (gb_file_is_not_exist(name))
-			chmod = true;
-	}
-
-	/* Make sure it's binary */
-	fd = _open(name, flag|0x8000, perm);
-	if (fd < 0) {
-		/* TODO(bill): Remove errno if possible because it's a stupid concept */
-		switch (errno) {
-		case EACCES: return GB_FILE_ERR_PERMISSION;
-		case EEXIST: return GB_FILE_ERR_EXISTS;
-		case ENOENT: return GB_FILE_ERR_NOT_EXISTS;
-
-		case EMFILE: /* FALLTHROUGH */
-		case EINVAL:
-		default:
-			return GB_FILE_ERR_INVALID;
-		}
-	}
-
-	if (chmod) gb_chmod(name, perm);
-
-	gb_file_new(file, fd, name);
-	return GB_FILE_ERR_NONE;
-}
-
+gb_inline b32 gb_file_is_not_exist(char const *name) { return !gb_file_is_exist(name); }
 
 gbFileError
 gb_file_create(gbFile *file, char const *filename, ...)
@@ -5909,11 +5985,12 @@ gb_file_new(gbFile *file, uintptr fd, char const *filename, ...)
 
 	va_start(va, filename);
 	gb_zero_struct(file);
-	file->fd   = fdi;
-	file->name = gb_alloc_str(gb_heap_allocator(), gb_sprintf_va(filename, va));
+	file->fd = fdi;
+	if (filename)
+		file->name = gb_alloc_str(gb_heap_allocator(), gb_sprintf_va(filename, va));
+	else
+		file->name = NULL;
 	va_end(va);
-
-	gb_mutex_init(&file->mutex);
 
 	gb_file_last_write_time("%s", file->name);
 }
@@ -5941,62 +6018,16 @@ gb_file_open_file(gbFile *file, u32 flag, gbFileMode perm, char const *filename,
 	return err;
 }
 
-
-
-gbFileError
-gb_file_close(gbFile *file)
-{
-	if (!file)
-		return GB_FILE_ERR_INVALID;
-
-	gb_mutex_destroy(&file->mutex);
-
-	if (file->name) gb_free(gb_heap_allocator(), file->name);
-
-	if (file->fd == cast(intptr)INVALID_HANDLE_VALUE)
-		return GB_FILE_ERR_INVALID;
-
-	_close(cast(int)file->fd);
-
-	return GB_FILE_ERR_NONE;
-}
-
-b32
-gb_file_read(gbFile *f, void *buffer, isize size)
-{
-	int bytes_read;
-
-	gb_mutex_lock(&f->mutex);
-	bytes_read = _read(cast(int)f->fd, buffer, cast(unsigned int)size);
-	gb_mutex_unlock(&f->mutex);
-
-	return bytes_read == size;
-}
-
-b32
-gb_file_write(gbFile *f, void const *buffer, isize size)
-{
-	int bytes_written;
-
-	gb_mutex_lock(&f->mutex);
-	bytes_written = _write(cast(int)f->fd, buffer, cast(unsigned int)size);
-	gb_mutex_unlock(&f->mutex);
-
-	return bytes_written == size;
-}
-
 b32
 gb_file_read_at(gbFile *f, void *buffer, isize size, i64 offset)
 {
 	int bytes_read;
 	i64 prev_offset;
 
-	gb_mutex_lock(&f->mutex);
-	prev_offset = gb_file_seek(f, 0, GB_SEEK_CUR);
+	prev_offset = gb_file_tell(f);
 	gb_file_seek(f, offset, GB_SEEK_SET);
-	bytes_read = _read(cast(int)f->fd, buffer, cast(unsigned int)size);
+	bytes_read = gb_file_read(f, buffer, size);
 	gb_file_seek(f, prev_offset, GB_SEEK_SET);
-	gb_mutex_unlock(&f->mutex);
 
 	return bytes_read == size;
 }
@@ -6007,54 +6038,17 @@ gb_file_write_at(gbFile *f, void const *buffer, isize size, i64 offset)
 	int bytes_written;
 	i64 prev_offset = 0;
 
-	gb_mutex_lock(&f->mutex);
-
-	prev_offset = gb_file_seek(f, 0, GB_SEEK_CUR);
+	prev_offset = gb_file_tell(f);
 	gb_file_seek(f, offset, GB_SEEK_SET);
-
-	bytes_written = _write(cast(int)f->fd, buffer, cast(unsigned int)size);
-
+	bytes_written = gb_file_write(f, buffer, size);
 	gb_file_seek(f, prev_offset, GB_SEEK_SET);
-
-	gb_mutex_unlock(&f->mutex);
 
 	return bytes_written == size;
 }
 
-i64
-gb_file_seek(gbFile *file, i64 offset, gbSeekWhence whence)
-{
-	return _lseeki64(cast(int)file->fd, offset, whence);
-}
-
-i64
-gb_file_size(gbFile *file)
-{
-	return _filelengthi64(cast(int)file->fd);
-}
-
-uintptr
-gb_file_fd(gbFile *file)
-{
-	if (file) return cast(uintptr)file->fd;
-	return cast(uintptr)INVALID_HANDLE_VALUE;
-}
-
 char const *gb_file_name(gbFile *file) { return file->name ? file->name : ""; }
 
-gbFileError
-gb_file_truncate(gbFile *file, i64 size)
-{
-	gbFileError err = GB_FILE_ERR_NONE;
-	int i = _chsize_s(cast(int)file->fd, size);
-	if (i != 0)
-		err = GB_FILE_ERR_TRUNCATION_FAILURE;
-	return err;
-}
-
-#endif
-
-b32
+gb_inline b32
 gb_file_has_changed(gbFile *file)
 {
 	b32 result = false;
@@ -6171,6 +6165,13 @@ gb_file_last_write_time(char const *filepath, ...)
 	va_end(va);
 
 	return cast(gbFileTime)result;
+}
+
+gb_inline b32
+gb_file_rename(char const *old_filename, char const *new_filename)
+{
+	GB_PANIC("TODO(bill): Implement");
+	return false;
 }
 
 gb_inline b32
