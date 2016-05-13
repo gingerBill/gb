@@ -1,4 +1,4 @@
-/* gb.h - v0.11a - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.12  - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -26,6 +26,7 @@ Conventions used:
 
 
 Version History:
+	0.12  - New File Handing System! No stdio or stdlib! (WIN32 Only)
 	0.11a - Add string precision and width (experimental)
 	0.11  - Started making stdio & stdlib optional (Not tested much)
 	0.10c - Fix gb_endian_swap32()
@@ -187,12 +188,7 @@ extern "C" {
 /* TODO(bill): How many of these headers do I really need? */
 #include <stdarg.h>
 #include <stddef.h>
-#include <sys/stat.h> /* NOTE(bill): File info */
 #include <intrin.h>
-
-#if !defined(GB_NO_STDIO)
-#include <stdio.h>    /* TODO(bill): Remove and replace with OS Specific stuff */
-#endif
 
 #if defined(GB_SYSTEM_WINDOWS)
 	#define NOMINMAX            1
@@ -201,7 +197,8 @@ extern "C" {
 	#define VC_EXTRALEAN        1
 	#include <windows.h>
 	#include <direct.h>
-	#include <malloc.h>
+	#include <malloc.h> /* NOTE(bill): _aligned_*() */
+	#include <io.h> /* NOTE(bill): File functions */
 #else
 	#include <dlfcn.h>
 	#include <mach/mach_time.h>
@@ -211,6 +208,7 @@ extern "C" {
 	#include <unistd.h>
 #endif
 
+#include <sys/stat.h> /* NOTE(bill): File info */
 
 
 
@@ -305,11 +303,11 @@ typedef i32 b32; /* NOTE(bill): Prefer this!!! */
 /* NOTE(bill): Get true and false */
 #if !defined(__cplusplus)
 	#if (defined(_MSC_VER) && _MSC_VER <= 1800) || !defined(__STDC_VERSION__)
-		#ifndef false
-		#define false 0
-		#endif
 		#ifndef true
-		#define true 1
+		#define true  (0 == 0)
+		#endif
+		#ifndef false
+		#define false (0 != 0)
 		#endif
 	#else
 		#include <stdbool.h>
@@ -480,7 +478,6 @@ extern "C++" {
 
 
 
-
 /***************************************************************
  *
  * Defer statement
@@ -490,7 +487,9 @@ extern "C++" {
  * NOTE: C++11 (and above) only!
  */
 #if defined(__cplusplus) && __cplusplus >= 201103L
+#if 1
 extern "C++" {
+#endif
 namespace gb {
 
 	/* NOTE(bill): Stupid fucking templates */
@@ -517,7 +516,9 @@ namespace gb {
 	#define defer(code)      auto GB_DEFER_3(_defer_) = gb::priv_defer_func([&](){code;})
 	#endif
 } /* namespace gb */
+#if 1
 }
+#endif
 
 /* Example */
 #if 0
@@ -551,7 +552,7 @@ namespace gb {
 
 
 #ifndef GB_BIT
-#define GB_BIT(x) (1<<x)
+#define GB_BIT(x) (1<<(x))
 #endif
 
 #ifndef gb_min
@@ -636,23 +637,24 @@ GB_DEF void gb_assert_handler(char const *condition, char const *file, i32 line,
 #define GB_PRINTF_ARGS(FMT)
 #endif
 
+/* TODO(bill): Allow printf-ing to a gbFile!!! */
 
-#if !defined(GB_NO_STDIO)
-GB_DEF isize gb_printf     (char const *fmt, ...) GB_PRINTF_ARGS(1);
-GB_DEF isize gb_printf_va  (char const *fmt, va_list va);
-GB_DEF isize gb_fprintf    (FILE *f, char const *fmt, ...) GB_PRINTF_ARGS(2);
-GB_DEF isize gb_fprintf_va (FILE *f, char const *fmt, va_list va);
-#endif
+GB_DEF isize gb_printf        (char const *fmt, ...) GB_PRINTF_ARGS(1);
+GB_DEF isize gb_printf_va     (char const *fmt, va_list va);
+GB_DEF isize gb_printf_err    (char const *fmt, ...) GB_PRINTF_ARGS(2);
+GB_DEF isize gb_printf_err_va (char const *fmt, va_list va);
+
 GB_DEF char *gb_sprintf    (char const *fmt, ...) GB_PRINTF_ARGS(1); /* NOTE(bill): A locally persisting buffer is used internally */
 GB_DEF char *gb_sprintf_va (char const *fmt, va_list va);            /* NOTE(bill): A locally persisting buffer is used internally */
 GB_DEF isize gb_snprintf   (char *str, isize n, char const *fmt, ...) GB_PRINTF_ARGS(3);
 GB_DEF isize gb_snprintf_va(char *str, isize n, char const *fmt, va_list va);
 
-#if !defined(GB_NO_STDIO)
-GB_DEF isize gb_println (char const *str);
-GB_DEF isize gb_fprintln(FILE *f, char const *str);
-#endif
-
+/* NOTE(bill): If you need an fprintf equivalent, you will need to but write to the file directly e.g.
+ * char buf[...];
+ * isize len = gb_snprintf(buf, gb_size_of(buf), "", ...);
+ * isize offset = ...;
+ * gb_file_write_at(&file, buf, len, offset);
+ */
 
 /***************************************************************
  *
@@ -682,6 +684,7 @@ GB_DEF void *gb_memcopy   (void *gb_restrict dest, void const *gb_restrict sourc
 GB_DEF void *gb_memmove   (void *dest, void const *source, isize size);
 GB_DEF void *gb_memset    (void *data, u8 byte_value, isize size);
 GB_DEF i32   gb_memcompare(void const *s1, void const *s2, isize size);
+GB_DEF void  gb_memswap   (void *i, void *j, isize size);
 
 
 /* NOTE(bill): Very similar to doing `*cast(T *)(&u)` */
@@ -1070,9 +1073,9 @@ GB_DEF GB_COMPARE_PROC_PTR(gb_f64_cmp  (isize offset));
 GB_DEF GB_COMPARE_PROC_PTR(gb_char_cmp (isize offset));
 
 /* TODO(bill): Better sorting algorithms */
-
-#define gb_qsort_array(array, count, compare_proc) gb_qsort(array, count, gb_size_of(*(array)), compare_proc)
-GB_DEF void gb_qsort(void *base, isize count, isize size, gbCompareProc compare_proc);
+/* NOTE(bill): Uses quick sort for large arrays but insertion sort for small */
+#define gb_sort_array(array, count, compare_proc) gb_sort(array, count, gb_size_of(*(array)), compare_proc)
+GB_DEF void gb_sort(void *base, isize count, isize size, gbCompareProc compare_proc);
 
 /* NOTE(bill): the count of temp == count of items */
 GB_DEF void gb_radix_sort_u8 (u8  *gb_restrict items, u8  *gb_restrict temp, isize count);
@@ -1571,36 +1574,29 @@ GB_DEF gbHashTableEntry const *gb_multi_hash_table_find_first_entry(gbHashTable 
 GB_DEF gbHashTableEntry const *gb_multi_hash_table_find_next_entry (gbHashTable const *h, gbHashTableEntry const *e);
 
 
+
+
+
 /***************************************************************
  *
  * File Handling
  *
  */
-#if !defined(GB_NO_STDIO)
-/* TODO(bill): Get working without stdio */
+
+typedef struct gbDirInfo {
+	u8 *buf;
+	isize buf_count;
+	isize buf_pos;
+} gbDirInfo;
+
 typedef u64 gbFileTime;
 
-typedef enum gbFileAccess {
-	GB_FILE_ACCESS_READ  = 1,
-	GB_FILE_ACCESS_WRITE = 2
-} gbFileAccess;
-
-typedef enum gbFileType {
-	GB_FILE_TYPE_UNKNOWN,
-	GB_FILE_TYPE_FILE,
-	GB_FILE_TYPE_DIRECTORY,
-
-	GB_FILE_TYPE_COUNT
-} gbFileType;
-
 typedef struct gbFile {
-	void *handle; /* File to fread/fwrite */
-	char *path;
-	i64 size;
-	b32 is_open;
-	gbFileAccess access;
-	gbFileType type;
+	intptr fd;
+	char *name;
+	gbDirInfo *dir_info;
 	gbFileTime last_write_time;
+	gbMutex mutex; /* TODO(bill): Need a mutex? */
 } gbFile;
 
 typedef struct gbFileContents {
@@ -1608,23 +1604,95 @@ typedef struct gbFileContents {
 	isize size;
 } gbFileContents;
 
+typedef u32 gbFileMode;
 
-GB_DEF b32 gb_file_create     (gbFile *file, char const *filepath, ...) GB_PRINTF_ARGS(2); /* TODO(bill): Give file permissions */
-GB_DEF b32 gb_file_open       (gbFile *file, char const *filepath, ...) GB_PRINTF_ARGS(2);
-GB_DEF b32 gb_file_close      (gbFile *file);
-GB_DEF b32 gb_file_read_at    (gbFile *file, void *buffer, isize size, i64 offset);
-GB_DEF b32 gb_file_write_at   (gbFile *file, void const *buffer, isize size, i64 offset);
-GB_DEF i64 gb_file_size       (gbFile *file);
-GB_DEF b32 gb_file_has_changed(gbFile *file);
+#define GB_FILE_MODE_DIR         cast(gbFileMode)GB_BIT(31) /* d: is a directory        */
+#define GB_FILE_MODE_APPEND      cast(gbFileMode)GB_BIT(30) /* a: append-only           */
+#define GB_FILE_MODE_EXCLUSIVE   cast(gbFileMode)GB_BIT(29) /* l: exclusive use         */
+#define GB_FILE_MODE_TEMPORARY   cast(gbFileMode)GB_BIT(28) /* T: temporary file        */
+#define GB_FILE_MODE_SYMLINK     cast(gbFileMode)GB_BIT(27) /* L: symbolic link         */
+#define GB_FILE_MODE_DEVICE      cast(gbFileMode)GB_BIT(26) /* D: device file           */
+#define GB_FILE_MODE_NAMED_PIPE  cast(gbFileMode)GB_BIT(25) /* p: named pipe            */
+#define GB_FILE_MODE_SOCKET      cast(gbFileMode)GB_BIT(24) /* S: UNIX domain socket    */
+#define GB_FILE_MODE_SETUID      cast(gbFileMode)GB_BIT(23) /* u: setuid                */
+#define GB_FILE_MODE_SETGID      cast(gbFileMode)GB_BIT(22) /* g: setgid                */
+#define GB_FILE_MODE_CHAR_DEVICE cast(gbFileMode)GB_BIT(21) /* c: UNIX character device */
+#define GB_FILE_MODE_STICKY      cast(gbFileMode)GB_BIT(20) /* t: sticky                */
+
+/* NOTE(bill): Mask for which non will be set for regular files */
+#define GB_FILE_MODE_TYPE GB_FILE_MODE_DIR | GB_FILE_MODE_SYMLINK | \
+                          GB_FILE_MODE_NAMED_PIPE | GB_FILE_MODE_SOCKET | \
+                          GB_FILE_MODE_DEVICE
+
+#define GB_FILE_MODE_PERM cast(gbFileMode)0777 /* UNIX Permission bits */
+
+typedef enum gbFileFlag {
+	GB_O_RDONLY = 0x0000,
+	GB_O_WRONLY = 0x0001,
+	GB_O_RDWR   = 0x0002,
+	GB_O_APPEND = 0x0008,
+	GB_O_CREATE = 0x0100,
+	GB_O_TRUNC  = 0x0200,
+	GB_O_EXCL   = 0x0400
+} gbFileFlag;
+
+typedef enum gbSeekWhence {
+	GB_SEEK_SET = 0,
+	GB_SEEK_CUR = 1,
+	GB_SEEK_END = 2
+} gbSeekWhence;
+
+typedef enum gbFileError {
+	GB_FILE_ERR_NONE,
+	GB_FILE_ERR_INVALID,
+	GB_FILE_ERR_EXISTS,
+	GB_FILE_ERR_NOT_EXISTS,
+	GB_FILE_ERR_PERMISSION,
+	GB_FILE_ERR_TRUNCATION_FAILURE
+} gbFileError;
+
+/* TODO(bill): std(in|out|err) files */
+
+
+GB_DEF gbFileError gb_file_create     (gbFile *file, char const *filename, ...) GB_PRINTF_ARGS(2);
+GB_DEF void        gb_file_new        (gbFile *file, uintptr fd, char const *filename, ...) GB_PRINTF_ARGS(3);
+GB_DEF gbFileError gb_file_open       (gbFile *file, char const *filename, ...) GB_PRINTF_ARGS(2);
+GB_DEF gbFileError gb_file_open_file  (gbFile *file, u32 flag, gbFileMode perm, char const *filename, ...) GB_PRINTF_ARGS(4);
+GB_DEF gbFileError gb_file_close      (gbFile *file);
+GB_DEF b32         gb_file_read       (gbFile *file, void *buffer, isize size);
+GB_DEF b32         gb_file_write      (gbFile *file, void const *buffer, isize size);
+GB_DEF b32         gb_file_read_at    (gbFile *file, void *buffer, isize size, i64 offset);
+GB_DEF b32         gb_file_write_at   (gbFile *file, void const *buffer, isize size, i64 offset);
+GB_DEF i64         gb_file_seek       (gbFile *file, i64 offset, gbSeekWhence whence);
+GB_DEF i64         gb_file_size       (gbFile *file);
+GB_DEF uintptr     gb_file_fd         (gbFile *file);
+GB_DEF char const *gb_file_name       (gbFile *file);
+GB_DEF gbFileError gb_file_truncate   (gbFile *file, i64 size);
+
+GB_DEF b32         gb_file_has_changed(gbFile *file);
+
+
+/* TODO(bill): read_dir and read_dir_names */
+
+GB_DEF b32         gb_file_mode_is_dir    (gbFileMode m);
+GB_DEF b32         gb_file_mode_is_regular(gbFileMode m);
+GB_DEF i32         gb_file_mode_perm      (gbFileMode m);
+GB_DEF char const *gb_file_mode_string    (gbFileMode m); /* NOTE(bill): Temporary local persisting buffer */
+
+GB_DEF b32 gb_file_is_exist    (char const *name);
+GB_DEF b32 gb_file_is_not_exist(char const *name);
+
 
 GB_DEF gbFileTime gb_file_last_write_time(char const *filepath, ...) GB_PRINTF_ARGS(1);
 
-GB_DEF b32 gb_file_copy(char const *existing_filename, char const *new_filename, b32 fail_if_exists);
-GB_DEF b32 gb_file_move(char const *existing_filename, char const *new_filename);
+GB_DEF i32 gb_chmod(char const *name, gbFileMode perm);
+
+GB_DEF b32 gb_file_rename(char const *old_filename, char const *new_filename);
+GB_DEF b32 gb_file_copy  (char const *existing_filename, char const *new_filename, b32 fail_if_exists);
+GB_DEF b32 gb_file_move  (char const *existing_filename, char const *new_filename);
 
 GB_DEF gbFileContents gb_file_read_contents(gbAllocator a, b32 zero_terminate, char const *filepath, ...) GB_PRINTF_ARGS(3);
 
-#endif
 
 #ifndef GB_PATH_SEPARATOR
 	#if defined(GB_SYSTEM_WINDOWS)
@@ -1927,19 +1995,19 @@ gb_printf(char const *fmt, ...)
 	isize res;
 	va_list va;
 	va_start(va, fmt);
-	res = gb_fprintf_va(stdout, fmt, va);
+	res = gb_printf_va(fmt, va);
 	va_end(va);
 	return res;
 }
 
 
 isize
-gb_fprintf(FILE *f, char const *fmt, ...)
+gb_printf_err(char const *fmt, ...)
 {
 	isize res;
 	va_list va;
 	va_start(va, fmt);
-	res = gb_fprintf_va(f, fmt, va);
+	res = gb_printf_err_va(fmt, va);
 	va_end(va);
 	return res;
 }
@@ -1969,12 +2037,37 @@ gb_snprintf(char *str, isize n, char const *fmt, ...)
 
 
 #if !defined(GB_NO_STDIO)
-gb_inline isize gb_printf_va (char const *fmt, va_list va)          { return gb_fprintf_va(stdout, fmt, va); }
 gb_inline isize
-gb_fprintf_va(FILE *f, char const *fmt, va_list va)
+gb_printf_va(char const *fmt, va_list va)
 {
-	/* TODO(bill): Make gb_fprintf_va _not_ use vfprintf internally */
-	return vfprintf(f, fmt, va);
+	gb_local_persist char buf[4096];
+	isize len = gb_snprintf_va(buf, gb_size_of(buf), fmt, va);
+#if defined(_MSC_VER)
+	{
+		HANDLE std_out_handle = GetStdHandle(STD_OUTPUT_HANDLE);
+		DWORD written_bytes = 0;
+		WriteFile(std_out_handle, buf, cast(DWORD)len, &written_bytes, NULL);
+	}
+#else
+#error Implementation gb_printf_va
+#endif
+	return len;
+}
+gb_inline isize
+gb_printf_err_va(char const *fmt, va_list va)
+{
+	gb_local_persist char buf[4096];
+	isize len = gb_snprintf_va(buf, gb_size_of(buf), fmt, va);
+#if defined(_MSC_VER)
+	{
+		HANDLE std_err_handle = GetStdHandle(STD_ERROR_HANDLE);
+		DWORD written_bytes = 0;
+		WriteFile(std_err_handle, buf, cast(DWORD)len, &written_bytes, NULL);
+	}
+#else
+#error Implementation gb_printf_va
+#endif
+	return len;
 }
 #endif
 
@@ -2347,41 +2440,19 @@ gb_snprintf_va(char *text, isize max_len, char const *fmt, va_list va)
 #endif
 }
 
-#if !defined(GB_NO_STDIO)
-gb_inline isize gb_println(char const *str) { return gb_fprintln(stdout, str); }
-
-gb_inline isize
-gb_fprintln(FILE *f, char const *str)
-{
-	isize res;
-	res = gb_fprintf(f, "%s", str);
-	gb_fprintf(f, "\n");
-	res++;
-	return res;
-}
-#endif
-
-
 
 
 void
 gb_assert_handler(char const *condition, char const *file, i32 line, char const *msg)
 {
-#if !defined(GB_NO_STDIO)
-	gb_fprintf(stderr, "%s:%d: Assert Failure: ", file, line);
+	gb_printf_err("%s:%d: Assert Failure: ", file, line);
 	if (condition)
-		gb_fprintf(stderr, "`%s` ", condition);
+		gb_printf_err("`%s` ", condition);
 
 	if (msg)
-		gb_fprintf(stderr, "%s", msg);
+		gb_printf_err("%s", msg);
 
-	gb_fprintf(stderr, "\n");
-#else
-	gb_unused(condition);
-	gb_unused(file);
-	gb_unused(line);
-	gb_unused(msg);
-#endif
+	gb_printf_err("\n");
 }
 
 
@@ -2533,6 +2604,20 @@ gb_memcompare(void const *s1, void const *s2, isize size)
 	return 0;
 }
 
+gb_inline void
+gb_memswap(void *i, void *j, isize size)
+{
+	/* TODO(bill): Heavily optimize */
+	u8 *a = cast(u8 *)i;
+	u8 *b = cast(u8 *)j;
+	if (a != b) {
+		while (size--) {
+			u8 c = *a;
+			*a++ = *b;
+			*b++ = c;
+		}
+	}
+}
 
 
 
@@ -3251,13 +3336,19 @@ gb_heap_allocator(void)
 	return a;
 }
 
-
 GB_ALLOCATOR_PROC(gb_heap_allocator_proc)
 {
 	gb_unused(allocator_data);
 	gb_unused(options);
+	gb_unused(old_size);
 /* TODO(bill): Throughly test! */
 	switch (type) {
+#if defined(GB_SYSTEM_WINDOWS)
+	case GB_ALLOCATION_ALLOC:  return _aligned_malloc(size, alignment);
+	case GB_ALLOCATION_FREE:   _aligned_free(old_memory); break;
+	case GB_ALLOCATION_RESIZE: return _aligned_realloc(old_memory, size, alignment);
+#else
+	/* TODO(bill): *nix version that's decent */
 	case GB_ALLOCATION_ALLOC: {
 		isize total_size = size + alignment + gb_size_of(gbAllocationHeader);
 		void *ptr = malloc(total_size);
@@ -3271,13 +3362,14 @@ GB_ALLOCATOR_PROC(gb_heap_allocator_proc)
 		free(gb_allocation_header(old_memory));
 	} break;
 
-	case GB_ALLOCATION_FREE_ALL:
-		break;
-
 	case GB_ALLOCATION_RESIZE: {
 		gbAllocator a = gb_heap_allocator();
 		return gb_default_resize_align(a, old_memory, old_size, size, alignment);
 	} break;
+#endif
+
+	case GB_ALLOCATION_FREE_ALL:
+		break;
 	}
 
 	return NULL; /* NOTE(bill): Default return value */
@@ -3928,51 +4020,90 @@ GB_COMPARE_PROC_PTR(gb_str_cmp(isize offset))
 
 #undef GB__COMPARE_PROC
 
+/* TODO(bill): Make user definable? */
+#define GB__SORT_STACK_SIZE   64
+#define GB__SORT_INSERT_SORT_THRESHOLD  8
+
+#define GB__SORT_PUSH(_base, _limit) do { \
+	stack_ptr[0] = (_base); \
+	stack_ptr[1] = (_limit); \
+	stack_ptr += 2; \
+} while (0)
+
+
+#define GB__SORT_POP(_base, _limit) do { \
+	stack_ptr -= 2; \
+	(_base)  = stack_ptr[0]; \
+	(_limit) = stack_ptr[1]; \
+} while (0)
+
 
 
 gb_inline void
-gb__qsort_swap(void *x, void *y, isize len)
+gb_sort(void *base_, isize count, isize size, gbCompareProc cmp)
 {
-	u8 *a = cast(void *)x;
-	u8 *b = cast(void *)y;
-	while (len--) {
-		gb_swap(u8, *a, *b);
-		*a++, *b++;
-	}
-}
+	u8 *i, *j;
+	u8 *base = cast(u8 *)base_;
+	u8 *limit = base + count*size;
+	isize threshold = GB__SORT_INSERT_SORT_THRESHOLD * size;
 
-gb_inline void
-gb__qsort(u8 *array, isize size, gbCompareProc cmp, isize begin, isize end)
-{
-	/* TODO(bill): Make non-recursive */
-	if (end > begin) {
-		void *pivot = array + begin;
-		isize l = begin + size;
-		isize r = end;
-		while (l < r) {
-			if (cmp(array+l, pivot) < 0)
-				l += size;
-			else if (cmp(array+r, pivot) > 0)
-				l -= size;
-			else if (l < r)
-				gb__qsort_swap(array+l, array+r, size);
+	/* NOTE(bill): Prepare the stack */
+	u8 *stack[GB__SORT_STACK_SIZE] = {0};
+	u8 **stack_ptr = stack;
+
+	for (;;) {
+		if ((limit-base) > threshold) {
+			/* NOTE(bill): Quick sort */
+			i = base + size;
+			j = limit - size;
+
+			gb_memswap(((limit-base)/size/2) * size + base, base, size);
+			if (cmp(i, j) > 0)    gb_memswap(i, j, size);
+			if (cmp(base, j) > 0) gb_memswap(base, j, size);
+			if (cmp(i, base) > 0) gb_memswap(i, base, size);
+
+			for (;;) {
+				do {
+					i += size;
+				} while(cmp(i, base) < 0);
+				do {
+					j -= size;
+				} while (cmp(j, base) > 0);
+				if (i > j)
+					break;
+				gb_memswap(i, j, size);
+			}
+
+			gb_memswap(base, j, size);
+
+			if (j - base > limit - i) {
+				GB__SORT_PUSH(base, j);
+				base = i;
+			} else {
+				GB__SORT_PUSH(i, limit);
+				limit = j;
+			}
+		} else {
+			/* NOTE(bill): Insertion sort */
+			for (j = base, i = j+size;
+			     i < limit;
+			     j = i, i += size) {
+				for (; cmp(j, j+size) > 0; j -= size) {
+					gb_memswap(j, j+size, size);
+					if (j == base)
+						break;
+				}
+			}
+
+			if (stack_ptr == stack)
+				break; /* NOTE(bill): Sorting is done! */
+			GB__SORT_POP(base, limit);
 		}
-
-		l -= size;
-		gb__qsort_swap(array+begin, array+l, size);
-		gb__qsort(array, size, cmp, begin, l);
-		gb__qsort(array, size, cmp, r, end);
 	}
 }
 
-
-
-gb_inline void
-gb_qsort(void *base, isize count, isize size, gbCompareProc cmp)
-{
-	/* TODO(bill): Maybe change the default sort from qsort? */
-	gb__qsort(cast(u8 *)base, size, cmp, 0, count*size);
-}
+#undef GB__SORT_PUSH
+#undef GB__SORT_POP
 
 void
 gb_radix_sort_u8(u8 *gb_restrict items, u8 *gb_restrict temp, isize count)
@@ -5688,149 +5819,293 @@ gb_hash_table_clear(gbHashTable *h)
  *
  */
 
-#if !defined(GB_NO_STDIO)
-/* TODO(bill): Get working without stdio */
+
+
+/* TODO(bill): std(in|out|err) files */
+
+#if defined(GB_SYSTEM_WINDOWS)
+
+i32
+gb_chmod(char const *name, gbFileMode perm)
+{
+	return _chmod(name, perm & GB_FILE_MODE_PERM);
+}
 
 b32
-gb_file_create(gbFile *file, char const *filepath, ...)
+gb_file_is_exist(char const *name)
+{
+	WIN32_FIND_DATA data;
+	HANDLE handle = FindFirstFile(name, &data);
+	b32 found = handle != INVALID_HANDLE_VALUE;
+	if (found) FindClose(handle);
+	return found;
+}
+
+b32
+gb_file_is_not_exist(char const *name)
+{
+	return !gb_file_is_exist(name);
+}
+
+
+/* NOTE(bill): Who thought errno was a good idea, really?! */
+#include <errno.h>
+
+
+gbFileError
+gb_file_open_file_va(gbFile *file, u32 flag, gbFileMode perm, char const *filename, va_list va)
+{
+	b32 chmod = false;
+	int fd = 0; /* NOTE(bill): Must be an int on windows */
+	char const *name = gb_sprintf_va(filename, va);
+
+	if ((flag&GB_O_CREATE) != 0  && (perm&GB_FILE_MODE_STICKY) != 0) {
+		if (gb_file_is_not_exist(name))
+			chmod = true;
+	}
+
+	/* Make sure it's binary */
+	fd = _open(name, flag|0x8000, perm);
+	if (fd < 0) {
+		/* TODO(bill): Remove errno if possible because it's a stupid concept */
+		switch (errno) {
+		case EACCES: return GB_FILE_ERR_PERMISSION;
+		case EEXIST: return GB_FILE_ERR_EXISTS;
+		case ENOENT: return GB_FILE_ERR_NOT_EXISTS;
+
+		case EMFILE: /* FALLTHROUGH */
+		case EINVAL:
+		default:
+			return GB_FILE_ERR_INVALID;
+		}
+	}
+
+	if (chmod) gb_chmod(name, perm);
+
+	gb_file_new(file, fd, name);
+	return GB_FILE_ERR_NONE;
+}
+
+
+gbFileError
+gb_file_create(gbFile *file, char const *filename, ...)
+{
+	gbFileError err;
+	va_list va;
+	va_start(va, filename);
+	err = gb_file_open_file_va(file, GB_O_RDWR|GB_O_CREATE|GB_O_TRUNC, 0666, filename, va);
+	va_end(va);
+	return err;
+}
+
+void
+gb_file_new(gbFile *file, uintptr fd, char const *filename, ...)
 {
 	va_list va;
-	char *path;
-	gb_zero_struct(file);
+	intptr fdi = cast(intptr)fd;
+	if (fdi < 0) return;
 
-	va_start(va, filepath);
-	path = gb_sprintf_va(filepath, va);
+	va_start(va, filename);
+	gb_zero_struct(file);
+	file->fd   = fdi;
+	file->name = gb_alloc_str(gb_heap_allocator(), gb_sprintf_va(filename, va));
 	va_end(va);
 
-	file->handle = fopen(path, "wb");
-	if (file->handle) {
-		file->path = gb_alloc_str(gb_heap_allocator(), path);
-		file->size = gb_file_size(file);
-		file->is_open = true;
-		file->access = GB_FILE_ACCESS_WRITE;
-		file->last_write_time = gb_file_last_write_time("%s", file->path);
-		return true;
-	}
-	return false;
+	gb_mutex_init(&file->mutex);
+
+	gb_file_last_write_time("%s", file->name);
+}
+
+
+gbFileError
+gb_file_open(gbFile *file, char const *filename, ...)
+{
+	gbFileError err;
+	va_list va;
+	va_start(va, filename);
+	err = gb_file_open_file_va(file, GB_O_RDONLY, 0, filename, va);
+	va_end(va);
+	return err;
+}
+
+gbFileError
+gb_file_open_file(gbFile *file, u32 flag, gbFileMode perm, char const *filename, ...)
+{
+	gbFileError err;
+	va_list va;
+	va_start(va, filename);
+	err = gb_file_open_file_va(file, flag, perm, filename, va);
+	va_end(va);
+	return err;
 }
 
 
 
-b32
-gb_file_open(gbFile *file, char const *filepath, ...)
-{
-	va_list va;
-	char *path;
-	gb_zero_struct(file);
-
-	va_start(va, filepath);
-	path = gb_sprintf_va(filepath, va);
-	va_end(va);
-
-	file->handle = fopen(path, "rb");
-	if (file->handle) {
-		file->path = gb_alloc_str(gb_heap_allocator(), path);
-		file->size = gb_file_size(file);
-		file->is_open = true;
-		file->access  = GB_FILE_ACCESS_READ;
-		file->type    = GB_FILE_TYPE_UNKNOWN;
-	#if defined(_MSC_VER)
-		{
-			struct _stat64 st;
-			if (_stat64(path, &st) == 0) {
-				if ((st.st_mode & _S_IFREG) != 0)
-					file->type = GB_FILE_TYPE_FILE;
-				else if ((st.st_mode & _S_IFDIR) != 0)
-					file->type = GB_FILE_TYPE_DIRECTORY;
-			}
-		}
-	#else
-		{
-			struct stat64 st;
-			if (stat64(path, &st) == 0) {
-				if ((st.st_mode & S_IFREG) != 0)
-					file->type = GB_FILE_TYPE_FILE;
-				else if ((st.st_mode & S_IFDIR) != 0)
-					file->type = GB_FILE_TYPE_DIRECTORY;
-			}
-		}
-	#endif
-		file->last_write_time = gb_file_last_write_time("%s", file->path);
-		return true;
-	}
-	return false;
-}
-
-gb_inline b32
+gbFileError
 gb_file_close(gbFile *file)
 {
-	b32 result = true;
-	if (file && file->handle)
-		result = fclose(cast(FILE *)file->handle) != 0; /* TODO(bill): Handle fclose errors */
+	if (!file)
+		return GB_FILE_ERR_INVALID;
 
-	if (file->path) gb_free(gb_heap_allocator(), file->path);
-	file->is_open = false;
+	gb_mutex_destroy(&file->mutex);
 
-	return result;
+	if (file->name) gb_free(gb_heap_allocator(), file->name);
+
+	if (file->fd == cast(intptr)INVALID_HANDLE_VALUE)
+		return GB_FILE_ERR_INVALID;
+
+	_close(cast(int)file->fd);
+
+	return GB_FILE_ERR_NONE;
 }
 
-gb_inline b32
-gb_file_read_at(gbFile *file, void *buffer, isize size, i64 offset)
+b32
+gb_file_read(gbFile *f, void *buffer, isize size)
 {
-	i64 prev_cursor_pos;
+	int bytes_read;
 
-	GB_ASSERT(file->access == GB_FILE_ACCESS_READ);
+	gb_mutex_lock(&f->mutex);
+	bytes_read = _read(cast(int)f->fd, buffer, cast(unsigned int)size);
+	gb_mutex_unlock(&f->mutex);
 
-	prev_cursor_pos = ftell(cast(FILE *)file->handle);
-	fseek(cast(FILE *)file->handle, cast(long)offset, SEEK_SET);
-	fread(buffer, 1, size, cast(FILE *)file->handle);
-	fseek(cast(FILE *)file->handle, cast(long)prev_cursor_pos, SEEK_SET);
-	return true;
+	return bytes_read == size;
 }
 
-gb_inline b32
-gb_file_write_at(gbFile *file, void const *buffer, isize size, i64 offset)
+b32
+gb_file_write(gbFile *f, void const *buffer, isize size)
 {
-	isize written_size;
-	i64 prev_cursor_pos;
+	int bytes_written;
 
-	GB_ASSERT(file->access == GB_FILE_ACCESS_WRITE);
+	gb_mutex_lock(&f->mutex);
+	bytes_written = _write(cast(int)f->fd, buffer, cast(unsigned int)size);
+	gb_mutex_unlock(&f->mutex);
 
-	prev_cursor_pos = ftell(cast(FILE *)file->handle);
-	fseek(cast(FILE *)file->handle, cast(long)offset, SEEK_SET);
-
-	written_size = fwrite(buffer, 1, size, cast(FILE *)file->handle);
-	fseek(cast(FILE *)file->handle, cast(long)prev_cursor_pos, SEEK_SET);
-	if (written_size != size) {
-		GB_PANIC("Failed to write file data");
-		return false;
-	}
-
-	return true;
+	return bytes_written == size;
 }
 
-gb_inline i64
+b32
+gb_file_read_at(gbFile *f, void *buffer, isize size, i64 offset)
+{
+	int bytes_read;
+	i64 prev_offset;
+
+	gb_mutex_lock(&f->mutex);
+	prev_offset = gb_file_seek(f, 0, GB_SEEK_CUR);
+	gb_file_seek(f, offset, GB_SEEK_SET);
+	bytes_read = _read(cast(int)f->fd, buffer, cast(unsigned int)size);
+	gb_file_seek(f, prev_offset, GB_SEEK_SET);
+	gb_mutex_unlock(&f->mutex);
+
+	return bytes_read == size;
+}
+
+b32
+gb_file_write_at(gbFile *f, void const *buffer, isize size, i64 offset)
+{
+	int bytes_written;
+	i64 prev_offset = 0;
+
+	gb_mutex_lock(&f->mutex);
+
+	prev_offset = gb_file_seek(f, 0, GB_SEEK_CUR);
+	gb_file_seek(f, offset, GB_SEEK_SET);
+
+	bytes_written = _write(cast(int)f->fd, buffer, cast(unsigned int)size);
+
+	gb_file_seek(f, prev_offset, GB_SEEK_SET);
+
+	gb_mutex_unlock(&f->mutex);
+
+	return bytes_written == size;
+}
+
+i64
+gb_file_seek(gbFile *file, i64 offset, gbSeekWhence whence)
+{
+	return _lseeki64(cast(int)file->fd, offset, whence);
+}
+
+i64
 gb_file_size(gbFile *file)
 {
-	i64 result_size;
-
-	fseek(cast(FILE *)file->handle, 0, SEEK_END);
-	result_size = cast(i64)ftell(cast(FILE *)file->handle);
-	fseek(cast(FILE *)file->handle, 0, SEEK_SET);
-	return result_size;
+	return _filelengthi64(cast(int)file->fd);
 }
+
+uintptr
+gb_file_fd(gbFile *file)
+{
+	if (file) return cast(uintptr)file->fd;
+	return cast(uintptr)INVALID_HANDLE_VALUE;
+}
+
+char const *gb_file_name(gbFile *file) { return file->name ? file->name : ""; }
+
+gbFileError
+gb_file_truncate(gbFile *file, i64 size)
+{
+	gbFileError err = GB_FILE_ERR_NONE;
+	int i = _chsize_s(cast(int)file->fd, size);
+	if (i != 0)
+		err = GB_FILE_ERR_TRUNCATION_FAILURE;
+	return err;
+}
+
+#endif
 
 b32
 gb_file_has_changed(gbFile *file)
 {
 	b32 result = false;
-	gbFileTime last_write_time = gb_file_last_write_time("%s", file->path);
+	gbFileTime last_write_time = gb_file_last_write_time("%s", file->name);
 	if (file->last_write_time != last_write_time) {
 		result = true;
 		file->last_write_time = last_write_time;
 	}
 	return result;
 }
+
+
+
+/* TODO(bill): read_dir and read_dir_names */
+
+gb_inline b32 gb_file_mode_is_dir    (gbFileMode m) { return (m & GB_FILE_MODE_DIR) != 0;  }
+gb_inline b32 gb_file_mode_is_regular(gbFileMode m) { return (m & GB_FILE_MODE_TYPE) == 0; }
+gb_inline i32 gb_file_mode_perm      (gbFileMode m) { return cast(i32)(m & GB_FILE_MODE_PERM); }
+
+char const *
+gb_file_mode_string(gbFileMode m)
+{
+	gb_local_persist char buf[33] = {0};
+	char const str[] = "dalTLDpSugct";
+	char const rwx[] = "rwxrwxrwx";
+	isize i, j = 0;
+
+	for (i = 0; i < gb_size_of(str)-1; i++) {
+		if ((m & GB_BIT(32-1-i)) != 0) {
+			buf[j] = str[i];
+			j++;
+		}
+	}
+
+	if (j == 0) {
+		buf[j] = '-';
+		j++;
+	}
+
+	for (i = 0; i < gb_size_of(rwx)-1; i++) {
+		if ((m & GB_BIT(9-1-i)) != 0)
+			buf[j] = rwx[i];
+		else
+			buf[j] = '-';
+		j++;
+	}
+
+	buf[j] = '\0';
+
+	return buf;
+}
+
+
 
 
 
@@ -5856,6 +6131,13 @@ gb_file_last_write_time(char const *filepath, ...)
 }
 
 gb_inline b32
+gb_file_rename(char const *old_filename, char const *new_filename)
+{
+	return rename(old_filename, new_filename) == 0;
+}
+
+
+gb_inline b32
 gb_file_copy(char const *existing_filename, char const *new_filename, b32 fail_if_exists)
 {
 	return CopyFileA(existing_filename, new_filename, fail_if_exists);
@@ -5870,6 +6152,7 @@ gb_file_move(char const *existing_filename, char const *new_filename)
 
 
 #else
+#error Implement File System
 
 gbFileTime
 gb_file_last_write_time(char const *filepath, ...)
@@ -5936,7 +6219,7 @@ gb_file_read_contents(gbAllocator a, b32 zero_terminate, char const *filepath, .
 	return result;
 }
 
-#endif
+
 
 
 

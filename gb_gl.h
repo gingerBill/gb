@@ -1,4 +1,4 @@
-/* gb.h - v0.04b - OpenGL Helper Library - public domain
+/* gb.h - v0.04c - OpenGL Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -55,6 +55,7 @@ Conventions used:
 
 
 Version History:
+	0.04c - Use new gb.h file handling system
 	0.04b - Work with the new gb.h
 	0.04a - Better Documentation
 	0.04  - Remove gb_math.h dependency
@@ -908,7 +909,8 @@ gbgl__load_single_shader_from_file(gbglShader *shader, gbglShaderType type, char
 {
 	gbglShaderError err = GBGL_SHADER_ERROR_NONE;
 
-	if (!gb_file_open(&shader->files[type], "%s%s", name, GBGL_SHADER_FILE_EXTENSIONS[type])) {
+	if (gb_file_open(&shader->files[type],
+	                 "%s%s", name, GBGL_SHADER_FILE_EXTENSIONS[type]) != GB_FILE_ERR_NONE) {
 		err = GBGL_SHADER_ERROR_UNABLE_TO_READ_FILE;
 	} else {
 		gb_local_persist char info_log[4096];
@@ -927,9 +929,9 @@ gbgl__load_single_shader_from_file(gbglShader *shader, gbglShaderType type, char
 			glCompileShader(shader->shaders[type]);
 			glGetShaderiv(shader->shaders[type], GL_COMPILE_STATUS, &params);
 			if (!params) {
-				gb_fprintf(stderr, "Shader Source:\n%s\n", file_source);
+				gb_printf_err("Shader Source:\n%s\n", file_source);
 				glGetShaderInfoLog(shader->shaders[type], gb_size_of(info_log), NULL, info_log);
-				gb_fprintf(stderr, "Shader compilation failed:\n %s\n", info_log);
+				gb_printf_err("Shader compilation failed:\n %s\n", info_log);
 
 				err = GBGL_SHADER_ERROR_SHADER_COMPILE;
 			}
@@ -957,12 +959,12 @@ gbgl__load_single_shader_from_memory(gbglShader *s, gbglShaderType type, char co
 		gb_local_persist char log_info[4096];
 		i32 total_len, log_len;
 
-		gb_fprintf(stderr, "Unable to compile shader: %s\n", text);
+		gb_printf_err("Unable to compile shader: %s\n", text);
 		glGetShaderiv(s->shaders[type], GL_INFO_LOG_LENGTH, &status);
 		total_len = status;
 
 		glGetShaderInfoLog(s->shaders[type], 4095, &log_len, log_info);
-		gb_fprintf(stderr, log_info);
+		gb_printf_err(log_info);
 		err = GBGL_SHADER_ERROR_SHADER_COMPILE;
 	}
 
@@ -986,7 +988,7 @@ gbgl__link_shader(gbglShader *shader)
 	if (!status) {
 		gb_local_persist char log_info[4096];
 		glGetProgramInfoLog(shader->program, gb_size_of(log_info), NULL, log_info);
-		gb_fprintf(stderr, "Shader linking failed:\n %s \n", log_info);
+		gb_printf_err("Shader linking failed:\n %s \n", log_info);
 		err = GBGL_SHADER_ERROR_LINKING;
 	}
 
@@ -1249,7 +1251,7 @@ gbgl_init_render_buffer(gbglRenderBuffer *rb, i32 width, i32 height, i32 channel
 	{
 		u32 status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
 		if (status != GL_FRAMEBUFFER_COMPLETE) {
-			gb_fprintf(stderr, "Framebuffer Status: 0x%x\n", status);
+			gb_printf_err("Framebuffer Status: 0x%x\n", status);
 			return false;
 		}
 	}
@@ -1337,7 +1339,7 @@ gbgl_load_texture2d_from_file(gbglTexture *texture, b32 flip_vertically, char co
 	stbi_set_flip_vertically_on_load(flip_vertically);
 	data = stbi_load(path, &width, &height, &comp, 0);
 	if (data == NULL) {
-		gb_fprintf(stderr, "Failed to load image: %s\n", path);
+		gb_printf_err("Failed to load image: %s\n", path);
 		result = false;
 	} else {
 		result = gbgl_load_texture2d_from_memory(texture, data, width, height, comp);
@@ -1360,8 +1362,8 @@ gbgl_bind_texture2d(gbglTexture const *t, u32 position, u32 sampler)
 
 	if (position > 31) {
 		position = 31;
-		gb_fprintf(stderr, "Textures can only bound to position [0 ... 31]\n");
-		gb_fprintf(stderr, "Will bind to position [31]\n");
+		gb_printf_err("Textures can only bound to position [0 ... 31]\n");
+		gb_printf_err("Will bind to position [31]\n");
 	}
 
 	glActiveTexture(GL_TEXTURE0 + position);
@@ -1430,7 +1432,7 @@ gbgl_get_packed_font_dim(gbglFontCache *cache, gbglFontCachedTTF *ttf, i32 *widt
 			gb_zero_array(cache->rect_cache, cache->codepoint_count);
 			rp_ctx = cast(stbrp_context *)spc.pack_info;
 			stbtt_PackFontRangesGatherRects(&spc, &ttf->finfo, cache->ranges, cache->codepoint_count, cache->rect_cache);
-			gb_qsort_array(cache->rect_cache, cache->codepoint_count, rect_height_compare);
+			gb_sort_array(cache->rect_cache, cache->codepoint_count, rect_height_compare);
 
 			for (i = 0; i < cache->codepoint_count; i++) {
 				stbrp__findresult fr = stbrp__skyline_pack_rectangle(rp_ctx, cache->rect_cache[i].w, cache->rect_cache[i].h);
@@ -1564,7 +1566,7 @@ gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 	}
 	GB_ASSERT_NOT_NULL(f);
 	if (!f) {
-		gb_fprintf(stderr, "Failed to cache font\n");
+		gb_printf_err("Failed to cache font\n");
 		return NULL;
 	}
 
@@ -1590,7 +1592,7 @@ gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 		fc->rect_cache       = cast(stbrp_rect *)      gbgl_malloc(gb_size_of(stbrp_rect)       * codepoint_count);
 
 		if (!fc->ranges || !fc->codepoints || !fc->packed_char_data) {
-			gb_fprintf(stderr, "Unable to get memory for fonts");
+			gb_printf_err("Unable to get memory for fonts");
 		}
 
 		for (i = 0; i < fc->font_char_list_count; i++) {
@@ -1633,7 +1635,7 @@ gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 			gb_strncpy((*ttf_cache)->name, ttf_filename, name_len);
 			(*ttf_cache)->name[name_len] = '\0';
 
-			if (gb_file_open(&file, ttf_filename)) {
+			if (gb_file_open(&file, ttf_filename) == GB_FILE_ERR_NONE) {
 				i64 len = gb_file_size(&file);
 				(*ttf_cache)->ttf = cast(u8 *)gbgl_malloc(len);
 				GB_ASSERT_NOT_NULL((*ttf_cache)->ttf);
@@ -1715,7 +1717,7 @@ gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 					f->glyph_map[i].index = i;
 				}
 
-				gb_qsort_array(f->glyph_map, f->glyph_count, gbgl__glyph_map_compare);
+				gb_sort_array(f->glyph_map, f->glyph_count, gbgl__glyph_map_compare);
 
 				{ // Kerning Table
 					isize kps_count = 0;
@@ -1741,7 +1743,7 @@ gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 								}
 							}
 						}
-						gb_qsort_array(f->kern_table, f->kern_pair_count, gbgl__kern_pair_compare);
+						gb_sort_array(f->kern_table, f->kern_pair_count, gbgl__kern_pair_compare);
 					}
 				}
 			}
