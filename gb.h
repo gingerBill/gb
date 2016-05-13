@@ -1,4 +1,4 @@
-/* gb.h - v0.12  - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.12a - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -26,6 +26,7 @@ Conventions used:
 
 
 Version History:
+	0.12a - Compile as C++
 	0.12  - New File Handing System! No stdio or stdlib! (WIN32 Only)
 	0.11a - Add string precision and width (experimental)
 	0.11  - Started making stdio & stdlib optional (Not tested much)
@@ -2080,17 +2081,17 @@ gb_sprintf_va(char const *fmt, va_list va)
 }
 
 
-
+enum {
+	GB__LETTER_CASE_NO_CHANGE,
+	GB__LETTER_CASE_LOWER,
+	GB__LETTER_CASE_UPPER,
+};
 typedef struct {
 	b8 left_justify;
 	b8 force_sign;
 	b8 force_type;
 	b8 pad_zeroes;
-	enum {
-		GB__LETTER_CASE_NO_CHANGE,
-		GB__LETTER_CASE_LOWER,
-		GB__LETTER_CASE_UPPER,
-	} force_case;
+	i32 force_case;
 
 	isize width;
 	i32 base, precision;
@@ -2268,7 +2269,8 @@ gb_snprintf_va(char *text, isize max_len, char const *fmt, va_list va)
 				DO_INT,
 				DO_LONG,
 				DO_I64
-			} int_type = DO_INT;
+			};
+			isize int_type = DO_INT;
 
 			gb__FmtInfo info = {0};
 			info.base = 10;
