@@ -1,4 +1,4 @@
-/* gb.h - v0.12b - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.13  - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -26,7 +26,8 @@ Conventions used:
 
 
 Version History:
-	0.12b - Fix file minor bugs
+	0.13  - Highly experimental platform layer (WIN32 Only)
+	0.12b - Fix minor file bugs
 	0.12a - Compile as C++
 	0.12  - New File Handing System! No stdio or stdlib! (WIN32 Only)
 	0.11a - Add string precision and width (experimental)
@@ -65,6 +66,21 @@ WARNING
 
 CREDITS
 	Written by Ginger Bill
+
+TODOS
+	- Remove CRT dependency for people who want that
+	- Older compiler support?
+		- How old do you wanna go?
+	- File handling
+		- windows needs to use WIN32 API and not the CRT posix thing
+		- All files to be UTF-8 (even on windows)
+	- Better Virtual Memory handling
+	- Generic Heap Allocator (tcmalloc/dlmalloc/?)
+	- Fixed Heap Allocator
+	- Better UTF support and conversion
+	- Free List, best fit rather than first fit
+	- More date & time functions
+	- Platform Layer?
 
 */
 
@@ -198,6 +214,10 @@ extern "C" {
 	#define WIN32_MEAN_AND_LEAN 1
 	#define VC_EXTRALEAN        1
 	#include <windows.h>
+ 	#undef NOMINMAX
+	#undef WIN32_LEAN_AND_MEAN
+	#undef WIN32_MEAN_AND_LEAN
+	#undef VC_EXTRALEAN
 	#include <direct.h>
 	#include <malloc.h> /* NOTE(bill): _aligned_*() */
 	#include <io.h>     /* NOTE(bill): File functions */
@@ -220,15 +240,6 @@ extern "C" {
  * Base Types
  *
  */
-
-/* NOTE(bill); To mark types changing their size, e.g. intptr */
-#ifndef _W64
-	#if !defined(__midl) && (defined(_X86_) || defined(_M_IX86)) && _MSC_VER >= 1300
-		#define _W64 __w64
-	#else
-		#define _W64
-	#endif
-#endif
 
 #if defined(_MSC_VER)
 	#if _MSC_VER < 1300
@@ -279,6 +290,15 @@ GB_STATIC_ASSERT(sizeof(usize) == sizeof(isize));
 	typedef signed   __int64  intptr;
 	typedef unsigned __int64 uintptr;
 #elif defined(_WIN32)
+	/* NOTE(bill); To mark types changing their size, e.g. intptr */
+	#ifndef _W64
+		#if !defined(__midl) && (defined(_X86_) || defined(_M_IX86)) && _MSC_VER >= 1300
+			#define _W64 __w64
+		#else
+			#define _W64
+		#endif
+	#endif
+
 	typedef _W64   signed int  intptr;
 	typedef _W64 unsigned int uintptr;
 #else
@@ -650,6 +670,7 @@ GB_DEF isize       gb_pointer_diff     (void const *begin, void const *end);
 
 
 GB_DEF void gb_zero_size(void *ptr, isize size);
+/* TODO(bill): Should gb_zero_struct be renamed to gb_zero_elem(ent)? */
 #ifndef     gb_zero_struct
 #define     gb_zero_struct(t) gb_zero_size((t), gb_size_of(*(t))) /* NOTE(bill): Pass pointer of struct */
 #define     gb_zero_array(a, count) gb_zero_size((a), gb_size_of(*(a))*count)
@@ -802,7 +823,7 @@ typedef struct gbVirtualMemory {
 	isize size;
 } gbVirtualMemory;
 
-
+GB_DEF gbVirtualMemory gb_virtual_memory(void *data, isize size);
 GB_DEF gbVirtualMemory gb_vm_alloc(void *addr, isize size);
 GB_DEF void            gb_vm_free (gbVirtualMemory vm);
 GB_DEF gbVirtualMemory gb_vm_trim (gbVirtualMemory vm, isize lead_size, isize size);
@@ -1126,8 +1147,8 @@ GB_DEF isize gb_utf8_strlen (char const *str);
 GB_DEF isize gb_utf8_strnlen(char const *str, isize max_len);
 
 /* Windows doesn't handle 8 bit filenames well ('cause Micro$hit) */
-GB_DEF char16 *gb_utf8_to_utf16(char16 *buffer, char *str, isize len);
-GB_DEF char *  gb_utf16_to_utf8(char *buffer, char16 *str, isize len);
+GB_DEF char16 *gb_utf8_to_ucs2(char16 *buffer, isize len, char const *str);
+GB_DEF char *  gb_ucs2_to_utf8(char *buffer, isize len, char16 const *str);
 
 /* NOTE(bill): Returns size of codepoint in bytes */
 GB_DEF isize gb_utf8_decode    (char const *str, char32 *codepoint);
@@ -1810,6 +1831,310 @@ gb_global gbColour const GB_COLOUR_MAGENTA = {0xffff00ff};
 
 #endif /* !defined(GB_NO_COLOUR_TYPE) */
 
+
+
+/***************************************************************
+ *
+ * Platform Stuff
+ *
+ */
+
+#if defined(GB_PLATFORM)
+
+#if defined(GB_SYSTEM_WINDOWS)
+#include <xinput.h>
+#ifndef XUSER_MAX_COUNT
+#define XUSER_MAX_COUNT 4
+#endif
+#endif
+
+#ifndef GB_MAX_GAME_CONTROLLER_COUNT
+#define GB_MAX_GAME_CONTROLLER_COUNT 4
+#endif
+
+typedef enum gbWindowType {
+	GB_WINDOW_OPENGL   = 1,
+	GB_WINDOW_SOFTWARE = 2,
+} gbWindowType;
+
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable:4201)
+#endif
+
+typedef struct gbWindow {
+	void *handle;
+
+	i32 x, y;
+	i32 width, height;
+	b32 is_closed;
+	b32 has_focus;
+	b32 is_minimized;
+	b32 is_fullscreen;
+
+#if defined(GB_SYSTEM_WINDOWS)
+	WINDOWPLACEMENT win32_placement;
+	HDC             win32_dc;	
+#endif
+
+	gbWindowType type;
+	union {
+		struct {
+#if defined(GB_SYSTEM_WINDOWS)
+			HGLRC win32_context;
+#endif
+		} opengl;
+
+		struct {
+#if defined(GB_SYSTEM_WINDOWS)
+			BITMAPINFO win32_bmi;
+#endif
+			void *memory;
+			isize memory_size;
+			i32 pitch;
+			i32 bytes_per_pixel;
+		} software;
+	};
+} gbWindow;
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+
+
+typedef enum gbKeyType {
+	GB_KEY_UNKNOWN = 0,  /* Unhandled key */
+
+	GB_KEY_NUM0 = '0',
+	GB_KEY_NUM1,
+	GB_KEY_NUM2,
+	GB_KEY_NUM3,
+	GB_KEY_NUM4,
+	GB_KEY_NUM5,
+	GB_KEY_NUM6,
+	GB_KEY_NUM7,
+	GB_KEY_NUM8,
+	GB_KEY_NUM9,
+
+	GB_KEY_A = 'A',
+	GB_KEY_B,
+	GB_KEY_C,
+	GB_KEY_D,
+	GB_KEY_E,
+	GB_KEY_F,
+	GB_KEY_G,
+	GB_KEY_H,
+	GB_KEY_I,
+	GB_KEY_J,
+	GB_KEY_K,
+	GB_KEY_L,
+	GB_KEY_M,
+	GB_KEY_N,
+	GB_KEY_O,
+	GB_KEY_P,
+	GB_KEY_Q,
+	GB_KEY_R,
+	GB_KEY_S,
+	GB_KEY_T,
+	GB_KEY_U,
+	GB_KEY_V,
+	GB_KEY_W,
+	GB_KEY_X,
+	GB_KEY_Y,
+	GB_KEY_Z,
+
+	GB_KEY_LBRACKET  = '[',
+	GB_KEY_RBRACKET  = ']',
+	GB_KEY_SEMICOLON = ';',
+	GB_KEY_COMMA     = ',',
+	GB_KEY_PERIOD    = '.',
+	GB_KEY_QUOTE     = '\'',
+	GB_KEY_SLASH     = '/',
+	GB_KEY_BACKSLASH = '\\',
+	GB_KEY_GRAVE     = '`',
+	GB_KEY_EQUALS    = '=',
+	GB_KEY_MINUS     = '-',
+	GB_KEY_SPACE     = ' ',
+
+	GB_KEY__PAD = 128,   /* NOTE(bill): make sure ASCII is reserved */
+
+	GB_KEY_ESCAPE,       /* The Escape key */
+	GB_KEY_LCONTROL,     /* The left Control key */
+	GB_KEY_LSHIFT,       /* The left Shift key */
+	GB_KEY_LALT,         /* The left Alt key */
+	GB_KEY_LSYSTEM,      /* The left OS specific key: window (Windows and Linux), apple (MacOS X), ... */
+	GB_KEY_RCONTROL,     /* The right Control key */
+	GB_KEY_RSHIFT,       /* The right Shift key */
+	GB_KEY_RALT,         /* The right Alt key */
+	GB_KEY_RSYSTEM,      /* The right OS specific key: window (Windows and Linux), apple (MacOS X), ... */
+	GB_KEY_MENU,         /* The Menu key */
+	GB_KEY_RETURN,       /* The Return key */
+	GB_KEY_BACKSPACE,    /* The Backspace key */
+	GB_KEY_TAB,          /* The Tabulation key */
+	GB_KEY_PAGEUP,       /* The Page up key */
+	GB_KEY_PAGEDOWN,     /* The Page down key */
+	GB_KEY_END,          /* The End key */
+	GB_KEY_HOME,         /* The Home key */
+	GB_KEY_INSERT,       /* The Insert key */
+	GB_KEY_DELETE,       /* The Delete key */
+	GB_KEY_PLUS,         /* + */
+	GB_KEY_SUBTRACT,     /* - */
+	GB_KEY_MULTIPLY,     /* * */
+	GB_KEY_DIVIDE,       /* / */
+	GB_KEY_LEFT,         /* Left arrow */
+	GB_KEY_RIGHT,        /* Right arrow */
+	GB_KEY_UP,           /* Up arrow */
+	GB_KEY_DOWN,         /* Down arrow */
+	GB_KEY_NUMPAD0,      /* The numpad 0 key */
+	GB_KEY_NUMPAD1,      /* The numpad 1 key */
+	GB_KEY_NUMPAD2,      /* The numpad 2 key */
+	GB_KEY_NUMPAD3,      /* The numpad 3 key */
+	GB_KEY_NUMPAD4,      /* The numpad 4 key */
+	GB_KEY_NUMPAD5,      /* The numpad 5 key */
+	GB_KEY_NUMPAD6,      /* The numpad 6 key */
+	GB_KEY_NUMPAD7,      /* The numpad 7 key */
+	GB_KEY_NUMPAD8,      /* The numpad 8 key */
+	GB_KEY_NUMPAD9,      /* The numpad 9 key */
+	GB_KEY_F1,           /* The F1 key */
+	GB_KEY_F2,           /* The F2 key */
+	GB_KEY_F3,           /* The F3 key */
+	GB_KEY_F4,           /* The F4 key */
+	GB_KEY_F5,           /* The F5 key */
+	GB_KEY_F6,           /* The F6 key */
+	GB_KEY_F7,           /* The F7 key */
+	GB_KEY_F8,           /* The F8 key */
+	GB_KEY_F9,           /* The F8 key */
+	GB_KEY_F10,          /* The F10 key */
+	GB_KEY_F11,          /* The F11 key */
+	GB_KEY_F12,          /* The F12 key */
+	GB_KEY_F13,          /* The F13 key */
+	GB_KEY_F14,          /* The F14 key */
+	GB_KEY_F15,          /* The F15 key */
+	GB_KEY_PAUSE,        /* The Pause key */
+
+	GB_KEY_COUNT
+} gbKeyType;
+
+typedef struct gbKey {
+	b32 is_down;
+	i32 repeat_count;
+} gbKey;
+
+typedef enum gbMouseButton {
+	GB_MOUSE_BUTTON_LEFT,
+	GB_MOUSE_BUTTON_MIDDLE,
+	GB_MOUSE_BUTTON_RIGHT,
+	GB_MOUSE_BUTTON_X1,
+	GB_MOUSE_BUTTON_X2,
+
+	GB_MOUSE_BUTTON_COUNT
+} gbMouseButton;
+
+typedef struct gbMouse {
+	i32 x, y;
+	i32 dx, dy;
+	b8 buttons[GB_MOUSE_BUTTON_COUNT];
+} gbMouse;
+
+
+typedef enum gbControllerAxisType {
+	GB_CONTROLLER_AXIS_LEFT_X,
+	GB_CONTROLLER_AXIS_LEFT_Y,
+	GB_CONTROLLER_AXIS_RIGHT_X,
+	GB_CONTROLLER_AXIS_RIGHT_Y,
+	GB_CONTROLLER_AXIS_LEFT_TRIGGER,
+	GB_CONTROLLER_AXIS_RIGHT_TRIGGER,
+
+	GB_CONTROLLER_AXIS_COUNT
+} gbControllerAxisType;
+
+typedef enum gbControllerButtonType {
+	GB_CONTROLLER_BUTTON_UP,
+	GB_CONTROLLER_BUTTON_DOWN,
+	GB_CONTROLLER_BUTTON_LEFT,
+	GB_CONTROLLER_BUTTON_RIGHT,
+	GB_CONTROLLER_BUTTON_A,
+	GB_CONTROLLER_BUTTON_B,
+	GB_CONTROLLER_BUTTON_X,
+	GB_CONTROLLER_BUTTON_Y,
+	GB_CONTROLLER_BUTTON_LEFT_SHOULDER,
+	GB_CONTROLLER_BUTTON_RIGHT_SHOULDER,
+	GB_CONTROLLER_BUTTON_BACK,
+	GB_CONTROLLER_BUTTON_START,
+
+	GB_CONTROLLER_BUTTON_COUNT
+} gbControllerButtonType;
+
+typedef struct gbControllerButton {
+	i32 half_transition_count;
+	b32 ended_down;
+} gbControllerButton;
+
+typedef struct gbGameController {
+	b16 is_connected;
+	b16 is_analog;
+
+	f32 axes[GB_CONTROLLER_AXIS_COUNT];
+	gbControllerButton buttons[GB_CONTROLLER_BUTTON_COUNT];
+} gbGameController;
+
+#if defined(GB_SYSTEM_WINDOWS)
+#define GB_XINPUT_GET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_STATE *pState)
+typedef GB_XINPUT_GET_STATE(gbXInputGetStateProc);
+
+#define GB_XINPUT_SET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_VIBRATION *pVibration)
+typedef GB_XINPUT_SET_STATE(gbXInputSetStateProc);
+#endif
+
+typedef struct gbPlatform {
+	gbWindow window;
+
+	gbKey keys[GB_KEY_COUNT];
+	gbMouse mouse;
+
+	struct {
+		b32 control;
+		b32 alt;
+		b32 shift;
+	} key_modifiers;
+
+	gbGameController game_controllers[GB_MAX_GAME_CONTROLLER_COUNT];
+
+	f64 curr_time;
+	f64 dt_for_frame;
+
+	b32 quit_requested;
+
+
+#if defined(GB_SYSTEM_WINDOWS)
+	struct {
+		gbXInputGetStateProc *get_state;
+		gbXInputSetStateProc *set_state;
+	} xinput;
+#endif
+} gbPlatform;
+
+GB_DEF void gb_platform_init   (gbPlatform *p);
+GB_DEF void gb_platform_update (gbPlatform *p);
+GB_DEF void gb_platform_display(gbPlatform *p);
+
+GB_DEF b32  gb_platform_is_key_down       (gbPlatform *p, gbKeyType key);
+GB_DEF b32  gb_platform_is_key_held       (gbPlatform *p, gbKeyType key);
+GB_DEF void gb_platform_show_cursor       (gbPlatform *p, i32 show);
+GB_DEF void gb_platform_set_mouse_position(gbPlatform *p, gbWindow *rel_win, i32 x, i32 y);
+
+GB_DEF gbGameController *gb_platform_get_controller(gbPlatform *p, isize index);
+
+/* NOTE(bill): Title is UTF-8 */
+GB_DEF gbWindow *gb_window_init                (gbPlatform *p, char const *title, i32 w, i32 h, gbWindowType type, b32 is_fullscreen);
+GB_DEF void      gb_window_set_position        (gbWindow *w, i32 x, i32 y);
+GB_DEF void      gb_window_set_title           (gbWindow *w, char const *title, ...) GB_PRINTF_ARGS(2);
+GB_DEF void      gb_window_toggle_fullscreen   (gbWindow *w);
+GB_DEF void      gb_window_make_context_current(gbWindow *w);
+
+
+#endif /* GB_PLATFORM */
+
 #if defined(__cplusplus)
 }
 #endif
@@ -2059,13 +2384,31 @@ gb_snprintf(char *str, isize n, char const *fmt, ...)
 gb_inline isize
 gb_printf_va(char const *fmt, va_list va)
 {
+#if defined(GB_SYSTEM_WINDOWS)
+	/* TODO(bill): Fix File system */
+	gb_local_persist char buf[4096];
+	isize len = gb_snprintf_va(buf, gb_size_of(buf), fmt, va);
+	DWORD bw;
+	WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), buf, cast(DWORD)len, &bw, NULL);
+	return len;
+#else
 	return gb_fprintf_va(gb_stdout, fmt, va);
+#endif
 }
 
 gb_inline isize
 gb_printf_err_va(char const *fmt, va_list va)
 {
-	return gb_fprintf_va(gb_stderr, fmt, va);
+#if defined(GB_SYSTEM_WINDOWS)
+	/* TODO(bill): Fix File system */
+	gb_local_persist char buf[4096];
+	isize len = gb_snprintf_va(buf, gb_size_of(buf), fmt, va);
+	DWORD bw;
+	WriteFile(GetStdHandle(STD_ERROR_HANDLE), buf, cast(DWORD)len, &bw, NULL);
+	return len;
+#else
+	return gb_fprintf_va(gb_std, fmt, va);
+#endif
 }
 
 gb_inline isize
@@ -2292,8 +2635,6 @@ gb_snprintf_va(char *text, isize max_len, char const *fmt, va_list va)
 				}
 			}
 
-			if (*fmt >= '0' && *fmt <= '9')
-				info.width = gb_str_to_i64(fmt, cast(char **)&fmt, 0);
 			if (*fmt == '*') {
 				info.width = cast(isize)va_arg(va, int);
 				if (fmt[1] == '.') fmt++;
@@ -2620,9 +2961,8 @@ gb_memswap(void *i, void *j, isize size)
 	u8 *b = cast(u8 *)j;
 	if (a != b) {
 		while (size--) {
-			u8 c = *a;
-			*a++ = *b;
-			*b++ = c;
+			gb_swap(u8, *a, *b);
+			*a++, *b++;
 		}
 	}
 }
@@ -3389,6 +3729,16 @@ GB_ALLOCATOR_PROC(gb_heap_allocator_proc)
  * Virtual Memory
  *
  */
+
+gbVirtualMemory
+gb_virtual_memory(void *data, isize size)
+{
+	gbVirtualMemory vm;
+	vm.data = data;
+	vm.size = size;
+	return vm;
+}
+
 
 #if defined(GB_SYSTEM_WINDOWS)
 gb_inline gbVirtualMemory
@@ -4915,7 +5265,7 @@ gb_inline gbString gb_string_trim_space(gbString str) { return gb_string_trim(st
 
 
 char16 *
-gb_utf8_to_utf16(char16 *buffer, char *s, isize len)
+gb_utf8_to_ucs2(char16 *buffer, isize len, char const *s)
 {
 	u8 *str = cast(u8 *)s;
 	char32 c;
@@ -4982,7 +5332,7 @@ gb_utf8_to_utf16(char16 *buffer, char *s, isize len)
 }
 
 char *
-gb_utf16_to_utf8(char *buffer, char16 *str, isize len)
+gb_ucs2_to_utf8(char *buffer, isize len, char16 const *str)
 {
 	isize i = 0;
 	len--;
@@ -5842,7 +6192,7 @@ gbFile *gb_stderr = &gb__stderr;
 
 #if defined(GB_SYSTEM_WINDOWS)
 
-/* IMPORTANT TODO(bill): REMOVE THE STUPID FUCKING POSIX CODE! */
+/* IMPORTANT TODO(bill): REMOVE THE STUPID FUCKING POSIX CODE FOR WIN32! */
 
 gb_inline i32
 gb_chmod(char const *name, gbFileMode perm)
@@ -5856,7 +6206,6 @@ gb_file_open_file_va(gbFile *file, u32 flag, gbFileMode perm, char const *filena
 	b32 chmod = false;
 	int fd = 0; /* NOTE(bill): Must be an int on windows */
 	char const *name = gb_sprintf_va(filename, va);
-	LPOFSTRUCT buffer = {0};
 
 	if ((flag & GB_O_CREATE) != 0 &&
 	    (perm & GB_FILE_MODE_STICKY) != 0) {
@@ -5883,7 +6232,7 @@ gb_file_close(gbFile *file)
 	if (file->fd == cast(intptr)INVALID_HANDLE_VALUE)
 		return GB_FILE_ERR_INVALID;
 
-	_close(file->fd);
+	_close(cast(int)file->fd);
 
 	return GB_FILE_ERR_NONE;
 }
@@ -5892,11 +6241,11 @@ b32
 gb_file_read(gbFile *f, void *buffer, isize size)
 {
 	int bytes_read;
-	int fd = f->fd;
+	int fd = cast(int)f->fd;
 	/* TODO(bill): Do I _need_ this locking or is something else better? */
-	// _locking(fd, _LK_LOCK, size);
+	_locking(fd, _LK_LOCK, cast(unsigned int)size);
 	bytes_read = _read(fd, buffer, cast(unsigned int)size);
-	// _locking(fd, _LK_UNLCK, size);
+	_locking(fd, _LK_UNLCK, cast(unsigned int)size);
 	return bytes_read == size;
 }
 
@@ -5904,11 +6253,11 @@ b32
 gb_file_write(gbFile *f, void const *buffer, isize size)
 {
 	int bytes_written;
-	int fd = f->fd;
+	int fd = cast(int)f->fd;
 	/* TODO(bill): Do I _need_ this locking or is something else better? */
-	// _locking(fd, _LK_LOCK, size);
+	_locking(fd, _LK_LOCK, cast(unsigned int)size);
 	bytes_written = _write(fd, buffer, cast(unsigned int)size);
-	// _locking(fd, _LK_UNLCK, size);
+	_locking(fd, _LK_UNLCK, cast(unsigned int)size);
 	return bytes_written == size;
 }
 
@@ -6534,6 +6883,680 @@ gb_colour(f32 r, f32 g, f32 b, f32 a)
 	return result;
 }
 #endif
+
+
+#if defined(GB_PLATFORM)
+
+#if defined(GB_SYSTEM_WINDOWS)
+
+
+GB_XINPUT_GET_STATE(gbXInputGetState_Stub)
+{ 
+	gb_unused(dwUserIndex); gb_unused(pState);
+	return ERROR_DEVICE_NOT_CONNECTED;
+}
+
+GB_XINPUT_SET_STATE(gbXInputSetState_Stub)
+{
+	gb_unused(dwUserIndex); gb_unused(pVibration);
+	return ERROR_DEVICE_NOT_CONNECTED;
+}
+
+
+gb_internal gb_inline void
+gb__process_xinput_digital_button(DWORD xinput_button_state, DWORD button_bit,
+                                  gbControllerButton *button)
+{
+	b32 ended_down = ((xinput_button_state & button_bit) == button_bit);
+	button->half_transition_count = (button->ended_down != ended_down) ? 1 : 0;
+	button->ended_down = ended_down;
+}
+
+gb_internal gb_inline f32
+gb__process_xinput_stick_value(SHORT value, SHORT dead_zone_threshold)
+{
+	f32 result = 0;
+
+	if (value < -dead_zone_threshold)
+		result = cast(f32) (value + dead_zone_threshold) / (32768.0f - dead_zone_threshold);
+	else if (value > dead_zone_threshold)
+		result = cast(f32) (value - dead_zone_threshold) / (32767.0f - dead_zone_threshold);
+
+	return result;
+}
+
+gb_internal gb_inline f32
+gb__process_xinput_trigger_value(BYTE value)
+{
+	f32 result;
+	result = cast(f32) (value / 255.0f);
+	return result;
+}
+
+gb_internal void
+gb__window_resize_dib_section(gbWindow *window, i32 width, i32 height)
+{
+	if ((window->width != width) ||
+	    (window->height != height)) {
+		BITMAPINFO bmi = {0};
+		window->width  = width;
+		window->height = height;
+
+		window->software.bytes_per_pixel = 4;
+		window->software.pitch = window->software.bytes_per_pixel * width;
+
+		bmi.bmiHeader.biSize = gb_size_of(bmi.bmiHeader);
+		bmi.bmiHeader.biWidth       = width;
+		bmi.bmiHeader.biHeight      = -height; /* NOTE(bill): -ve is top-down, +ve is bottom-up */
+		bmi.bmiHeader.biPlanes      = 1;
+		bmi.bmiHeader.biBitCount    = 8*cast(WORD)window->software.bytes_per_pixel;
+		bmi.bmiHeader.biCompression = BI_RGB;
+
+		window->software.win32_bmi = bmi;
+
+		if (window->software.memory)
+			gb_vm_free(gb_virtual_memory(window->software.memory, window->software.memory_size));
+
+		{
+			isize memory_size = window->software.pitch * height;
+			gbVirtualMemory vm = gb_vm_alloc(0, memory_size);
+			window->software.memory      = vm.data;
+			window->software.memory_size = vm.size;
+		}
+	}
+}
+
+
+void 
+gb_platform_init(gbPlatform *p)
+{
+	gb_zero_struct(p);
+
+	{ /* Load XInput */
+		gbDllHandle xinput_library = gb_dll_load("xinput1_4.dll");
+		if (!xinput_library) xinput_library = gb_dll_load("xinput9_1_0.dll");
+		if (!xinput_library) xinput_library = gb_dll_load("xinput1_3.dll");
+		if (!xinput_library) {
+			// TODO(bill): Diagnostic
+			gb_printf_err("XInput could not be loaded. Controllers will not work!\n");
+		} else {
+			p->xinput.get_state = cast(gbXInputGetStateProc *) gb_dll_proc_address(xinput_library, "XInputGetState");
+			if (!p->xinput.get_state) p->xinput.get_state = gbXInputGetState_Stub;
+
+			p->xinput.set_state = cast(gbXInputSetStateProc *) gb_dll_proc_address(xinput_library, "XInputSetState");
+			if (!p->xinput.set_state) p->xinput.set_state = gbXInputSetState_Stub;
+		}
+	}	
+
+}
+
+
+void 
+gb_platform_update(gbPlatform *p)
+{
+	isize i;
+
+	{ /* NOTE(bill): Set window state */
+		RECT window_rect;
+		i32 x, y, w, h;
+
+		GetClientRect(cast(HWND)p->window.handle, &window_rect);
+		x = window_rect.left;
+		y = window_rect.top;
+		w = window_rect.right - window_rect.left;
+		h = window_rect.bottom - window_rect.top;
+
+		if ((p->window.width != w) || (p->window.height != h)) {
+			if (p->window.type == GB_WINDOW_SOFTWARE)
+				gb__window_resize_dib_section(&p->window, w, h);
+		}
+
+
+		p->window.x = x;
+		p->window.y = y;
+		p->window.width = w;
+		p->window.height = h;
+
+		p->window.has_focus = (GetFocus() == cast(HWND)p->window.handle);
+		p->window.is_minimized = IsIconic(cast(HWND)p->window.handle) != 0;
+	}
+
+	{ /* NOTE(bill): Set mouse pos */
+		POINT mouse_pos;
+
+		GetCursorPos(&mouse_pos);
+		ScreenToClient(cast(HWND)p->window.handle, &mouse_pos);
+
+		p->mouse.dx = mouse_pos.x - p->mouse.x;
+		p->mouse.dy = mouse_pos.y - p->mouse.y;
+		p->mouse.x = mouse_pos.x;
+		p->mouse.y = mouse_pos.y;
+	}
+
+	{ /* NOTE(bill): Set mouse buttons */
+		DWORD win_button_id[GB_MOUSE_BUTTON_COUNT] = {
+			VK_LBUTTON,
+			VK_MBUTTON,
+			VK_RBUTTON,
+			VK_XBUTTON1,
+			VK_XBUTTON2,
+		};
+		for (i = 0; i < GB_MOUSE_BUTTON_COUNT; i++)
+			p->mouse.buttons[i] = GetAsyncKeyState(win_button_id[i]) < 0;
+	}
+
+	/* NOTE(bill): Set Key states */
+	if (p->window.has_focus) {
+		#define GB__KEY_SET(platform, vk) do { \
+			b32 is_down = GetAsyncKeyState(vk) < 0; \
+			p->keys[platform].is_down = is_down; \
+			if (is_down) { \
+				p->keys[platform].repeat_count++; \
+			} else { \
+				p->keys[platform].repeat_count = 0; \
+			} \
+		} while (0)
+		GB__KEY_SET(GB_KEY_A, 'A');
+		GB__KEY_SET(GB_KEY_B, 'B');
+		GB__KEY_SET(GB_KEY_C, 'C');
+		GB__KEY_SET(GB_KEY_D, 'D');
+		GB__KEY_SET(GB_KEY_E, 'E');
+		GB__KEY_SET(GB_KEY_F, 'F');
+		GB__KEY_SET(GB_KEY_G, 'G');
+		GB__KEY_SET(GB_KEY_H, 'H');
+		GB__KEY_SET(GB_KEY_I, 'I');
+		GB__KEY_SET(GB_KEY_J, 'J');
+		GB__KEY_SET(GB_KEY_K, 'K');
+		GB__KEY_SET(GB_KEY_L, 'L');
+		GB__KEY_SET(GB_KEY_M, 'M');
+		GB__KEY_SET(GB_KEY_N, 'N');
+		GB__KEY_SET(GB_KEY_O, 'O');
+		GB__KEY_SET(GB_KEY_P, 'P');
+		GB__KEY_SET(GB_KEY_Q, 'Q');
+		GB__KEY_SET(GB_KEY_R, 'R');
+		GB__KEY_SET(GB_KEY_S, 'S');
+		GB__KEY_SET(GB_KEY_T, 'T');
+		GB__KEY_SET(GB_KEY_U, 'U');
+		GB__KEY_SET(GB_KEY_V, 'V');
+		GB__KEY_SET(GB_KEY_W, 'W');
+		GB__KEY_SET(GB_KEY_X, 'X');
+		GB__KEY_SET(GB_KEY_Y, 'Y');
+		GB__KEY_SET(GB_KEY_Z, 'Z');
+
+		GB__KEY_SET(GB_KEY_NUM0, '0');
+		GB__KEY_SET(GB_KEY_NUM1, '1');
+		GB__KEY_SET(GB_KEY_NUM2, '2');
+		GB__KEY_SET(GB_KEY_NUM3, '3');
+		GB__KEY_SET(GB_KEY_NUM4, '4');
+		GB__KEY_SET(GB_KEY_NUM5, '5');
+		GB__KEY_SET(GB_KEY_NUM6, '6');
+		GB__KEY_SET(GB_KEY_NUM7, '7');
+		GB__KEY_SET(GB_KEY_NUM8, '8');
+		GB__KEY_SET(GB_KEY_NUM9, '9');
+
+		GB__KEY_SET(GB_KEY_ESCAPE, VK_ESCAPE);
+
+		GB__KEY_SET(GB_KEY_LCONTROL, VK_LCONTROL);
+		GB__KEY_SET(GB_KEY_LSHIFT,   VK_LSHIFT);
+		GB__KEY_SET(GB_KEY_LALT,     VK_LMENU);
+		GB__KEY_SET(GB_KEY_LSYSTEM,  VK_LWIN);
+		GB__KEY_SET(GB_KEY_RCONTROL, VK_RCONTROL);
+		GB__KEY_SET(GB_KEY_RSHIFT,   VK_RSHIFT);
+		GB__KEY_SET(GB_KEY_RALT,     VK_RMENU);
+		GB__KEY_SET(GB_KEY_RSYSTEM,  VK_RWIN);
+		GB__KEY_SET(GB_KEY_MENU,     VK_MENU);
+
+		GB__KEY_SET(GB_KEY_LBRACKET,  VK_OEM_4);
+		GB__KEY_SET(GB_KEY_RBRACKET,  VK_OEM_6);
+		GB__KEY_SET(GB_KEY_SEMICOLON, VK_OEM_1);
+		GB__KEY_SET(GB_KEY_COMMA,     VK_OEM_COMMA);
+		GB__KEY_SET(GB_KEY_PERIOD,    VK_OEM_PERIOD);
+		GB__KEY_SET(GB_KEY_QUOTE,     VK_OEM_7);
+		GB__KEY_SET(GB_KEY_SLASH,     VK_OEM_2);
+		GB__KEY_SET(GB_KEY_BACKSLASH, VK_OEM_5);
+		GB__KEY_SET(GB_KEY_GRAVE,     VK_OEM_3);
+		GB__KEY_SET(GB_KEY_EQUALS,    VK_OEM_PLUS);
+		GB__KEY_SET(GB_KEY_MINUS,     VK_OEM_MINUS);
+
+		GB__KEY_SET(GB_KEY_SPACE,     VK_SPACE);
+		GB__KEY_SET(GB_KEY_RETURN,    VK_RETURN);
+		GB__KEY_SET(GB_KEY_BACKSPACE, VK_BACK);
+		GB__KEY_SET(GB_KEY_TAB,       VK_TAB);
+
+		GB__KEY_SET(GB_KEY_PAGEUP,   VK_PRIOR);
+		GB__KEY_SET(GB_KEY_PAGEDOWN, VK_NEXT);
+		GB__KEY_SET(GB_KEY_END,      VK_END);
+		GB__KEY_SET(GB_KEY_HOME,     VK_HOME);
+		GB__KEY_SET(GB_KEY_INSERT,   VK_INSERT);
+		GB__KEY_SET(GB_KEY_DELETE,   VK_DELETE);
+
+		GB__KEY_SET(GB_KEY_PLUS,     VK_ADD);
+		GB__KEY_SET(GB_KEY_SUBTRACT, VK_SUBTRACT);
+		GB__KEY_SET(GB_KEY_MULTIPLY, VK_MULTIPLY);
+		GB__KEY_SET(GB_KEY_DIVIDE,   VK_DIVIDE);
+
+		GB__KEY_SET(GB_KEY_LEFT,  VK_LEFT);
+		GB__KEY_SET(GB_KEY_RIGHT, VK_RIGHT);
+		GB__KEY_SET(GB_KEY_UP,    VK_UP);
+		GB__KEY_SET(GB_KEY_DOWN,  VK_DOWN);
+
+		GB__KEY_SET(GB_KEY_NUMPAD0, VK_NUMPAD0);
+		GB__KEY_SET(GB_KEY_NUMPAD1, VK_NUMPAD1);
+		GB__KEY_SET(GB_KEY_NUMPAD2, VK_NUMPAD2);
+		GB__KEY_SET(GB_KEY_NUMPAD3, VK_NUMPAD3);
+		GB__KEY_SET(GB_KEY_NUMPAD4, VK_NUMPAD4);
+		GB__KEY_SET(GB_KEY_NUMPAD5, VK_NUMPAD5);
+		GB__KEY_SET(GB_KEY_NUMPAD6, VK_NUMPAD6);
+		GB__KEY_SET(GB_KEY_NUMPAD7, VK_NUMPAD7);
+		GB__KEY_SET(GB_KEY_NUMPAD8, VK_NUMPAD8);
+		GB__KEY_SET(GB_KEY_NUMPAD9, VK_NUMPAD9);
+
+		GB__KEY_SET(GB_KEY_F1,  VK_F1);
+		GB__KEY_SET(GB_KEY_F2,  VK_F2);
+		GB__KEY_SET(GB_KEY_F3,  VK_F3);
+		GB__KEY_SET(GB_KEY_F4,  VK_F4);
+		GB__KEY_SET(GB_KEY_F5,  VK_F5);
+		GB__KEY_SET(GB_KEY_F6,  VK_F6);
+		GB__KEY_SET(GB_KEY_F7,  VK_F7);
+		GB__KEY_SET(GB_KEY_F8,  VK_F8);
+		GB__KEY_SET(GB_KEY_F9,  VK_F9);
+		GB__KEY_SET(GB_KEY_F10, VK_F10);
+		GB__KEY_SET(GB_KEY_F11, VK_F11);
+		GB__KEY_SET(GB_KEY_F12, VK_F12);
+		GB__KEY_SET(GB_KEY_F13, VK_F13);
+		GB__KEY_SET(GB_KEY_F14, VK_F14);
+		GB__KEY_SET(GB_KEY_F15, VK_F15);
+
+		GB__KEY_SET(GB_KEY_PAUSE, VK_PAUSE);
+		#undef GB__KEY_SET
+
+		p->key_modifiers.control = gb_platform_is_key_down(p, GB_KEY_LCONTROL) || gb_platform_is_key_down(p, GB_KEY_RCONTROL);
+		p->key_modifiers.alt     = gb_platform_is_key_down(p, GB_KEY_LALT)     || gb_platform_is_key_down(p, GB_KEY_RALT);
+		p->key_modifiers.shift   = gb_platform_is_key_down(p, GB_KEY_LSHIFT)   || gb_platform_is_key_down(p, GB_KEY_RSHIFT);
+	}
+
+	{ /* NOTE(bill): Set Controller states */
+		DWORD max_controller_count = XUSER_MAX_COUNT;
+		if (max_controller_count > gb_count_of(p->game_controllers))
+			max_controller_count = gb_count_of(p->game_controllers);
+
+		for (i = 0;
+		     i < max_controller_count;
+		     i++) {
+			gbGameController *controller = &p->game_controllers[i];
+
+			XINPUT_STATE controller_state = {0};
+			if (p->xinput.get_state(cast(DWORD)i, &controller_state) != ERROR_SUCCESS) {
+				// NOTE(bill): The controller is not available
+				controller->is_connected = false;
+			} else {
+				// NOTE(bill): This controller is plugged in
+				// TODO(bill): See if ControllerState.dwPacketNumber increments too rapidly
+				XINPUT_GAMEPAD *pad = &controller_state.Gamepad;
+
+				controller->is_connected = true;
+
+				// TODO(bill): This is a square deadzone, check XInput to
+				// verify that the deadzone is "round" and show how to do
+				// round deadzone processing.
+				controller->axes[GB_CONTROLLER_AXIS_LEFT_X]  = gb__process_xinput_stick_value(pad->sThumbLX, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
+				controller->axes[GB_CONTROLLER_AXIS_LEFT_Y]  = gb__process_xinput_stick_value(pad->sThumbLY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
+				controller->axes[GB_CONTROLLER_AXIS_RIGHT_Y] = gb__process_xinput_stick_value(pad->sThumbRX, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
+				controller->axes[GB_CONTROLLER_AXIS_RIGHT_Y] = gb__process_xinput_stick_value(pad->sThumbRY, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
+
+				controller->axes[GB_CONTROLLER_AXIS_LEFT_TRIGGER]  = gb__process_xinput_trigger_value(pad->bLeftTrigger);
+				controller->axes[GB_CONTROLLER_AXIS_RIGHT_TRIGGER] = gb__process_xinput_trigger_value(pad->bRightTrigger);
+
+
+				if ((controller->axes[GB_CONTROLLER_AXIS_LEFT_X] != 0.0f) ||
+					(controller->axes[GB_CONTROLLER_AXIS_LEFT_Y] != 0.0f)) {
+					controller->is_analog = true;
+				}
+
+				// NOTE(bill): I know, I just wanted macros
+			#define GB__PROCESS_PAD_BUTTON(stick_axis, sign, xinput_button) do { \
+					if (pad->wButtons & xinput_button) { \
+						controller->axes[stick_axis] = sign 1.0f; \
+						controller->is_analog  = false; \
+					} \
+				} while (0)
+
+				GB__PROCESS_PAD_BUTTON(GB_CONTROLLER_AXIS_LEFT_X, -, XINPUT_GAMEPAD_DPAD_LEFT);
+				GB__PROCESS_PAD_BUTTON(GB_CONTROLLER_AXIS_LEFT_X, +, XINPUT_GAMEPAD_DPAD_RIGHT);
+				GB__PROCESS_PAD_BUTTON(GB_CONTROLLER_AXIS_LEFT_Y, -, XINPUT_GAMEPAD_DPAD_DOWN);
+				GB__PROCESS_PAD_BUTTON(GB_CONTROLLER_AXIS_LEFT_Y, +, XINPUT_GAMEPAD_DPAD_UP);
+			#undef GB__PROCESS_PAD_BUTTON
+
+			#define GB__PROCESS_DIGITAL_AXIS(stick_axis, sign, button_type) \
+				gb__process_xinput_digital_button((controller->axes[stick_axis] < sign 0.5f) ? 1 : 0, 1, &controller->buttons[button_type])
+				GB__PROCESS_DIGITAL_AXIS(GB_CONTROLLER_AXIS_LEFT_X, -, GB_CONTROLLER_BUTTON_LEFT);
+				GB__PROCESS_DIGITAL_AXIS(GB_CONTROLLER_AXIS_LEFT_X, +, GB_CONTROLLER_BUTTON_RIGHT);
+				GB__PROCESS_DIGITAL_AXIS(GB_CONTROLLER_AXIS_LEFT_Y, -, GB_CONTROLLER_BUTTON_DOWN);
+				GB__PROCESS_DIGITAL_AXIS(GB_CONTROLLER_AXIS_LEFT_Y, +, GB_CONTROLLER_BUTTON_UP);
+			#undef GB__PROCESS_DIGITAL_AXIS
+
+			#define GB__PROCESS_DIGITAL_BUTTON(button_type, xinput_button) \
+				gb__process_xinput_digital_button(pad->wButtons, xinput_button, &controller->buttons[button_type])
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_A, XINPUT_GAMEPAD_A);
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_B, XINPUT_GAMEPAD_B);
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_X, XINPUT_GAMEPAD_X);
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_Y, XINPUT_GAMEPAD_Y);
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_LEFT_SHOULDER, XINPUT_GAMEPAD_LEFT_SHOULDER);
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_RIGHT_SHOULDER, XINPUT_GAMEPAD_RIGHT_SHOULDER);
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_START, XINPUT_GAMEPAD_START);
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_BACK, XINPUT_GAMEPAD_BACK);
+			#undef GB__PROCESS_DIGITAL_BUTTON
+			}
+		}
+	}
+
+	{ /* NOTE(bill): Process pending messages */
+		MSG message;
+		for (;;) {
+			BOOL is_okay = PeekMessage(&message, 0, 0, 0, PM_REMOVE);
+			if (!is_okay) break;
+
+			switch (message.message) {
+			case WM_QUIT:
+				p->quit_requested = true;
+				break;
+
+			default:
+				TranslateMessage(&message);
+				DispatchMessageW(&message);
+				break;
+		}
+		}
+	}
+}
+
+void 
+gb_platform_display(gbPlatform *p)
+{
+	gbWindow *window;
+	GB_ASSERT_NOT_NULL(p);
+
+	window = &p->window;
+
+	switch (window->type) {
+	case GB_WINDOW_OPENGL: {
+		SwapBuffers(window->win32_dc);
+	} break;
+	case GB_WINDOW_SOFTWARE: {
+		StretchDIBits(window->win32_dc,
+		              0, 0, window->width, window->height,
+		              0, 0, window->width, window->height,
+		              window->software.memory,
+		              &window->software.win32_bmi,
+		              DIB_RGB_COLORS, SRCCOPY);
+	} break;
+	default: GB_PANIC("Invalid window type"); break;
+	}
+
+	{
+		f64 prev_time = p->curr_time;
+		f64 curr_time = gb_time_now();
+		p->dt_for_frame = curr_time - prev_time;
+		p->curr_time = curr_time;
+	}
+}
+
+
+gb_inline b32 
+gb_platform_is_key_down(gbPlatform *p, gbKeyType key)
+{
+	b32 is_down = p->keys[key].is_down;
+	return is_down;
+}
+
+b32 
+gb_platform_is_key_held(gbPlatform *p, gbKeyType key)
+{
+	b32 is_held = (p->keys[key].is_down) && (p->keys[key].repeat_count > 0);
+	return is_held;
+}
+
+void
+gb_platform_show_cursor(gbPlatform *p, i32 show)
+{
+	gb_unused(p);
+	ShowCursor(show);
+}
+
+void
+gb_platform_set_mouse_position(gbPlatform *p, gbWindow *rel_win, i32 x, i32 y)
+{
+	POINT point;
+	point.x = cast(LONG)x;
+	/* point.y = cast(LONG)rel_win->height-1-y; */
+	point.y = cast(LONG)y;
+	ClientToScreen(cast(HWND)rel_win->handle, &point);
+	SetCursorPos(point.x, point.y);
+
+	p->mouse.dx = point.x - p->mouse.x;
+	p->mouse.dy = point.y - p->mouse.y;
+	p->mouse.x  = point.x;
+	p->mouse.y  = point.y;
+}
+
+
+gb_inline gbGameController *
+gb_platform_get_controller(gbPlatform *p, isize index)
+{
+	if (index >= 0 && index < gb_count_of(p->game_controllers))
+		return p->game_controllers + index;
+	return NULL;
+}
+
+LRESULT CALLBACK
+gb__win32_main_window_callback(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
+{
+	LRESULT result = 0;
+	gbWindow *window = cast(gbWindow *)GetWindowLongPtr(wnd, GWLP_USERDATA);
+
+	switch (msg) {
+	case WM_CLOSE:
+	case WM_DESTROY:
+		window->is_closed = true;
+		break;
+
+	default:
+		result = DefWindowProcW(wnd, msg, wparam, lparam);
+		break;
+	}
+
+	return result;
+}
+
+
+/* TODO(bill): Make this return errors rathern than silly message boxes */
+gbWindow *
+gb_window_init(gbPlatform *p, char const *title, i32 w, i32 h, gbWindowType type, b32 is_fullscreen)
+{
+	gbWindow *window = NULL;
+	WNDCLASSEXW wc = {gb_size_of(WNDCLASSEXW)};
+	DWORD ex_style, style;
+	RECT wr;
+	char16 title_buffer[256] = {0}; /* TODO(bill): gb_local_persist this? */
+
+
+
+	window = &p->window;
+	gb_zero_struct(window);
+
+	wc.style = CS_HREDRAW | CS_VREDRAW; /* | CS_OWNDC */
+	wc.lpfnWndProc   = gb__win32_main_window_callback;
+	wc.hIcon         = LoadIcon(NULL, IDI_WINLOGO);
+	wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
+	wc.hbrBackground = cast(HBRUSH)GetStockObject(WHITE_BRUSH);
+	wc.lpszMenuName  = NULL;
+	wc.lpszClassName = L"gb-win32-wndclass"; /* TODO(bill): Is this enough? */
+	wc.hInstance     = GetModuleHandle(NULL);
+	wc.hIconSm       = LoadIcon(NULL, IDI_WINLOGO);
+
+	if (RegisterClassExW(&wc) == 0) {
+		MessageBoxW(NULL, L"Failed to register the window class", L"ERROR", MB_OK | MB_ICONEXCLAMATION);
+		return NULL;
+	}
+
+	if (is_fullscreen) {
+		DEVMODEW screen_settings = {gb_size_of(DEVMODEW)};
+		screen_settings.dmPelsWidth	 = w;
+		screen_settings.dmPelsHeight = h;
+		screen_settings.dmBitsPerPel = 32;
+		screen_settings.dmFields     = DM_BITSPERPEL|DM_PELSWIDTH|DM_PELSHEIGHT;
+
+		if (ChangeDisplaySettingsW(&screen_settings, CDS_FULLSCREEN) != DISP_CHANGE_SUCCESSFUL) {
+			if (MessageBoxW(NULL, L"The requested fullscreen mode is not supported by\n"
+			                L"your video card. Use windowed mode instead?",
+			                L"",
+			                MB_YESNO|MB_ICONEXCLAMATION) == IDYES) {
+				is_fullscreen = false;
+			} else {
+				MessageBoxW(NULL, L"Failed to create a window", L"ERROR", MB_OK|MB_ICONSTOP);
+				return NULL;
+			}
+		}
+	}
+
+	ex_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
+	style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_VISIBLE | WS_OVERLAPPEDWINDOW;
+	wr.left = 0;
+	wr.top = 0;
+	wr.right = w;
+	wr.bottom = h;
+	AdjustWindowRect(&wr, style, false);
+
+	window->is_fullscreen = is_fullscreen;
+	window->type = type;
+	window->handle = CreateWindowExW(ex_style,
+	                                 wc.lpszClassName,
+	                                 cast(LPCWSTR)gb_utf8_to_ucs2(title_buffer, gb_size_of(title_buffer), title),
+	                                 style,
+	                                 CW_USEDEFAULT, CW_USEDEFAULT,
+	                                 wr.right - wr.left, wr.bottom - wr.top,
+	                                 0, 0,
+	                                 GetModuleHandle(NULL),
+	                                 cast(HWND)NULL);
+
+	if (!window->handle) {
+		MessageBoxW(NULL, L"Window creation failed", L"Error", MB_OK|MB_ICONEXCLAMATION);
+		return NULL;
+	}
+
+	window->win32_dc = GetDC(cast(HWND)window->handle);
+
+	if (window->type == GB_WINDOW_OPENGL) {
+		PIXELFORMATDESCRIPTOR pfd = {gb_size_of(PIXELFORMATDESCRIPTOR)};
+		pfd.nVersion     = 1;
+		pfd.dwFlags      = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL;
+		pfd.iPixelType   = PFD_TYPE_RGBA;
+		pfd.cColorBits   = 32;
+		pfd.cAlphaBits   = 8;
+		pfd.cDepthBits   = 24;
+		pfd.cStencilBits = 8;
+		pfd.iLayerType   = PFD_MAIN_PLANE;
+
+		SetPixelFormat(window->win32_dc, ChoosePixelFormat(window->win32_dc, &pfd), NULL);
+
+		window->opengl.win32_context = wglCreateContext(window->win32_dc);
+		wglMakeCurrent(window->win32_dc, window->opengl.win32_context);
+	} else if (window->type == GB_WINDOW_SOFTWARE) {
+		gb__window_resize_dib_section(window, w, h);
+	}
+	
+
+	SetForegroundWindow(cast(HWND)window->handle);
+	SetFocus(cast(HWND)window->handle);
+	SetWindowLongPtr(cast(HWND)window->handle, GWLP_USERDATA, cast(LONG_PTR)window);
+	return window;
+}
+
+void      
+gb_window_set_position(gbWindow *w, i32 x, i32 y)
+{
+	RECT rect;
+	i32 width, height;
+
+	GetClientRect(cast(HWND)w->handle, &rect);
+	width  = rect.right - rect.left;
+	height = rect.bottom - rect.top;
+	MoveWindow(cast(HWND)w->handle, x, y, width, height, false);
+}
+
+void      
+gb_window_set_title(gbWindow *w, char const *title, ...)
+{
+	gb_local_persist char16 buffer[4096] = {0};
+	char *str;
+	va_list va;
+	va_start(va, title);
+	str = gb_sprintf_va(title, va);
+	va_end(va);
+	SetWindowTextW(cast(HWND)w->handle, cast(LPCWSTR)gb_utf8_to_ucs2(buffer, gb_size_of(buffer), str));
+}
+
+void      
+gb_window_toggle_fullscreen(gbWindow *w)
+{
+	HWND handle = cast(HWND)w->handle;
+	DWORD style = GetWindowLong(handle, GWL_STYLE);
+	if (style & WS_OVERLAPPEDWINDOW) {
+		MONITORINFO monitor_info = {gb_size_of(monitor_info)};
+		if (GetWindowPlacement(handle, &w->win32_placement) &&
+		    GetMonitorInfo(MonitorFromWindow(handle, 1), &monitor_info)) {
+			SetWindowLong(handle, GWL_STYLE, style & ~WS_OVERLAPPEDWINDOW);
+			SetWindowPos(handle, HWND_TOP,
+			             monitor_info.rcMonitor.left, monitor_info.rcMonitor.top,
+			             monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
+			             monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
+			             SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+
+			w->is_fullscreen = true;
+		}
+	} else {
+		SetWindowLong(handle, GWL_STYLE, style | WS_OVERLAPPEDWINDOW);
+		SetWindowPlacement(handle, &w->win32_placement);
+		SetWindowPos(handle, 0, 0, 0, 0, 0,
+		             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+		             SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+
+		w->is_fullscreen = false;
+	}
+}
+
+void
+gb_window_make_context_current(gbWindow *w)
+{
+	if (w->type == GB_WINDOW_OPENGL) {
+		wglMakeCurrent(w->win32_dc, w->opengl.win32_context);
+	}
+}
+
+
+
+#endif
+
+#endif /* GB_PLATFORM */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
