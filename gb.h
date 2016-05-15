@@ -1,4 +1,4 @@
-/* gb.h - v0.13  - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.14  - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -26,6 +26,7 @@ Conventions used:
 
 
 Version History:
+	0.14  - Better File Handling and better printf (WIN32 Only)
 	0.13  - Highly experimental platform layer (WIN32 Only)
 	0.12b - Fix minor file bugs
 	0.12a - Compile as C++
@@ -218,9 +219,8 @@ extern "C" {
 	#undef WIN32_LEAN_AND_MEAN
 	#undef WIN32_MEAN_AND_LEAN
 	#undef VC_EXTRALEAN
-	#include <direct.h>
+
 	#include <malloc.h> /* NOTE(bill): _aligned_*() */
-	#include <io.h>     /* NOTE(bill): File functions */
 #else
 	#include <dlfcn.h>
 	#include <mach/mach_time.h>
@@ -229,9 +229,6 @@ extern "C" {
 	#include <time.h>
 	#include <unistd.h>
 #endif
-
-#include <sys/stat.h> /* NOTE(bill): File info */
-#include <sys/locking.h>
 
 
 
@@ -1588,13 +1585,10 @@ typedef struct gbDirInfo {
 typedef u64 gbFileTime;
 
 typedef struct gbFile {
-	intptr fd;
+	void *handle;
 	char *name;
 	gbDirInfo *dir_info;
 	gbFileTime last_write_time;
-#if defined(GB_SYSTEM_WINDOWS)
-	HFILE win32_file;
-#endif
 } gbFile;
 
 typedef struct gbFileContents {
@@ -1602,43 +1596,28 @@ typedef struct gbFileContents {
 	isize size;
 } gbFileContents;
 
-typedef u32 gbFileMode;
 
-#define GB_FILE_MODE_DIR         cast(gbFileMode)GB_BIT(31) /* d: is a directory        */
-#define GB_FILE_MODE_APPEND      cast(gbFileMode)GB_BIT(30) /* a: append-only           */
-#define GB_FILE_MODE_EXCLUSIVE   cast(gbFileMode)GB_BIT(29) /* l: exclusive use         */
-#define GB_FILE_MODE_TEMPORARY   cast(gbFileMode)GB_BIT(28) /* T: temporary file        */
-#define GB_FILE_MODE_SYMLINK     cast(gbFileMode)GB_BIT(27) /* L: symbolic link         */
-#define GB_FILE_MODE_DEVICE      cast(gbFileMode)GB_BIT(26) /* D: device file           */
-#define GB_FILE_MODE_NAMED_PIPE  cast(gbFileMode)GB_BIT(25) /* p: named pipe            */
-#define GB_FILE_MODE_SOCKET      cast(gbFileMode)GB_BIT(24) /* S: UNIX domain socket    */
-#define GB_FILE_MODE_SETUID      cast(gbFileMode)GB_BIT(23) /* u: setuid                */
-#define GB_FILE_MODE_SETGID      cast(gbFileMode)GB_BIT(22) /* g: setgid                */
-#define GB_FILE_MODE_CHAR_DEVICE cast(gbFileMode)GB_BIT(21) /* c: UNIX character device */
-#define GB_FILE_MODE_STICKY      cast(gbFileMode)GB_BIT(20) /* t: sticky                */
-
-/* NOTE(bill): Mask for which non will be set for regular files */
-#define GB_FILE_MODE_TYPE GB_FILE_MODE_DIR | GB_FILE_MODE_SYMLINK | \
-                          GB_FILE_MODE_NAMED_PIPE | GB_FILE_MODE_SOCKET | \
-                          GB_FILE_MODE_DEVICE
-
-#define GB_FILE_MODE_PERM cast(gbFileMode)0777 /* NOTE(bill): UNIX Permission bits */
-
-/* TODO(bill): Should these be renamed to "proper english"? */
 typedef enum gbFileFlag {
-	GB_O_RDONLY = 0x0000,
-	GB_O_WRONLY = 0x0001,
-	GB_O_RDWR   = 0x0002,
-	GB_O_APPEND = 0x0008,
-	GB_O_CREATE = 0x0100,
-	GB_O_TRUNC  = 0x0200,
-	GB_O_EXCL   = 0x0400
+	GB_FILE_READ       = GB_BIT(0),
+	GB_FILE_WRITE      = GB_BIT(1),
+	GB_FILE_READ_WRITE = GB_BIT(2),
+	GB_FILE_APPEND     = GB_BIT(3),
+	GB_FILE_CREATE     = GB_BIT(4),
+	GB_FILE_TRUNCATE   = GB_BIT(5)
 } gbFileFlag;
 
+typedef u32 gbFileMode;
+typedef enum gbFileModeType {
+	GB_FILE_MODE_DENY   = 0,
+	GB_FILE_MODE_READ   = GB_BIT(0),
+	GB_FILE_MODE_WRITE  = GB_BIT(1),
+	GB_FILE_MODE_DELETE = GB_BIT(2),
+} gbFileModeType;
+
 typedef enum gbSeekWhence {
-	GB_SEEK_SET = 0,
-	GB_SEEK_CUR = 1,
-	GB_SEEK_END = 2
+	GB_SEEK_BEGIN   = 0,
+	GB_SEEK_CURRENT = 1,
+	GB_SEEK_END     = 2
 } gbSeekWhence;
 
 typedef enum gbFileError {
@@ -1650,16 +1629,18 @@ typedef enum gbFileError {
 	GB_FILE_ERR_TRUNCATION_FAILURE
 } gbFileError;
 
+typedef enum gbFileStandardType {
+	GB_FILE_STANDARD_INPUT,
+	GB_FILE_STANDARD_OUTPUT,
+	GB_FILE_STANDARD_ERROR
+} gbFileStandardType;
 
-extern gbFile *gb_stdin;
-extern gbFile *gb_stdout;
-extern gbFile *gb_stderr;
+GB_DEF gbFile gb_file_get_std(gbFileStandardType std);
 
 
 GB_DEF gbFileError gb_file_create     (gbFile *file, char const *filename, ...) GB_PRINTF_ARGS(2);
-GB_DEF void        gb_file_new        (gbFile *file, uintptr fd, char const *filename, ...) GB_PRINTF_ARGS(3);
 GB_DEF gbFileError gb_file_open       (gbFile *file, char const *filename, ...) GB_PRINTF_ARGS(2);
-GB_DEF gbFileError gb_file_open_file  (gbFile *file, u32 flag, gbFileMode perm, char const *filename, ...) GB_PRINTF_ARGS(4);
+GB_DEF gbFileError gb_file_open_file  (gbFile *file, u32 flag, gbFileMode mode, char const *filename, ...) GB_PRINTF_ARGS(4);
 GB_DEF gbFileError gb_file_close      (gbFile *file);
 GB_DEF b32         gb_file_read       (gbFile *file, void *buffer, isize size);
 GB_DEF b32         gb_file_write      (gbFile *file, void const *buffer, isize size);
@@ -1668,27 +1649,16 @@ GB_DEF b32         gb_file_write_at   (gbFile *file, void const *buffer, isize s
 GB_DEF i64         gb_file_seek       (gbFile *file, i64 offset, gbSeekWhence whence);
 GB_DEF i64         gb_file_tell       (gbFile *file);
 GB_DEF i64         gb_file_size       (gbFile *file);
-GB_DEF uintptr     gb_file_fd         (gbFile *file);
 GB_DEF char const *gb_file_name       (gbFile *file);
 GB_DEF gbFileError gb_file_truncate   (gbFile *file, i64 size);
 GB_DEF b32         gb_file_has_changed(gbFile *file);
 
 
 
-/* TODO(bill): read_dir and read_dir_names */
-
-GB_DEF b32         gb_file_mode_is_dir    (gbFileMode m);
-GB_DEF b32         gb_file_mode_is_regular(gbFileMode m);
-GB_DEF i32         gb_file_mode_perm      (gbFileMode m);
-GB_DEF char const *gb_file_mode_string    (gbFileMode m); /* NOTE(bill): Temporary local persisting buffer */
-
 GB_DEF b32 gb_file_is_exist    (char const *name);
 GB_DEF b32 gb_file_is_not_exist(char const *name);
 
-
 GB_DEF gbFileTime gb_file_last_write_time(char const *filepath, ...) GB_PRINTF_ARGS(1);
-
-GB_DEF i32 gb_chmod(char const *name, gbFileMode perm);
 
 GB_DEF b32 gb_file_rename(char const *old_filename, char const *new_filename);
 GB_DEF b32 gb_file_copy  (char const *existing_filename, char const *new_filename, b32 fail_if_exists);
@@ -1778,8 +1748,6 @@ GB_DEF void gb_exit(u32 code);
 GB_DEF void gb_yield(void);
 GB_DEF void gb_set_env(char const *name, char const *value);
 GB_DEF void gb_unset_env(char const *name);
-GB_DEF i32  gb_chdir(char const *path);
-GB_DEF void gb_get_working_cmd(char *buffer, isize len);
 
 GB_DEF u16 gb_endian_swap16(u16 i);
 GB_DEF u32 gb_endian_swap32(u32 i);
@@ -2384,31 +2352,15 @@ gb_snprintf(char *str, isize n, char const *fmt, ...)
 gb_inline isize
 gb_printf_va(char const *fmt, va_list va)
 {
-#if defined(GB_SYSTEM_WINDOWS)
-	/* TODO(bill): Fix File system */
-	gb_local_persist char buf[4096];
-	isize len = gb_snprintf_va(buf, gb_size_of(buf), fmt, va);
-	DWORD bw;
-	WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), buf, cast(DWORD)len, &bw, NULL);
-	return len;
-#else
-	return gb_fprintf_va(gb_stdout, fmt, va);
-#endif
+	gbFile f = gb_file_get_std(GB_FILE_STANDARD_OUTPUT);
+	return gb_fprintf_va(&f, fmt, va);
 }
 
 gb_inline isize
 gb_printf_err_va(char const *fmt, va_list va)
 {
-#if defined(GB_SYSTEM_WINDOWS)
-	/* TODO(bill): Fix File system */
-	gb_local_persist char buf[4096];
-	isize len = gb_snprintf_va(buf, gb_size_of(buf), fmt, va);
-	DWORD bw;
-	WriteFile(GetStdHandle(STD_ERROR_HANDLE), buf, cast(DWORD)len, &bw, NULL);
-	return len;
-#else
-	return gb_fprintf_va(gb_std, fmt, va);
-#endif
+	gbFile f = gb_file_get_std(GB_FILE_STANDARD_ERROR);
+	return gb_fprintf_va(&f, fmt, va);
 }
 
 gb_inline isize
@@ -2431,78 +2383,116 @@ gb_sprintf_va(char const *fmt, va_list va)
 
 
 enum {
-	GB__LETTER_CASE_NO_CHANGE,
-	GB__LETTER_CASE_LOWER,
-	GB__LETTER_CASE_UPPER,
-};
-typedef struct {
-	b8 left_justify;
-	b8 force_sign;
-	b8 force_type;
-	b8 pad_zeroes;
-	i32 force_case;
+	GB__FMT_MINUS     = GB_BIT(0),
+	GB__FMT_PLUS      = GB_BIT(1),
+	GB__FMT_ALT       = GB_BIT(2),
+	GB__FMT_SPACE     = GB_BIT(3),
+	GB__FMT_ZERO      = GB_BIT(4),
 
-	isize width;
-	i32 base, precision;
-} gb__FmtInfo;
+	GB__FMT_CHAR      = GB_BIT(5),
+	GB__FMT_SHORT     = GB_BIT(6),
+	GB__FMT_INT       = GB_BIT(7),
+	GB__FMT_LONG      = GB_BIT(8),
+	GB__FMT_LLONG     = GB_BIT(9),
+	GB__FMT_SIZE      = GB_BIT(10),
+	GB__FMT_INTPTR    = GB_BIT(11),
+
+	GB__FMT_FLOAT     = GB_BIT(12),
+	GB__FMT_DOUBLE    = GB_BIT(13),
+
+	GB__FMT_UNSIGNED  = GB_BIT(14),
+	GB__FMT_LOWER     = GB_BIT(15),
+	GB__FMT_UPPER     = GB_BIT(16),
+
+
+	GB__FMT_DONE      = GB_BIT(30)
+};
+
+typedef struct {
+	i32 base;
+	i32 flags;
+	i32 width;
+	i32 precision;
+} gbFmtStatus;
+
 
 gb_internal isize
-gb__print_string(char *text, isize max_len, gb__FmtInfo *info, char const *string)
+gb__print_string(char *text, isize max_len, gbFmtStatus *status, char const *str)
 {
-	/* TODO(bill): Get precision and width to work correctly
-	 * How does it actually work?!
-	 */
-	isize len = 0;
-	isize str_len = gb_strlen(string);
-	isize precision = str_len;
+	/* TODO(bill): Get precision and width to work correctly. How does it actually work?! */
+	/* TODO(bill): This looks very buggy indeed. */
+	isize res = 0;
+	isize len;
 
-	if (info && info->width && info->width > str_len) {
-		char fill = info->pad_zeroes ? '0' : ' ';
-		isize width = info->width - gb_strlen(string);
-		while (width-- > 0 && max_len > 0) {
-			*text++ = fill;
-			len++, max_len--;
+	if (status && status->precision >= 0)
+		len = gb_strnlen(str, status->precision);
+	else
+		len = gb_strlen(str);
+
+	if (status && (status->width == 0 || status->flags & GB__FMT_MINUS)) {
+		if (status->precision > 0)
+			len = status->precision < len ? status->precision : len;
+
+		res += gb_strlcpy(text, str, len);
+
+		if (status->width > res) {
+			isize padding = status->width - len;
+			char pad = (status->flags & GB__FMT_ZERO) ? '0' : ' ';
+			while (padding --> 0)
+				*text++ = pad, res++;
 		}
+	} else {
+		if (status && (status->width > res)) {
+			isize padding = status->width - len;
+			char pad = (status->flags & GB__FMT_ZERO) ? '0' : ' ';
+			while (padding --> 0)
+				*text++ = pad, res++;
+		}
+
+		res += gb_strlcpy(text, str, len);
 	}
 
-	if (info && info->precision > 0) precision = gb_min(info->precision, precision);
-
-	len += gb_strlcpy(text, string, gb_min(max_len, precision));
-
-	if (info) {
-		if (info->force_case == GB__LETTER_CASE_UPPER)
+	
+	if (status) {
+		if (status->flags & GB__FMT_UPPER)
 			gb_str_to_upper(text);
-		else if (info->force_case == GB__LETTER_CASE_LOWER)
+		else if (status->flags & GB__FMT_LOWER)
 			gb_str_to_lower(text);
 	}
 
-	return len;
+	return res;
 }
 
 gb_internal isize
-gb__print_i64(char *text, isize max_len, gb__FmtInfo *info, i64 value)
+gb__print_char(char *text, isize max_len, gbFmtStatus *status, char arg)
+{
+	char str[2] = "";
+	str[0] = arg;
+	return gb__print_string(text, max_len, status, str);
+}
+
+
+gb_internal isize
+gb__print_i64(char *text, isize max_len, gbFmtStatus *status, i64 value)
 {
 	char num[130];
-
-	/* TODO(bill): Make gb_lltoa */
-	gb_i64_to_str(value, num, info ? info->base : 10);
-	return gb__print_string(text, max_len, info, num);
+	gb_i64_to_str(value, num, status ? status->base : 10);
+	return gb__print_string(text, max_len, status, num);
 }
 
 gb_internal isize
-gb__print_u64(char *text, isize max_len, gb__FmtInfo *info, u64 value)
+gb__print_u64(char *text, isize max_len, gbFmtStatus *status, u64 value)
 {
 	char num[130];
-
-	/* TODO(bill): Make gb_ulltoa */
-	gb_u64_to_str(value, num, info ? info->base : 10);
-	return gb__print_string(text, max_len, info, num);
+	gb_u64_to_str(value, num, status ? status->base : 10);
+	return gb__print_string(text, max_len, status, num);
 }
 
 
 gb_internal isize
-gb__print_f64(char *text, isize max_len, gb__FmtInfo *info, f64 arg)
+gb__print_f64(char *text, isize max_len, gbFmtStatus *status, f64 arg)
 {
+	/* TODO(bill): Handle exponent notation */
 	isize width, len, remaining = max_len;
 	char *text_begin = text;
 
@@ -2513,7 +2503,7 @@ gb__print_f64(char *text, isize max_len, gb__FmtInfo *info, f64 arg)
 				*text = '-', remaining--;
 			text++;
 			arg = -arg;
-		} else if (info->force_sign) {
+		} else if (status->flags & GB__FMT_MINUS) {
 			if (remaining > 1)
 				*text = '+', remaining--;
 			text++;
@@ -2529,16 +2519,15 @@ gb__print_f64(char *text, isize max_len, gb__FmtInfo *info, f64 arg)
 			remaining -= len;
 		arg -= value;
 
-		if (info->precision < 0) {
-			info->precision = 6;
-		}
+		if (status->precision < 0)
+			status->precision = 6;
 
-		if (info->force_type || info->precision > 0) {
+		if ((status->flags & GB__FMT_ALT) || status->precision > 0) {
 			i64 mult = 10;
 			if (remaining > 1)
 				*text = '.', remaining--;
 			text++;
-			while (info->precision-- > 0) {
+			while (status->precision-- > 0) {
 				value = cast(u64)(arg * mult);
 				len = gb__print_u64(text, remaining, NULL, value);
 				text += len;
@@ -2554,16 +2543,16 @@ gb__print_f64(char *text, isize max_len, gb__FmtInfo *info, f64 arg)
 		if (remaining > 1)
 			*text = '0', remaining--;
 		text++;
-		if (info->force_type) {
+		if (status->flags & GB__FMT_ALT) {
 			if (remaining > 1)
 				*text = '.', remaining--;
 			text++;
 		}
 	}
 
-	width = info->width - (text - text_begin);
+	width = status->width - (text - text_begin);
 	if (width > 0) {
-		char fill = info->pad_zeroes ? '0' : ' ';
+		char fill = (status->flags & GB__FMT_ZERO) ? '0' : ' ';
 		char *end = text+remaining-1;
 		len = (text - text_begin);
 
@@ -2593,200 +2582,223 @@ gb__print_f64(char *text, isize max_len, gb__FmtInfo *info, f64 arg)
 gb_no_inline isize
 gb_snprintf_va(char *text, isize max_len, char const *fmt, va_list va)
 {
-#if 0 && !defined(GB_NO_STDIO)
-	i32 res;
-#if defined(_WIN32)
-	res = _vsnprintf(text, max_len, fmt, va);
-#else
-	res = vsnprintf(text, max_len, fmt, va);
-#endif
-	if (max_len) text[max_len-1] = 0;
-	/* NOTE(bill): Unix returns length output would require, Windows returns negative when truncated. */
-	return (res >= max_len || res < 0) ? -1 : res;
-#else
+	char const *text_begin = text;
 	isize remaining = max_len;
-	char *text_begin = text;
 
-	if (!fmt) fmt = "";
 
 	while (*fmt) {
+		gbFmtStatus status = {0};
+		isize len = 0;
+		status.precision = -1;
+
+		while (*fmt && *fmt != '%' && remaining) 
+			*text++ = *fmt++;
+
 		if (*fmt == '%') {
-			isize len = 0;
-			b32 finish_parse = false, check_flag = true;
-
-			enum { /* NOTE(bill): Gotta love inline enums! */
-				DO_INT,
-				DO_LONG,
-				DO_I64
-			};
-			isize int_type = DO_INT;
-
-			gb__FmtInfo info = {0};
-			info.base = 10;
-			info.precision = -1;
-
-			while (check_flag) {
+			do {
 				switch (*fmt++) {
-				case '-': info.left_justify = true;  break;
-				case '+': info.force_sign   = true;  break;
-				case '#': info.force_type   = true;  break;
-				case '0': info.pad_zeroes   = true;  break;
-				default:  check_flag        = false; break;
-				}
-			}
-
-			if (*fmt == '*') {
-				info.width = cast(isize)va_arg(va, int);
-				if (fmt[1] == '.') fmt++;
-			}
-
-			if (*fmt == '.') {
-				fmt++;
-				if (*fmt >= '0' && *fmt <= '9') {
-					info.precision = cast(i32)gb_str_to_i64(fmt, cast(char **)&fmt, 0);
-				} else if (*fmt == '*') {
-					info.precision = cast(i32)va_arg(va, int);
-				} else {
-					info.precision = 0;
-				}
-				fmt++;
-			}
-
-			while (!finish_parse) {
-				switch (*fmt) {
-				case '%':
-					if (remaining > 1)
-						*text = '%';
-					len = 1;
-					finish_parse = true;
+				case '-':
+					status.flags |= GB__FMT_MINUS;
+					fmt++;
 					break;
-
-				case 'c':
-					/* NOTE(bill): `char` is promoted to `int` */
-					if (remaining > 1)
-						*text = cast(char)va_arg(va, int);
-					len = 1;
-					finish_parse = true;
+				case '+':
+					status.flags |= GB__FMT_PLUS;
+					fmt++;
 					break;
-
-				case 'h':
-					/* NOTE(bill): `short` is promoted to `int`*/
-					/* TODO(bill): */
+				case '#':
+					status.flags |= GB__FMT_ALT;
+					fmt++;
 					break;
-
-				case 'l':
-					if (int_type < DO_I64)
-						int_type++;
+				case ' ':
+					status.flags |= GB__FMT_SPACE;
+					fmt++;
 					break;
-
-				case 'I':
-					if (gb_strncmp(fmt, "I64", 3) == 0) {
-						fmt += 2;
-						int_type = DO_I64;
-					}
+				case '0':
+					status.flags |= GB__FMT_ZERO;
+					fmt++;
 					break;
-
-				case 'i':
-				case 'd':
-					switch (int_type) {
-					case DO_INT:
-						len = gb__print_i64(text, remaining, &info, cast(i64)va_arg(va, int));
-						break;
-					case DO_LONG:
-						len = gb__print_i64(text, remaining, &info, cast(i64)va_arg(va, long));
-						break;
-					case DO_I64:
-						len = gb__print_i64(text, remaining, &info, va_arg(va, i64));
-						break;
-					}
-					finish_parse = true;
-					break;
-
-				case 'p':
-					info.force_case = GB__LETTER_CASE_LOWER;
-					info.pad_zeroes = true;
-					len = gb__print_u64(text, remaining, &info, cast(u64)cast(uintptr)va_arg(va, void *));
-					finish_parse = true;
-					break;
-
-				case 'x':
-					info.force_case = GB__LETTER_CASE_LOWER;
-					/* Fallthrough */
-				case 'X':
-					if (info.force_case == GB__LETTER_CASE_NO_CHANGE)
-						info.force_case = GB__LETTER_CASE_UPPER;
-					if (info.base == 10)
-						info.base = 16;
-					if (*fmt == 'p') {
-					#if defined(GB_ARCH_64_BIT)
-						int_type = DO_I64;
-					#else
-						int_type = DO_LONG;
-					#endif
-					}
-					/* Fallthrough */
-				case 'o':
-					if (info.base == 10)
-						info.base = 8;
-					/* Fallthrough */
-				case 'u':
-					info.pad_zeroes = true;
-					switch (int_type) {
-					case DO_INT:
-						len = gb__print_u64(text, remaining, &info, cast(u64)va_arg(va, unsigned int));
-						break;
-					case DO_LONG:
-						len = gb__print_u64(text, remaining, &info, cast(u64)va_arg(va, unsigned long));
-						break;
-					case DO_I64:
-						len = gb__print_u64(text, remaining, &info, va_arg(va, u64));
-						break;
-					}
-					finish_parse = true;
-					break;
-
-				case 'f':
-				case 'F':
-					len = gb__print_f64(text, remaining, &info, va_arg(va, f64));
-					finish_parse = true;
-					break;
-
-				case 's':
-					/* TODO(bill): Handle custom length strings i.e %.*s */
-					len = gb__print_string(text, remaining, &info, va_arg(va, char *));
-					finish_parse = true;
-					break;
-
-				/* TODO(bill): Handle a fuck ton more printf fmt cases!!! */
-				/* TODO(bill): Unhandled: eE, aA, gG (Does this differ from fF?), n(??) */
-
-
 				default:
-					finish_parse = true;
+					status.flags |= GB__FMT_DONE;
 					break;
 				}
-				fmt++;
-			}
-			text += len;
-			if (len >= remaining)
-				remaining = gb_min(remaining, 1);
-			else
-				remaining -= len;
-		} else {
-			if (remaining > 1)
-				*text = *fmt, remaining--;
-			fmt++, text++;
+			} while (!(status.flags & GB__FMT_DONE));
 		}
-	}
 
-	if (remaining > 0)
-		*text = '\0';
+		/* NOTE(bill): Optional Width */
+		if (*fmt == '*') {
+			int width = va_arg(va, int);
+			if (width < 0) {
+				status.flags |= GB__FMT_MINUS;
+				status.width = -status.width;
+			} else {
+				status.width = -status.width;
+			}
+			fmt++;
+		} else {
+			status.width = cast(i32)gb_str_to_i64(fmt, cast(char **)&fmt, 10);
+		}
+
+		/* NOTE(bill): Optional Precision */
+		if (*fmt == '.') {
+				fmt++;
+			if (*fmt == '*') {
+				status.precision = va_arg(va, int);
+				fmt++;
+			} else {
+				status.precision = cast(i32)gb_str_to_i64(fmt, cast(char **)&fmt, 10);
+			}
+			status.flags &= ~GB__FMT_ZERO;
+		}
+
+		switch (*fmt++) {
+		case 'h':
+			if (*fmt == 'h') {
+				/* hh => char */
+				status.flags |= GB__FMT_CHAR;
+				fmt++;
+			} else {
+				/* h => short */
+				status.flags |= GB__FMT_SHORT;
+			}
+			break;
+
+		case 'l':
+			if (*fmt == 'l') {
+				/* ll => long long */
+				status.flags |= GB__FMT_LLONG;
+				fmt++;
+			} else {
+				/* l => long */
+				status.flags |= GB__FMT_LONG;
+			}
+			break;
+
+			break;
+
+		case 't': /* NOTE(bill): isize */
+			status.flags |= GB__FMT_SIZE;
+			break;
+		case 'z': /* NOTE(bill): usize */
+			status.flags |= (GB__FMT_SIZE|GB__FMT_UNSIGNED);
+			break;
+
+		default:
+			fmt--;
+			break;
+		}
+
+
+		switch (*fmt) {
+		case 'u':
+			status.flags |= GB__FMT_UNSIGNED;
+			/* FALLTHROUGH */
+		case 'd':
+		case 'i':
+			status.base = 10;
+			break;
+
+		case 'o':
+			status.base = 8;
+			break;
+
+		case 'x':
+			status.base = 16;
+			status.flags |= (GB__FMT_UNSIGNED | GB__FMT_LOWER);
+			break;
+
+		case 'X':
+			status.base = 16;
+			status.flags |= (GB__FMT_UNSIGNED | GB__FMT_UPPER);
+			break;
+
+		case 'f':
+		case 'F':
+		case 'g':
+		case 'G':
+			len = gb__print_f64(text, remaining, &status, va_arg(va, f64));
+			break;
+
+		case 'a':
+		case 'A':
+			/* TODO(bill): */
+			break;
+
+		case 'c':
+			len = gb__print_char(text, remaining, &status, cast(char)va_arg(va, int));
+			break;
+
+		case 's': 
+			len = gb__print_string(text, remaining, &status, va_arg(va, char *));
+			break;
+
+		case 'p':
+			status.base = 16;
+			status.flags |= (GB__FMT_LOWER|GB__FMT_UNSIGNED|GB__FMT_ALT|GB__FMT_INTPTR);
+			break;
+
+		default:
+			fmt--;
+			break;
+		}
+
+		fmt++;
+
+
+		if (status.base != 0) {
+			if (status.flags & GB__FMT_UNSIGNED) {
+				u64 value = 0;
+				if (status.flags & GB__FMT_CHAR)
+					value = cast(u64)cast(u8)va_arg(va, int);
+				else if (status.flags & GB__FMT_SHORT)
+					value = cast(u64)cast(u16)va_arg(va, int);
+				else if (status.flags & GB__FMT_LONG)
+					value = cast(u64)va_arg(va, unsigned long);
+				else if (status.flags & GB__FMT_LLONG)
+					value = cast(u64)va_arg(va, unsigned long long);
+				else if (status.flags & GB__FMT_SIZE)
+					value = cast(u64)va_arg(va, usize);
+				else if (status.flags & GB__FMT_INTPTR)
+					value = cast(u64)va_arg(va, uintptr);
+				else
+					value = cast(u64)va_arg(va, int);
+
+				len = gb__print_u64(text, remaining, &status, value);
+
+			} else {
+				i64 value = 0;
+				if (status.flags & GB__FMT_CHAR)
+					value = cast(i64)cast(i8)va_arg(va, int);
+				else if (status.flags & GB__FMT_SHORT)
+					value = cast(i64)cast(i16)va_arg(va, int);
+				else if (status.flags & GB__FMT_LONG)
+					value = cast(i64)va_arg(va, long);
+				else if (status.flags & GB__FMT_LLONG)
+					value = cast(i64)va_arg(va, long long);
+				else if (status.flags & GB__FMT_SIZE)
+					value = cast(i64)va_arg(va, isize);
+				else if (status.flags & GB__FMT_INTPTR)
+					value = cast(i64)va_arg(va, intptr);
+				else
+					value = cast(i64)va_arg(va, int);
+
+				len = gb__print_i64(text, remaining, &status, value);
+            }
+		}
+
+
+		text += len;
+		if (len >= remaining)
+			remaining = gb_min(remaining, 1);
+		else
+			remaining -= len;
+	}	
+
+	*text++ = '\0';
 
 	{
 		isize res = (text - text_begin);
 		return (res >= max_len || res < 0) ? -1 : res;
 	}
-#endif
 }
 
 
@@ -6176,48 +6188,64 @@ gb_hash_table_clear(gbHashTable *h)
  * File Handling
  *
  */
-#if defined(GB_SYSTEM_WINDOWS)
-#define GB__FILE_STD(i) {i, NULL, NULL, 0}
-#else
-#define GB__FILE_STD(i) {i, NULL, NULL, 0}
-#endif
-
-gb_global gbFile gb__stdin  = GB__FILE_STD(0);
-gb_global gbFile gb__stdout = GB__FILE_STD(1);
-gb_global gbFile gb__stderr = GB__FILE_STD(2);
-
-gbFile *gb_stdin = &gb__stdin;
-gbFile *gb_stdout = &gb__stdout;
-gbFile *gb_stderr = &gb__stderr;
 
 #if defined(GB_SYSTEM_WINDOWS)
 
-/* IMPORTANT TODO(bill): REMOVE THE STUPID FUCKING POSIX CODE FOR WIN32! */
-
-gb_inline i32
-gb_chmod(char const *name, gbFileMode perm)
+gb_inline gbFile
+gb_file_get_std(gbFileStandardType std)
 {
-	return _chmod(name, perm & GB_FILE_MODE_PERM);
+	gbFile file = {0};
+	switch (std) {
+	case GB_FILE_STANDARD_INPUT:  file.handle = GetStdHandle(STD_INPUT_HANDLE);  break;
+	case GB_FILE_STANDARD_OUTPUT: file.handle = GetStdHandle(STD_OUTPUT_HANDLE); break;
+	case GB_FILE_STANDARD_ERROR:  file.handle = GetStdHandle(STD_ERROR_HANDLE);  break;
+	default: GB_PANIC("Invalid standard file"); break;
+	}
+	return file;
 }
 
-gbFileError
-gb_file_open_file_va(gbFile *file, u32 flag, gbFileMode perm, char const *filename, va_list va)
-{
-	b32 chmod = false;
-	int fd = 0; /* NOTE(bill): Must be an int on windows */
-	char const *name = gb_sprintf_va(filename, va);
 
-	if ((flag & GB_O_CREATE) != 0 &&
-	    (perm & GB_FILE_MODE_STICKY) != 0) {
-		if (gb_file_is_not_exist(name))
-			chmod = true;
+gbFileError
+gb_file_open_file_va(gbFile *file, u32 flag, gbFileMode mode, char const *filename, va_list va)
+{
+	char const *name = gb_sprintf_va(filename, va);
+	gb_zero_struct(file);
+
+	if (filename) file->name = gb_alloc_str(gb_heap_allocator(), name);
+
+	{
+		DWORD  desired_access       = 0;
+		DWORD  share_mode           = 0;
+		DWORD  creation_disposition = 0;
+
+		if (flag & GB_FILE_READ)       desired_access |= GENERIC_READ;
+		if (flag & GB_FILE_WRITE)      desired_access |= GENERIC_WRITE;
+		if (flag & GB_FILE_READ_WRITE) desired_access |= (GENERIC_READ|GENERIC_WRITE);
+		if (flag & GB_FILE_APPEND)     desired_access |= (GENERIC_READ|GENERIC_WRITE);
+		if (flag & GB_FILE_CREATE)     desired_access |= (GENERIC_READ|GENERIC_WRITE);
+
+		if (mode & GB_FILE_MODE_READ)   share_mode |= FILE_SHARE_READ;
+		if (mode & GB_FILE_MODE_WRITE)  share_mode |= FILE_SHARE_WRITE;
+		if (mode & GB_FILE_MODE_DELETE) share_mode |= FILE_SHARE_DELETE;
+
+		// if (flag & GB_FILE_CREATE) creation_disposition |= 
+		if (flag & GB_FILE_TRUNCATE) creation_disposition |= TRUNCATE_EXISTING;
+		if (flag & GB_FILE_READ)     creation_disposition |= OPEN_EXISTING;
+		if (flag & GB_FILE_WRITE)    creation_disposition |= OPEN_EXISTING;
+		if (flag & GB_FILE_CREATE)   creation_disposition |= CREATE_ALWAYS;
+
+
+		file->handle = CreateFileA(file->name,
+		                           desired_access,
+		                           share_mode,
+		                           NULL,
+		                           creation_disposition,
+		                           0,
+		                           NULL);
 	}
 
-	fd = _open(name, flag|0x8000, perm);
 
-	if (chmod) gb_chmod(name, perm);
-
-	gb_file_new(file, fd, "%s", name);
+	file->last_write_time = gb_file_last_write_time("%s", file->name);
 	return GB_FILE_ERR_NONE;
 }
 
@@ -6229,10 +6257,10 @@ gb_file_close(gbFile *file)
 
 	if (file->name) gb_free(gb_heap_allocator(), file->name);
 
-	if (file->fd == cast(intptr)INVALID_HANDLE_VALUE)
+	if (file->handle == INVALID_HANDLE_VALUE)
 		return GB_FILE_ERR_INVALID;
 
-	_close(cast(int)file->fd);
+	CloseHandle(file->handle);
 
 	return GB_FILE_ERR_NONE;
 }
@@ -6240,59 +6268,54 @@ gb_file_close(gbFile *file)
 b32
 gb_file_read(gbFile *f, void *buffer, isize size)
 {
-	int bytes_read;
-	int fd = cast(int)f->fd;
-	/* TODO(bill): Do I _need_ this locking or is something else better? */
-	_locking(fd, _LK_LOCK, cast(unsigned int)size);
-	bytes_read = _read(fd, buffer, cast(unsigned int)size);
-	_locking(fd, _LK_UNLCK, cast(unsigned int)size);
-	return bytes_read == size;
+	DWORD bytes_read;
+	if (ReadFile(f->handle, buffer, cast(DWORD)size, &bytes_read, NULL))
+		return bytes_read == size;
+	return false;
 }
 
 b32
 gb_file_write(gbFile *f, void const *buffer, isize size)
 {
-	int bytes_written;
-	int fd = cast(int)f->fd;
-	/* TODO(bill): Do I _need_ this locking or is something else better? */
-	_locking(fd, _LK_LOCK, cast(unsigned int)size);
-	bytes_written = _write(fd, buffer, cast(unsigned int)size);
-	_locking(fd, _LK_UNLCK, cast(unsigned int)size);
-	return bytes_written == size;
+	DWORD bytes_written;
+	if (WriteFile(f->handle, buffer, cast(DWORD)size, &bytes_written, NULL))
+		return bytes_written == size;
+	return false;
 }
 
 gb_inline i64
-gb_file_seek(gbFile *file, i64 offset, gbSeekWhence whence)
+gb_file_seek(gbFile *file, i64 offset_, gbSeekWhence whence)
 {
-	return _lseeki64(cast(int)file->fd, offset, whence);
+	LARGE_INTEGER offset;
+	LARGE_INTEGER new_offset;
+	offset.QuadPart = offset_;
+	SetFilePointerEx(file->handle, offset, &new_offset, whence);
+	return cast(i64)new_offset.QuadPart;
 }
 
 gb_inline i64
 gb_file_tell(gbFile *file)
 {
-	return _telli64(cast(int)file->fd);
+	return gb_file_seek(file, 0, GB_SEEK_CURRENT);
 }
 
 gb_inline i64
 gb_file_size(gbFile *file)
 {
-	return _filelengthi64(cast(int)file->fd);
-}
-
-gb_inline uintptr
-gb_file_fd(gbFile *file)
-{
-	if (file) return cast(uintptr)file->fd;
-	return cast(uintptr)INVALID_HANDLE_VALUE;
+	LARGE_INTEGER size;
+	GetFileSizeEx(file->handle, &size);
+	return size.QuadPart;
 }
 
 gb_inline gbFileError
 gb_file_truncate(gbFile *file, i64 size)
 {
 	gbFileError err = GB_FILE_ERR_NONE;
-	int i = _chsize_s(cast(int)file->fd, size);
-	if (i != 0)
+	i64 prev_offset = gb_file_tell(file);
+	gb_file_seek(file, size, GB_SEEK_BEGIN);
+	if (!SetEndOfFile(file))
 		err = GB_FILE_ERR_TRUNCATION_FAILURE;
+	gb_file_seek(file, prev_offset, GB_SEEK_BEGIN);
 	return err;
 }
 
@@ -6320,28 +6343,9 @@ gb_file_create(gbFile *file, char const *filename, ...)
 	gbFileError err;
 	va_list va;
 	va_start(va, filename);
-	err = gb_file_open_file_va(file, GB_O_RDWR|GB_O_CREATE|GB_O_TRUNC, 0666, filename, va);
+	err = gb_file_open_file_va(file, GB_FILE_READ_WRITE|GB_FILE_CREATE, GB_FILE_MODE_READ|GB_FILE_MODE_WRITE, filename, va);
 	va_end(va);
 	return err;
-}
-
-void
-gb_file_new(gbFile *file, uintptr fd, char const *filename, ...)
-{
-	va_list va;
-	intptr fdi = cast(intptr)fd;
-	if (fdi < 0) return;
-
-	va_start(va, filename);
-	gb_zero_struct(file);
-	file->fd = fdi;
-	if (filename)
-		file->name = gb_alloc_str(gb_heap_allocator(), gb_sprintf_va(filename, va));
-	else
-		file->name = NULL;
-	va_end(va);
-
-	gb_file_last_write_time("%s", file->name);
 }
 
 
@@ -6351,7 +6355,7 @@ gb_file_open(gbFile *file, char const *filename, ...)
 	gbFileError err;
 	va_list va;
 	va_start(va, filename);
-	err = gb_file_open_file_va(file, GB_O_RDONLY, 0, filename, va);
+	err = gb_file_open_file_va(file, GB_FILE_READ, GB_FILE_MODE_READ, filename, va);
 	va_end(va);
 	return err;
 }
@@ -6374,9 +6378,9 @@ gb_file_read_at(gbFile *f, void *buffer, isize size, i64 offset)
 	i64 prev_offset;
 
 	prev_offset = gb_file_tell(f);
-	gb_file_seek(f, offset, GB_SEEK_SET);
+	gb_file_seek(f, offset, GB_SEEK_BEGIN);
 	bytes_read = gb_file_read(f, buffer, size);
-	gb_file_seek(f, prev_offset, GB_SEEK_SET);
+	gb_file_seek(f, prev_offset, GB_SEEK_BEGIN);
 
 	return bytes_read == size;
 }
@@ -6388,9 +6392,9 @@ gb_file_write_at(gbFile *f, void const *buffer, isize size, i64 offset)
 	i64 prev_offset = 0;
 
 	prev_offset = gb_file_tell(f);
-	gb_file_seek(f, offset, GB_SEEK_SET);
+	gb_file_seek(f, offset, GB_SEEK_BEGIN);
 	bytes_written = gb_file_write(f, buffer, size);
-	gb_file_seek(f, prev_offset, GB_SEEK_SET);
+	gb_file_seek(f, prev_offset, GB_SEEK_BEGIN);
 
 	return bytes_written == size;
 }
@@ -6409,46 +6413,6 @@ gb_file_has_changed(gbFile *file)
 	return result;
 }
 
-
-
-/* TODO(bill): read_dir and read_dir_names */
-
-gb_inline b32 gb_file_mode_is_dir    (gbFileMode m) { return (m & GB_FILE_MODE_DIR) != 0;  }
-gb_inline b32 gb_file_mode_is_regular(gbFileMode m) { return (m & GB_FILE_MODE_TYPE) == 0; }
-gb_inline i32 gb_file_mode_perm      (gbFileMode m) { return cast(i32)(m & GB_FILE_MODE_PERM); }
-
-char const *
-gb_file_mode_string(gbFileMode m)
-{
-	gb_local_persist char buf[33] = {0};
-	char const str[] = "dalTLDpSugct";
-	char const rwx[] = "rwxrwxrwx";
-	isize i, j = 0;
-
-	for (i = 0; i < gb_size_of(str)-1; i++) {
-		if ((m & GB_BIT(32-1-i)) != 0) {
-			buf[j] = str[i];
-			j++;
-		}
-	}
-
-	if (j == 0) {
-		buf[j] = '-';
-		j++;
-	}
-
-	for (i = 0; i < gb_size_of(rwx)-1; i++) {
-		if ((m & GB_BIT(9-1-i)) != 0)
-			buf[j] = rwx[i];
-		else
-			buf[j] = '-';
-		j++;
-	}
-
-	buf[j] = '\0';
-
-	return buf;
-}
 
 
 
@@ -6478,7 +6442,7 @@ gb_file_last_write_time(char const *filepath, ...)
 gb_inline b32
 gb_file_rename(char const *old_filename, char const *new_filename)
 {
-	return rename(old_filename, new_filename) == 0;
+	return MoveFileA(old_filename, new_filename) != 0;
 }
 
 
@@ -6810,30 +6774,6 @@ gb_unset_env(char const *name)
 	unsetenv(name);
 #endif
 }
-
-gb_inline i32
-gb_chdir(char const *path)
-{
-#if defined(_MSC_VER)
-	return _chdir(path);
-#else
-	return chdir(path);
-#endif
-}
-
-
-
-
-gb_inline void
-gb_get_working_cmd(char *buffer, isize len)
-{
-#if defined(_MSC_VER)
-	_getcwd(buffer, cast(i32)len);
-#else
-	getcwd(buffer, len);
-#endif
-}
-
 
 
 gb_inline u16
@@ -7487,13 +7427,17 @@ gb_window_set_position(gbWindow *w, i32 x, i32 y)
 void      
 gb_window_set_title(gbWindow *w, char const *title, ...)
 {
-	gb_local_persist char16 buffer[4096] = {0};
+	char16 buffer[256] = {0};
 	char *str;
+	LPCWSTR wstr;
 	va_list va;
 	va_start(va, title);
 	str = gb_sprintf_va(title, va);
 	va_end(va);
-	SetWindowTextW(cast(HWND)w->handle, cast(LPCWSTR)gb_utf8_to_ucs2(buffer, gb_size_of(buffer), str));
+
+	wstr = cast(LPCWSTR)gb_utf8_to_ucs2(buffer, gb_size_of(buffer), str);
+	if (wstr)
+		SetWindowTextW(cast(HWND)w->handle, wstr);
 }
 
 void      
