@@ -1,4 +1,4 @@
-/* gb.h - v0.15  - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.15a - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -37,6 +37,7 @@ Conventions used:
 
 
 Version History:
+	0.15a - gb_atomic(32|64)_spin_(lock|unlock)
 	0.15  - Recursive "Mutex"; Key States; gbRandom
 	0.14  - Better File Handling and better printf (WIN32 Only)
 	0.13  - Highly experimental platform layer (WIN32 Only)
@@ -82,10 +83,10 @@ CREDITS
 
 TODOS
 	- Remove CRT dependency for people who want that
+		- But do I really?
 	- Older compiler support?
 		- How old do you wanna go?
 	- File handling
-		- But do I really?
 		- All files to be UTF-8 (even on windows)
 	- Better Virtual Memory handling
 	- Generic Heap Allocator (tcmalloc/dlmalloc/?)
@@ -737,6 +738,9 @@ GB_DEF i32  gb_atomic32_exchanged       (gbAtomic32 volatile *a, i32 desired);
 GB_DEF i32  gb_atomic32_fetch_add       (gbAtomic32 volatile *a, i32 operand);
 GB_DEF i32  gb_atomic32_fetch_and       (gbAtomic32 volatile *a, i32 operand);
 GB_DEF i32  gb_atomic32_fetch_or        (gbAtomic32 volatile *a, i32 operand);
+GB_DEF void gb_atomic32_spin_lock       (gbAtomic32 volatile *a);
+GB_DEF void gb_atomic32_spin_unlock     (gbAtomic32 volatile *a);
+
 
 GB_DEF i64  gb_atomic64_load            (gbAtomic64 const volatile *a);
 GB_DEF void gb_atomic64_store           (gbAtomic64 volatile *a, i64 value);
@@ -745,6 +749,9 @@ GB_DEF i64  gb_atomic64_exchanged       (gbAtomic64 volatile *a, i64 desired);
 GB_DEF i64  gb_atomic64_fetch_add       (gbAtomic64 volatile *a, i64 operand);
 GB_DEF i64  gb_atomic64_fetch_and       (gbAtomic64 volatile *a, i64 operand);
 GB_DEF i64  gb_atomic64_fetch_or        (gbAtomic64 volatile *a, i64 operand);
+GB_DEF void gb_atomic64_spin_lock       (gbAtomic64 volatile *a);
+GB_DEF void gb_atomic64_spin_unlock     (gbAtomic64 volatile *a);
+
 
 
 
@@ -3447,6 +3454,31 @@ gb_atomic64_fetch_or(gbAtomic64 volatile *a, i64 operand)
 #endif
 }
 #endif
+
+gb_inline void
+gb_atomic32_spin_lock(gbAtomic32 volatile *a)
+{
+	a->value = 0;
+	for (;;) {
+		i32 expected = 0;
+		if (gb_atomic32_compare_exchange(a, expected, 1))
+			break;
+	}
+}
+gb_inline void gb_atomic32_spin_unlock(gbAtomic32 volatile *a) { gb_atomic32_store(a, 0); }
+
+gb_inline void
+gb_atomic64_spin_lock(gbAtomic64 volatile *a)
+{
+	a->value = 0;
+	for (;;) {
+		i64 expected = 0;
+		if (gb_atomic64_compare_exchange(a, expected, 1))
+			break;
+	}
+}
+gb_inline void gb_atomic64_spin_unlock(gbAtomic64 volatile *a) { gb_atomic64_store(a, 0); }
+
 
 
 
