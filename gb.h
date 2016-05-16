@@ -1,4 +1,4 @@
-/* gb.h - v0.15b - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.15c - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -37,6 +37,7 @@ Conventions used:
 
 
 Version History:
+	0.15c - Linux Experimental Support (DON'T USE IT)
 	0.15b - C90 Support
 	0.15a - gb_atomic(32|64)_spin_(lock|unlock)
 	0.15  - Recursive "Mutex"; Key States; gbRandom
@@ -217,11 +218,15 @@ extern "C" {
 	#endif
 #endif
 
+#if defined(GB_SYSTEM_UNIX)
+	#define _GNU_SOURCE
+	#define _LARGEFILE64_SOURCE
+#endif
+
 
 /* TODO(bill): How many of these headers do I really need? */
 #include <stdarg.h>
 #include <stddef.h>
-#include <intrin.h>
 #include <math.h> /* fmod */
 
 #if defined(GB_SYSTEM_WINDOWS)
@@ -236,17 +241,25 @@ extern "C" {
 	#undef VC_EXTRALEAN
 
 	#include <malloc.h> /* NOTE(bill): _aligned_*() */
+	#include <intrin.h>
 #else
+
+	#include <stdlib.h> /* NOTE(bill): malloc */
 	#include <dlfcn.h>
-	#include <mach/mach_time.h>
+	#include <fcntl.h>
 	#include <pthread.h>
+	#include <sys/mman.h>
 	#include <sys/stat.h>
+	#include <sys/time.h>
+	#include <sys/types.h>
 	#include <time.h>
 	#include <unistd.h>
+	#include <errno.h>
 #endif
 
 #if defined(GB_SYSTEM_OSX)
 #include <mach/mach.h>
+#include <mach/mach_time.h>
 #endif
 
 #if defined(GB_SYSTEM_UNIX)
@@ -2849,7 +2862,7 @@ gb_assert_handler(char const *condition, char const *file, i32 line, char const 
 {
 	gb_printf_err("%s:%d: Assert Failure: ", file, line);
 	if (condition)
-		gb_printf_err("`%s` ", condition);
+		gb_printf_err( "`%s` ", condition);
 	if (msg)
 		gb_printf_err("%s", msg);
 	gb_printf_err("\n");
@@ -3498,7 +3511,7 @@ gb_inline void gb_atomic64_spin_unlock(gbAtomic64 volatile *a) { gb_atomic64_sto
 #elif defined(GB_SYSTEM_UNIX)
 	gb_inline void gb_semaphore_init   (gbSemaphore *s)            { sem_init(&s->unix_handle, 0, 0); }
 	gb_inline void gb_semaphore_destroy(gbSemaphore *s)            { sem_destroy(&s->unix_handle); }
-	gb_inline void gb_semaphore_post   (gbSemaphore *s, i32 count) { while (count --> 0) sem_post(s->unix_handle); }
+	gb_inline void gb_semaphore_post   (gbSemaphore *s, i32 count) { while (count --> 0) sem_post(&s->unix_handle); }
 	gb_inline void gb_semaphore_wait   (gbSemaphore *s)            { int i; do { i = sem_wait(&s->unix_handle); } while (i == -1 && errno == EINTR); }
 
 #else
@@ -3804,7 +3817,7 @@ gb_vm_trim(gbVirtualMemory vm, isize lead_size, isize size)
 {
 	gbVirtualMemory new_vm = {0};
 	void *ptr;
-	GB_ASSERT(vm.size >= lead_size + vm.size);
+	GB_ASSERT(vm.size >= lead_size + size);
 
 	ptr = gb_pointer_add(vm.data, lead_size);
 
@@ -3827,7 +3840,54 @@ gb_vm_purge(gbVirtualMemory vm)
 	return true;
 }
 #else
-#error Implement Virtual Memory Procs
+
+#ifndef MAP_ANONYMOUS
+#define MAP_ANONYMOUS MAP_ANON
+#endif
+
+gb_inline gbVirtualMemory
+gb_vm_alloc(void *addr, isize size)
+{
+	gbVirtualMemory vm;
+	GB_ASSERT(size > 0);
+	vm.data = mmap(addr, size,
+	               PROT_READ | PROT_WRITE,
+	               MAP_ANONYMOUS | MAP_PRIVATE,
+	               -1, 0);
+	vm.size = size;
+	return vm;
+}
+
+gb_inline void
+gb_vm_free(gbVirtualMemory vm)
+{
+	munmap(vm.data, vm.size);
+}
+
+gb_inline gbVirtualMemory
+gb_vm_trim(gbVirtualMemory vm, isize lead_size, isize size)
+{
+	void *ptr;
+	isize trail_size;
+	GB_ASSERT(vm.size >= lead_size + size);
+
+	ptr = gb_pointer_add(vm.data, lead_size);
+	trail_size = vm.size - lead_size - size;
+
+	if (lead_size != 0)
+		gb_vm_free(gb_virtual_memory(vm.data, lead_size));
+	if (trail_size != 0)
+		gb_vm_free(gb_virtual_memory(ptr, trail_size));
+	return gb_virtual_memory(ptr, size);
+
+}
+
+gb_inline b32
+gb_vm_purge(gbVirtualMemory vm)
+{
+	int err = madvise(vm.data, vm.size, MADV_DONTNEED);
+	return err != 0;
+}
 #endif
 
 
@@ -5189,7 +5249,7 @@ gb_string_append_length(gbString str, void const *other, isize other_len)
 gb_inline gbString
 gb_string_appendc(gbString str, char const *other)
 {
-	return gb_string_append_length(str, other, cast(isize)strlen(other));
+	return gb_string_append_length(str, other, gb_strlen(other));
 }
 
 
@@ -6237,7 +6297,7 @@ gb_file_open_file_va(gbFile *file, u32 flag, gbFileMode mode, char const *filena
 	char const *name = gb_sprintf_va(filename, va);
 	gb_zero_struct(file);
 
-	if (filename) file->name = gb_alloc_str(gb_heap_allocator(), name);
+	if (name) file->name = gb_alloc_str(gb_heap_allocator(), name);
 
 	{
 		DWORD  desired_access       = 0;
@@ -6357,7 +6417,136 @@ gb_file_is_exist(char const *name)
 }
 
 #else
-#error Implement File System
+gb_inline gbFile
+gb_file_get_std(gbFileStandardType std)
+{
+	gbFile file = {0};
+	switch (std) {
+	case GB_FILE_STANDARD_INPUT:  file.handle = cast(void *)cast(intptr)0; break;
+	case GB_FILE_STANDARD_OUTPUT: file.handle = cast(void *)cast(intptr)1; break;
+	case GB_FILE_STANDARD_ERROR:  file.handle = cast(void *)cast(intptr)2; break;
+	default: GB_PANIC("Invalid standard file"); break;
+	}
+	return file;
+}
+
+gbFileError
+gb_file_open_file_va(gbFile *file, u32 flag, gbFileMode mode, char const *filename, va_list va)
+{
+	int fd = 0;
+	int posix_flags = 0;
+	mode_t posix_mode = {0};
+	char const *name = gb_sprintf_va(filename, va);
+	gb_zero_struct(file);
+
+	if (name) file->name = gb_alloc_str(gb_heap_allocator(), name);
+
+	{
+		/* TODO(bill): THROUGHLY TEST!!! */
+		if (flag & (GB_FILE_READ | GB_FILE_WRITE))
+			posix_flags |= O_RDWR;
+		else if (flag & GB_FILE_READ)
+			posix_flags |= O_RDONLY;
+		else if (flag & GB_FILE_WRITE)
+			posix_flags |= O_WRONLY;
+
+		if (flag & GB_FILE_APPEND)   posix_flags |= O_APPEND;
+		if (flag & GB_FILE_CREATE)   posix_flags |= O_CREAT;
+		if (flag & GB_FILE_TRUNCATE) posix_flags |= O_TRUNC;
+
+		if (mode & GB_FILE_MODE_READ)   posix_mode |= S_IRUSR;
+		if (mode & GB_FILE_MODE_WRITE)  posix_mode |= S_IWUSR;
+		if (mode & GB_FILE_MODE_DELETE) {/* TODO(bill): GB_FILE_MODE_DELETE */}
+
+		fd = open(file->name, posix_flags, posix_mode);
+		if (fd < 0) {
+			switch (errno) {
+			case EACCES: return GB_FILE_ERR_PERMISSION;
+			case EEXIST: return GB_FILE_ERR_EXISTS;
+			case ENOENT: return GB_FILE_ERR_NOT_EXISTS;
+
+			case EMFILE: /* FALLTHROUGH */
+			case EINVAL:
+			default:
+				return GB_FILE_ERR_INVALID;
+			}
+		}
+	}
+
+	file->handle = cast(void *)cast(intptr)fd;
+	file->last_write_time = gb_file_last_write_time("%s", file->name);
+	return GB_FILE_ERR_NONE;
+}
+
+gbFileError
+gb_file_close(gbFile *file)
+{
+	if (!file)
+		return GB_FILE_ERR_INVALID;
+
+	if (file->name) gb_free(gb_heap_allocator(), file->name);
+
+	if (cast(intptr)file->handle < 0)
+		return GB_FILE_ERR_INVALID;
+
+	close(cast(int)cast(intptr)file->handle);
+
+	return GB_FILE_ERR_NONE;
+}
+
+b32
+gb_file_read(gbFile *f, void *buffer, isize size)
+{
+	isize bytes_read;
+	bytes_read = read(cast(int)cast(intptr)f->handle, buffer, size);
+	return bytes_read == size;
+}
+
+b32
+gb_file_write(gbFile *f, void const *buffer, isize size)
+{
+	isize bytes_written;
+	bytes_written = write(cast(int)cast(intptr)f->handle, buffer, size);
+	return bytes_written == size;
+}
+
+gb_inline i64
+gb_file_seek(gbFile *file, i64 offset, gbSeekWhence whence)
+{
+	return lseek64(cast(int)cast(intptr)file->handle, offset, whence);
+}
+
+gb_inline i64
+gb_file_tell(gbFile *file)
+{
+	return gb_file_seek(file, 0, GB_SEEK_CURRENT);
+}
+
+gb_inline i64
+gb_file_size(gbFile *file)
+{
+	i64 size = 0;
+	i64 prev_offset = gb_file_tell(file);
+	gb_file_seek(file, 0, GB_SEEK_END);
+	size = gb_file_tell(file);
+	gb_file_seek(file, prev_offset, GB_SEEK_BEGIN);
+	return size;
+}
+
+gb_inline gbFileError
+gb_file_truncate(gbFile *file, i64 size)
+{
+	gbFileError err = GB_FILE_ERR_NONE;
+	int i = ftruncate(cast(int)cast(intptr)file->handle, size);
+	if (i != 0) err = GB_FILE_ERR_TRUNCATION_FAILURE;
+	return err;
+}
+
+b32
+gb_file_is_exist(char const *name)
+{
+	return access(name, F_OK) != -1;
+}
 #endif
 
 
@@ -6481,7 +6670,6 @@ gb_file_move(char const *existing_filename, char const *new_filename)
 
 
 #else
-#error Implement File System
 
 gbFileTime
 gb_file_last_write_time(char const *filepath, ...)
@@ -6492,7 +6680,7 @@ gb_file_last_write_time(char const *filepath, ...)
 	va_list va;
 	va_start(va, filepath);
 	if (stat(gb_sprintf_va(filepath, va), &file_stat)) {
-		result = file_stat.st_mtimespec.tv_sec;
+		result = file_stat.st_mtime;
 	}
 
 	va_end(va);
@@ -6504,15 +6692,61 @@ gb_file_last_write_time(char const *filepath, ...)
 gb_inline b32
 gb_file_copy(char const *existing_filename, char const *new_filename, b32 fail_if_exists)
 {
-	GB_PANIC("TODO(bill): Implement");
+	int fd_to, fd_from;
+	u8 buf[4096];
+	isize read_bytes;
+	int saved_errno;
+
+	fd_from = open(existing_filename, O_RDONLY);
+	if (fd_from < 0) return false;
+	
+	fd_to = open(new_filename, O_RDONLY);
+	if (fd_to >= 0 && fail_if_exists)
+		goto err_cleanup;
+
+	fd_to = open(new_filename, O_WRONLY | O_CREAT | O_EXCL, 0666);
+	if (fd_to < 0)
+		goto err_cleanup;
+
+	while (read_bytes = read(fd_from, buf, gb_size_of(buf)), read_bytes > 0) {
+		u8 *out = buf;
+		isize written_bytes;
+
+		do {
+			written_bytes = write(fd_to, out, read_bytes);
+			if (written_bytes >= 0) {
+				read_bytes -= written_bytes;
+				out        += written_bytes;
+			} else if (errno != EINTR) {
+				goto err_cleanup;
+			}
+		} while (read_bytes > 0);
+	}
+
+	if (read_bytes == 0) {
+		if (close(fd_to) < 0) {
+			fd_to = -1;
+			goto err_cleanup;
+		}
+		close(fd_from);
+		return true; /* NOTE(bill): IT WORKED! */
+	}
+
+err_cleanup:
+	saved_errno = errno;
+
+	close(fd_from);
+	if (fd_to >= 0) close(fd_to);
+
+	errno = saved_errno;
 	return false;
 }
 
 gb_inline b32
 gb_file_move(char const *existing_filename, char const *new_filename)
 {
-	GB_PANIC("TODO(bill): Implement");
-	return false;
+	/* TODO(bill): Is this TOO HACKY?! rename() would do fine really but it's in stdio */
+	return system(gb_sprintf("mv %s %s", existing_filename, new_filename)) == 0;
 }
 
 #endif
@@ -6733,7 +6967,7 @@ gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) 
 	gb_inline f64
 	gb_time_now(void)
 	{
-		struct timespec t;
+#if defined(GB_SYSTEM_OSX)
 		f64 result;
 
 		if (!gb__timestart) {
@@ -6746,21 +6980,31 @@ gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) 
 
 		result = (mach_absolute_time() - gb__timestart) * gb__timebase;
 		return result;
+#else
+		struct timespec t;
+		f64 result;
+
+		/* TODO(bill): THIS IS A HACK  */
+		clock_gettime(1 /*CLOCK_MONOTONIC*/, &t);
+		result = t.tv_sec + 1.0e-9 * t.tv_nsec;
+		return result;
+#endif
 	}
 
 	gb_inline u64
 	gb_utc_time_now(void)
 	{
-		struct timespect t;
-		clock_gettime(CLOCK_REALTIME, &t);
+		struct timespec t;
+		/* TODO(bill): THIS IS A HACK */
+		clock_gettime(0 /*CLOCK_REALTIME*/, &t);
 		return cast(u64)t.tv_sec * 1000000ull + t.tv_nsec/1000 + 11644473600000000ull;
 	}
 
 	gb_inline void
 	gb_sleep_ms(u32 ms)
 	{
-		timespec req = {cast(time_t)ms/1000, cast(long)((ms%1000)*1000000)};
-		timespec rem = {0, 0};
+		struct timespec req = {cast(time_t)ms/1000, cast(long)((ms%1000)*1000000)};
+		struct timespec rem = {0, 0};
 		nanosleep(&req, &rem);
 	}
 
@@ -6952,7 +7196,7 @@ gb__process_xinput_digital_button(DWORD xinput_button_state, DWORD button_bit,
 	button->half_transition_count = (button->ended_down != ended_down) ? 1 : 0;
 	button->ended_down = ended_down;
 }
-
+ 
 gb_internal gb_inline f32
 gb__process_xinput_stick_value(SHORT value, SHORT dead_zone_threshold)
 {
