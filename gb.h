@@ -1,4 +1,4 @@
-/* gb.h - v0.15a - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.15b - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -37,6 +37,7 @@ Conventions used:
 
 
 Version History:
+	0.15b - C90 Support
 	0.15a - gb_atomic(32|64)_spin_(lock|unlock)
 	0.15  - Recursive "Mutex"; Key States; gbRandom
 	0.14  - Better File Handling and better printf (WIN32 Only)
@@ -3004,7 +3005,7 @@ gb_memcompare(void const *s1, void const *s2, isize size)
 	return 0;
 }
 
-gb_inline void
+void
 gb_memswap(void *i, void *j, isize size)
 {
 	if (i == j) return;
@@ -3019,7 +3020,7 @@ gb_memswap(void *i, void *j, isize size)
 		if (a != b) {
 			while (size--) {
 				gb_swap(u8, *a, *b);
-				*a++, *b++;
+				a++, b++;
 			}
 		}
 	} else {
@@ -3730,7 +3731,7 @@ GB_ALLOCATOR_PROC(gb_heap_allocator_proc)
 	gb_unused(old_size);
 /* TODO(bill): Throughly test! */
 	switch (type) {
-#if defined(GB_SYSTEM_WINDOWS)
+#if defined(_MSC_VER)
 	case GB_ALLOCATION_ALLOC:  return _aligned_malloc(size, alignment);
 	case GB_ALLOCATION_FREE:   _aligned_free(old_memory); break;
 	case GB_ALLOCATION_RESIZE: return _aligned_realloc(old_memory, size, alignment);
@@ -6253,7 +6254,7 @@ gb_file_open_file_va(gbFile *file, u32 flag, gbFileMode mode, char const *filena
 		if (mode & GB_FILE_MODE_WRITE)  share_mode |= FILE_SHARE_WRITE;
 		if (mode & GB_FILE_MODE_DELETE) share_mode |= FILE_SHARE_DELETE;
 
-		// if (flag & GB_FILE_CREATE) creation_disposition |=
+		/* if (flag & GB_FILE_CREATE) creation_disposition |= */
 		if (flag & GB_FILE_TRUNCATE) creation_disposition |= TRUNCATE_EXISTING;
 		if (flag & GB_FILE_READ)     creation_disposition |= OPEN_EXISTING;
 		if (flag & GB_FILE_WRITE)    creation_disposition |= OPEN_EXISTING;
@@ -7017,7 +7018,7 @@ gb_platform_init(gbPlatform *p)
 		if (!xinput_library) xinput_library = gb_dll_load("xinput9_1_0.dll");
 		if (!xinput_library) xinput_library = gb_dll_load("xinput1_3.dll");
 		if (!xinput_library) {
-			// TODO(bill): Diagnostic
+			/* TODO(bill): Diagnostic */
 			gb_printf_err("XInput could not be loaded. Controllers will not work!\n");
 		} else {
 			p->xinput.get_state = cast(gbXInputGetStateProc *) gb_dll_proc_address(xinput_library, "XInputGetState");
@@ -7235,18 +7236,19 @@ gb_platform_update(gbPlatform *p)
 
 			XINPUT_STATE controller_state = {0};
 			if (p->xinput.get_state(cast(DWORD)i, &controller_state) != ERROR_SUCCESS) {
-				// NOTE(bill): The controller is not available
+				/* NOTE(bill): The controller is not available */
 				controller->is_connected = false;
 			} else {
-				// NOTE(bill): This controller is plugged in
-				// TODO(bill): See if ControllerState.dwPacketNumber increments too rapidly
+				/* NOTE(bill): This controller is plugged in */
+				/* TODO(bill): See if ControllerState.dwPacketNumber increments too rapidly */
 				XINPUT_GAMEPAD *pad = &controller_state.Gamepad;
 
 				controller->is_connected = true;
 
-				// TODO(bill): This is a square deadzone, check XInput to
-				// verify that the deadzone is "round" and show how to do
-				// round deadzone processing.
+				/* TODO(bill): This is a square deadzone, check XInput to
+				 * verify that the deadzone is "round" and show how to do
+				 * round deadzone processing.
+				 */
 				controller->axes[GB_CONTROLLER_AXIS_LEFT_X]  = gb__process_xinput_stick_value(pad->sThumbLX, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
 				controller->axes[GB_CONTROLLER_AXIS_LEFT_Y]  = gb__process_xinput_stick_value(pad->sThumbLY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
 				controller->axes[GB_CONTROLLER_AXIS_RIGHT_Y] = gb__process_xinput_stick_value(pad->sThumbRX, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
@@ -7261,7 +7263,7 @@ gb_platform_update(gbPlatform *p)
 					controller->is_analog = true;
 				}
 
-				// NOTE(bill): I know, I just wanted macros
+				/* NOTE(bill): I know, I just wanted macros */
 			#define GB__PROCESS_PAD_BUTTON(stick_axis, sign, xinput_button) do { \
 					if (pad->wButtons & xinput_button) { \
 						controller->axes[stick_axis] = sign 1.0f; \
