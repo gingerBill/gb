@@ -1,4 +1,4 @@
-/* gb.h - v0.15c - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.15d - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -37,6 +37,7 @@ Conventions used:
 
 
 Version History:
+	0.15d - Linux Experimental Support (DON'T USE IT PLEASE)
 	0.15c - Linux Experimental Support (DON'T USE IT)
 	0.15b - C90 Support
 	0.15a - gb_atomic(32|64)_spin_(lock|unlock)
@@ -243,11 +244,11 @@ extern "C" {
 	#include <malloc.h> /* NOTE(bill): _aligned_*() */
 	#include <intrin.h>
 #else
-
 	#include <stdlib.h> /* NOTE(bill): malloc */
 	#include <dlfcn.h>
 	#include <fcntl.h>
 	#include <pthread.h>
+	#include <sys/sendfile.h>
 	#include <sys/mman.h>
 	#include <sys/stat.h>
 	#include <sys/time.h>
@@ -6688,65 +6689,31 @@ gb_file_last_write_time(char const *filepath, ...)
 	return cast(gbFileTime)result;
 }
 
+/* IMPORTANT TODO(bill): remove eventually! */
+#include <stdio.h>
 
 gb_inline b32
 gb_file_copy(char const *existing_filename, char const *new_filename, b32 fail_if_exists)
 {
-	int fd_to, fd_from;
-	u8 buf[4096];
-	isize read_bytes;
-	int saved_errno;
+	isize size;
+	int existing_fd = open(existing_filename, O_RDONLY, 0);
+	int new_fd      = open(new_filename, O_WRONLY|O_CREAT, 0666);
 
-	fd_from = open(existing_filename, O_RDONLY);
-	if (fd_from < 0) return false;
-	
-	fd_to = open(new_filename, O_RDONLY);
-	if (fd_to >= 0 && fail_if_exists)
-		goto err_cleanup;
+	struct stat stat_existing;
+	fstat(existing_fd, &stat_existing);
 
-	fd_to = open(new_filename, O_WRONLY | O_CREAT | O_EXCL, 0666);
-	if (fd_to < 0)
-		goto err_cleanup;
+	size = sendfile(new_fd, existing_fd, 0, stat_existing.st_size);
 
-	while (read_bytes = read(fd_from, buf, gb_size_of(buf)), read_bytes > 0) {
-		u8 *out = buf;
-		isize written_bytes;
+	close(new_fd);
+	close(existing_fd);
 
-		do {
-			written_bytes = write(fd_to, out, read_bytes);
-			if (written_bytes >= 0) {
-				read_bytes -= written_bytes;
-				out        += written_bytes;
-			} else if (errno != EINTR) {
-				goto err_cleanup;
-			}
-		} while (read_bytes > 0);
-	}
-
-	if (read_bytes == 0) {
-		if (close(fd_to) < 0) {
-			fd_to = -1;
-			goto err_cleanup;
-		}
-		close(fd_from);
-		return true; /* NOTE(bill): IT WORKED! */
-	}
-
-err_cleanup:
-	saved_errno = errno;
-
-	close(fd_from);
-	if (fd_to >= 0) close(fd_to);
-
-	errno = saved_errno;
-	return false;
+	return size == stat_existing.st_size;
 }
 
 gb_inline b32
 gb_file_move(char const *existing_filename, char const *new_filename)
 {
-	/* TODO(bill): Is this TOO HACKY?! rename() would do fine really but it's in stdio */
-	return system(gb_sprintf("mv %s %s", existing_filename, new_filename)) == 0;
+	return rename(existing_filename, new_filename) == 0;
 }
 
 #endif
