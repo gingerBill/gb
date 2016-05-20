@@ -283,7 +283,7 @@ i32 const GBGL_INTERNAL_TEXTURE_FORMAT_F32[4] = { GL_R32F,  GL_RG32F,  GL_RGB32F
 gb_inline i32
 gbgl__get_texture_format(gbglBufferDataType data_type, i32 channel_count)
 {
-	GB_ASSERT(channel_count >= 1 && channel_count <= 4);
+	GB_ASSERT(gb_is_between(channel_count, 1, 4));
 	switch (data_type) {
 	case GBGL_BDT_U8:  return GBGL_INTERNAL_TEXTURE_FORMAT_U8[channel_count-1];
 	case GBGL_BDT_I8:  return GBGL_INTERNAL_TEXTURE_FORMAT_I8[channel_count-1];
@@ -908,9 +908,9 @@ gbglShaderError
 gbgl__load_single_shader_from_file(gbglShader *shader, gbglShaderType type, char const *name)
 {
 	gbglShaderError err = GBGL_SHADER_ERROR_NONE;
+	gbFileError ferr = gb_file_open(&shader->files[type], "%s%s", name, GBGL_SHADER_FILE_EXTENSIONS[type]);
 
-	if (gb_file_open(&shader->files[type],
-	                 "%s%s", name, GBGL_SHADER_FILE_EXTENSIONS[type]) != GB_FILE_ERR_NONE) {
+	if (ferr != GB_FILE_ERR_NONE) {
 		err = GBGL_SHADER_ERROR_UNABLE_TO_READ_FILE;
 	} else {
 		gb_local_persist char info_log[4096];
