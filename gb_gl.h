@@ -1,4 +1,4 @@
-/* gb.h - v0.04c - OpenGL Helper Library - public domain
+/* gb.h - v0.04d - OpenGL Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -55,6 +55,7 @@ Conventions used:
 
 
 Version History:
+	0.04d - Use new gb.h file handling system
 	0.04c - Use new gb.h file handling system
 	0.04b - Work with the new gb.h
 	0.04a - Better Documentation
@@ -1009,7 +1010,7 @@ gbgl_load_shader_from_file(gbglShader *shader, u32 type_bits, char const *filena
 	b32 loaded_shader[GBGL_SHADER_TYPE_COUNT] = {0};
 	i32 i;
 
-	gb_zero_struct(shader);
+	gb_zero_item(shader);
 	shader->type_flags = type_bits;
 	gb_strncpy(shader->base_name, filename, gb_size_of(shader->base_name));
 
@@ -1034,7 +1035,7 @@ gbgl_load_shader_from_memory_vf(gbglShader *s, char const *vert_source, char con
 {
 	gbglShaderError err = GBGL_SHADER_ERROR_NONE;
 
-	gb_zero_struct(s);
+	gb_zero_item(s);
 	s->type_flags = GB_BIT(GBGL_SHADER_TYPE_VERTEX) | GB_BIT(GBGL_SHADER_TYPE_FRAGMENT);
 
 	err = gbgl__load_single_shader_from_memory(s, GBGL_SHADER_TYPE_VERTEX, vert_source);
@@ -1052,7 +1053,7 @@ gbgl_load_shader_from_memory_vfg(gbglShader *s, char const *vert_source, char co
 {
 	gbglShaderError err = GBGL_SHADER_ERROR_NONE;
 
-	gb_zero_struct(s);
+	gb_zero_item(s);
 	s->type_flags = GB_BIT(GBGL_SHADER_TYPE_VERTEX) | GB_BIT(GBGL_SHADER_TYPE_FRAGMENT) | GB_BIT(GBGL_SHADER_TYPE_GEOMETRY);
 
 	err = gbgl__load_single_shader_from_memory(s, GBGL_SHADER_TYPE_VERTEX, vert_source);
@@ -1227,7 +1228,7 @@ gbgl_init_render_buffer(gbglRenderBuffer *rb, i32 width, i32 height, i32 channel
 {
 	if ((rb->width == width) && (rb->height == height) && (rb->channel_count == channel_count)) return true;
 	gbgl_destroy_render_buffer(rb);
-	gb_zero_struct(rb);
+	gb_zero_item(rb);
 
 	rb->width = width;
 	rb->height = height;
@@ -1297,7 +1298,7 @@ gbgl_load_texture2d_from_memory(gbglTexture *tex, void const *data, i32 width, i
 {
 	b32 result = true;
 
-	gb_zero_struct(tex);
+	gb_zero_item(tex);
 
 	tex->width = width;
 	tex->height = height;
@@ -1570,7 +1571,7 @@ gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 		return NULL;
 	}
 
-	gb_zero_struct(f);
+	gb_zero_item(f);
 
 	// NOTE(bill): Make sure the character list file has been loaded
 	if (!fc->font_char_list) {
@@ -1626,7 +1627,7 @@ gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 			GB_ASSERT_NOT_NULL(*ttf_cache);
 			(*ttf_cache)->name = NULL;
 			(*ttf_cache)->ttf  = NULL;
-			gb_zero_struct(&(*ttf_cache)->finfo);
+			gb_zero_item(&(*ttf_cache)->finfo);
 			(*ttf_cache)->next = NULL;
 
 
@@ -1749,7 +1750,7 @@ gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font_size)
 			}
 		} else {
 			GB_PANIC("Failure loading font");
-			gb_zero_struct(&f);
+			gb_zero_item(&f);
 		}
 	}
 	return f;

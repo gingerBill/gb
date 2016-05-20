@@ -1,8 +1,9 @@
-/* gb_math.h - v0.06c - public domain C math library - no warranty implied; use at your own risk
+/* gb_math.h - v0.06d - public domain C math library - no warranty implied; use at your own risk
    A C math library geared towards game development
    use '#define GB_MATH_IMPLEMENTATION' before including to create the implementation in _ONE_ file
 
 Version History:
+	0.06d - Bug fix
 	0.06c - Remove extra needed define for C++ and inline all operators
 	0.06b - Just formatting
 	0.06a - Implement rough versions of mod, remainder, copy_sign
@@ -797,7 +798,7 @@ gb_copy_sign(float x, float y)
 
 	ix &= 0x7fffffff;
 	ix |= iy & 0x80000000;
-	return *(float *)ix;
+	return *(float *)&ix;
 }
 
 float
@@ -1014,9 +1015,9 @@ float gb_fast_exp2(float x) { return gb_fast_exp(GB_MATH_LOG_TWO * x); }
 
 
 
-float gb_round(float x) { return (x >= 0.0f) ? gb_floor(x + 0.5f) : gb_ceil(x - 0.5f); }
-float gb_floor(float x) { return (x >= 0.0f) ? (int)x : (int)(x-0.9999999999999999f); }
-float gb_ceil(float x)  { return (x < 0) ? (int)x : ((int)x)+1; }
+float gb_round(float x) { return (float)((x >= 0.0f) ? gb_floor(x + 0.5f) : gb_ceil(x - 0.5f)); }
+float gb_floor(float x) { return (float)((x >= 0.0f) ? (int)x : (int)(x-0.9999999999999999f)); }
+float gb_ceil(float x)  { return (float)((x < 0) ? (int)x : ((int)x)+1); }
 
 
 

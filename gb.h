@@ -1,4 +1,4 @@
-/* gb.h - v0.16  - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.16a - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -229,7 +229,6 @@ extern "C" {
 /* TODO(bill): How many of these headers do I really need? */
 #include <stdarg.h>
 #include <stddef.h>
-#include <math.h> /* fmod */
 
 #if defined(GB_SYSTEM_WINDOWS)
 	#define NOMINMAX            1
@@ -706,9 +705,8 @@ GB_DEF isize       gb_pointer_diff     (void const *begin, void const *end);
 
 
 GB_DEF void gb_zero_size(void *ptr, isize size);
-/* TODO(bill): Should gb_zero_struct be renamed to gb_zero_elem(ent)? */
-#ifndef     gb_zero_struct
-#define     gb_zero_struct(t) gb_zero_size((t), gb_size_of(*(t))) /* NOTE(bill): Pass pointer of struct */
+#ifndef     gb_zero_item
+#define     gb_zero_item(t) gb_zero_size((t), gb_size_of(*(t))) /* NOTE(bill): Pass pointer of struct */
 #define     gb_zero_array(a, count) gb_zero_size((a), gb_size_of(*(a))*count)
 #endif
 
@@ -1986,8 +1984,8 @@ typedef struct gbWindow {
 #endif
 			void *memory;
 			isize memory_size;
-			i32 pitch;
-			i32 bits_per_pixel;
+			i32   pitch;
+			i32   bits_per_pixel;
 		} software;
 	};
 } gbWindow;
@@ -3167,7 +3165,7 @@ gb_mutex_unlock(gbMutex *m)
 void
 gb_thread_init(gbThread *t)
 {
-	gb_zero_struct(t);
+	gb_zero_item(t);
 #if defined(GB_SYSTEM_WINDOWS)
 	t->win32_handle = INVALID_HANDLE_VALUE;
 #else
@@ -3637,7 +3635,7 @@ gb_pool_init_align(gbPool *pool, gbAllocator backing, isize num_blocks, isize bl
 	void *data, *curr;
 	uintptr *end;
 
-	gb_zero_struct(pool);
+	gb_zero_item(pool);
 
 	pool->backing = backing;
 	pool->block_size = block_size;
@@ -7113,13 +7111,44 @@ gb_random_range_i64(gbRandom *r, i64 lower_inc, i64 higher_inc)
 	return i;
 }
 
+/* NOTE(bill): Semi-cc'ed from gb_math to remove need for fmod */
+f64
+gb__copy_sign64(f64 x, f64 y)
+{
+	i64 ix, iy;
+	ix = *(i64 *)&x;
+	iy = *(i64 *)&y;
+
+	ix &= 0x7fffffffffffffff;
+	ix |= iy & 0x8000000000000000;
+	return *cast(f64 *)&ix;
+}
+
+f64 gb__floor64    (f64 x)        { return cast(f64)((x >= 0.0) ? cast(i64)x : cast(i64)(x-0.9999999999999999)); }
+f64 gb__ceil64     (f64 x)        { return cast(f64)((x < 0) ? cast(i64)x : (cast(i64)x)+1); }
+f64 gb__round64    (f64 x)        { return cast(f64)((x >= 0.0) ? gb__floor64(x + 0.5) : gb__ceil64(x - 0.5)); }
+f64 gb__remainder64(f64 x, f64 y) { return x - (gb__round64(x/y)*y); }
+f64 gb__abs64      (f64 x)        { return x < 0 ? -x : x; }
+f64 gb__sign64     (f64 x)        { return x < 0 ? -1.0 : +1.0; }
+
+f64
+gb__mod64(f64 x, f64 y)
+{
+	f64 result;
+	y = gb__abs64(y);
+	result = gb__remainder64(gb__abs64(x), y);
+	if (gb__sign64(result)) result += y;
+	return gb__copy_sign64(result, x);
+}
+
+
 f64
 gb_random_range_f64(gbRandom *r, f64 lower_inc, f64 higher_inc)
 {
 	u64 u = gb_random_next(r);
 	f64 f = *cast(f64 *)&u;
-	f64 diff = higher_inc-lower_inc+1.0f;
-	f = fmod(f, diff); /* TODO(bill): Replace fmod, maybe... */
+	f64 diff = higher_inc-lower_inc+1.0;
+	f = gb__mod64(f, diff); /* TODO(bill): Replace fmod, maybe... */
 	f += lower_inc;
 	return f;
 }
@@ -7297,7 +7326,7 @@ gb__window_resize_dib_section(gbWindow *window, i32 width, i32 height)
 void
 gb_platform_init(gbPlatform *p)
 {
-	gb_zero_struct(p);
+	gb_zero_item(p);
 
 	{ /* Load XInput */
 		gbDllHandle xinput_library = gb_dll_load("xinput1_4.dll");
@@ -7675,6 +7704,8 @@ gb__win32_main_window_callback(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	LRESULT result = 0;
 	gbWindow *window = cast(gbWindow *)GetWindowLongPtr(wnd, GWLP_USERDATA);
 
+	/* TODO(bill): Do more in here? */
+
 	switch (msg) {
 	case WM_CLOSE:
 	case WM_DESTROY:
@@ -7694,14 +7725,13 @@ gb__win32_main_window_callback(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 gbWindow *
 gb_window_init(gbPlatform *p, char const *title, gbVideoMode mode, u32 flags)
 {
-	gbWindow *window = NULL;
+	gbWindow *window = &p->window;
 	WNDCLASSEXW wc = {gb_size_of(WNDCLASSEXW)};
 	DWORD ex_style, style;
 	RECT wr;
 	char16 title_buffer[256] = {0}; /* TODO(bill): gb_local_persist this? */
 
-	window = &p->window;
-	gb_zero_struct(window);
+	gb_zero_item(window);
 
 	wc.style = CS_HREDRAW | CS_VREDRAW; /* | CS_OWNDC */
 	wc.lpfnWndProc   = gb__win32_main_window_callback;
@@ -7823,7 +7853,7 @@ gb_window_destroy(gbWindow *w)
 
 	DestroyWindow(cast(HWND)w->handle);
 
-	gb_zero_struct(w);
+	gb_zero_item(w);
 }
 
 
@@ -7924,13 +7954,6 @@ gb_video_mode_bits(i32 width, i32 height, i32 bits_per_pixel)
 }
 
 
-b32         
-gb_video_mode_is_valid(gbVideoMode mode)
-{
-	gbVideoMode modes[256];
-	gb_video_mode_get_fullscreen_modes(modes, gb_count_of(modes));
-	return gb_binary_search_array(modes, gb_count_of(modes), &mode, gb_video_mode_cmp) == -1;
-}
 
 gbVideoMode 
 gb_video_mode_get_desktop(void)
@@ -7940,7 +7963,7 @@ gb_video_mode_get_desktop(void)
 	return gb_video_mode_bits(win32_mode.dmPelsWidth, win32_mode.dmPelsHeight, win32_mode.dmBitsPerPel);
 }
 
-void        
+void
 gb_video_mode_get_fullscreen_modes(gbVideoMode *modes, isize max_mode_count)
 {
 	DEVMODE win32_mode = {gb_size_of(win32_mode)};
@@ -7953,6 +7976,17 @@ gb_video_mode_get_fullscreen_modes(gbVideoMode *modes, isize max_mode_count)
 
 	gb_sort_array(modes, i, gb_video_mode_inv_cmp);
 }
+
+#endif
+
+b32
+gb_video_mode_is_valid(gbVideoMode mode)
+{
+	gbVideoMode modes[256];
+	gb_video_mode_get_fullscreen_modes(modes, gb_count_of(modes));
+	return gb_binary_search_array(modes, gb_count_of(modes), &mode, gb_video_mode_cmp) == -1;
+}
+
 
 GB_COMPARE_PROC(gb_video_mode_cmp)
 {
@@ -7971,9 +8005,6 @@ GB_COMPARE_PROC(gb_video_mode_inv_cmp)
 {
 	return -gb_video_mode_cmp(a, b);
 }
-
-
-#endif
 
 #endif /* GB_PLATFORM */
 
