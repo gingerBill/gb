@@ -37,6 +37,7 @@ Conventions used:
 
 
 Version History:
+	0.16a - Minor code layout changes
 	0.16  - New file API and improved platform layer
 	0.15d - Linux Experimental Support (DON'T USE IT PLEASE)
 	0.15c - Linux Experimental Support (DON'T USE IT)
