@@ -1,8 +1,9 @@
-/* gb_math.h - v0.06d - public domain C math library - no warranty implied; use at your own risk
+/* gb_math.h - v0.06e - public domain C math library - no warranty implied; use at your own risk
    A C math library geared towards game development
    use '#define GB_MATH_IMPLEMENTATION' before including to create the implementation in _ONE_ file
 
 Version History:
+	0.06e - Change brace style and fix some warnings
 	0.06d - Bug fix
 	0.06c - Remove extra needed define for C++ and inline all operators
 	0.06b - Just formatting
@@ -551,9 +552,7 @@ inline gbVec4 &operator*=(gbVec4 &a, float scalar) { return (a = a * scalar); }
 inline gbVec4 &operator/=(gbVec4 &a, float scalar) { return (a = a / scalar); }
 
 
-inline gbMat2
-operator+(gbMat2 const &a, gbMat2 const &b)
-{
+inline gbMat2 operator+(gbMat2 const &a, gbMat2 const &b) {
 	int i, j;
 	gbMat2 r = {0};
 	for (j = 0; j < 2; j++) {
@@ -563,9 +562,7 @@ operator+(gbMat2 const &a, gbMat2 const &b)
 	return r;
 }
 
-inline gbMat2
-operator-(gbMat2 const &a, gbMat2 const &b)
-{
+inline gbMat2 operator-(gbMat2 const &a, gbMat2 const &b) {
 	int i, j;
 	gbMat2 r = {0};
 	for (j = 0; j < 2; j++) {
@@ -577,9 +574,7 @@ operator-(gbMat2 const &a, gbMat2 const &b)
 
 inline gbMat2 operator*(gbMat2 const &a, gbMat2 const &b) { gbMat2 r; gb_mat2_mul(&r, (gbMat2 *)&a, (gbMat2 *)&b); return r; }
 inline gbVec2 operator*(gbMat2 const &a, gbVec2 v) { gbVec2 r; gb_mat2_mul_vec2(&r, (gbMat2 *)&a, v); return r; }
-inline gbMat2
-operator*(gbMat2 const &a, float scalar)
-{
+inline gbMat2 operator*(gbMat2 const &a, float scalar) {
 	gbMat2 r = {0};
 	int i;
 	for (i = 0; i < 2*2; i++) r.e[i] = a.e[i] * scalar;
@@ -594,9 +589,7 @@ inline gbMat2& operator*=(gbMat2& a, gbMat2 const &b) { return (a = a * b); }
 
 
 
-inline gbMat3
-operator+(gbMat3 const &a, gbMat3 const &b)
-{
+inline gbMat3 operator+(gbMat3 const &a, gbMat3 const &b) {
 	int i, j;
 	gbMat3 r = {0};
 	for (j = 0; j < 3; j++) {
@@ -606,9 +599,7 @@ operator+(gbMat3 const &a, gbMat3 const &b)
 	return r;
 }
 
-inline gbMat3
-operator-(gbMat3 const &a, gbMat3 const &b)
-{
+inline gbMat3 operator-(gbMat3 const &a, gbMat3 const &b) {
 	int i, j;
 	gbMat3 r = {0};
 	for (j = 0; j < 3; j++) {
@@ -619,9 +610,7 @@ operator-(gbMat3 const &a, gbMat3 const &b)
 }
 
 inline gbMat3 operator*(gbMat3 const &a, gbMat3 const &b) { gbMat3 r; gb_mat3_mul(&r, (gbMat3 *)&a, (gbMat3 *)&b); return r; }
-inline gbVec3 operator*(gbMat3 const &a, gbVec3 v) { gbVec3 r; gb_mat3_mul_vec3(&r, (gbMat3 *)&a, v); return r; }
-inline gbMat3 operator*(gbMat3 const &a, float scalar)
-{
+inline gbVec3 operator*(gbMat3 const &a, gbVec3 v) { gbVec3 r; gb_mat3_mul_vec3(&r, (gbMat3 *)&a, v); return r; } inline gbMat3 operator*(gbMat3 const &a, float scalar) {
 	gbMat3 r = {0};
 	int i;
 	for (i = 0; i < 3*3; i++) r.e[i] = a.e[i] * scalar;
@@ -636,9 +625,7 @@ inline gbMat3& operator*=(gbMat3& a, gbMat3 const &b) { return (a = a * b); }
 
 
 
-inline gbMat4
-operator+(gbMat4 const &a, gbMat4 const &b)
-{
+inline gbMat4 operator+(gbMat4 const &a, gbMat4 const &b) {
 	int i, j;
 	gbMat4 r = {0};
 	for (j = 0; j < 4; j++) {
@@ -648,9 +635,7 @@ operator+(gbMat4 const &a, gbMat4 const &b)
 	return r;
 }
 
-inline gbMat4
-operator-(gbMat4 const &a, gbMat4 const &b)
-{
+inline gbMat4 operator-(gbMat4 const &a, gbMat4 const &b) {
 	int i, j;
 	gbMat4 r = {0};
 	for (j = 0; j < 4; j++) {
@@ -662,9 +647,7 @@ operator-(gbMat4 const &a, gbMat4 const &b)
 
 inline gbMat4 operator*(gbMat4 const &a, gbMat4 const &b) { gbMat4 r; gb_mat4_mul(&r, (gbMat4 *)&a, (gbMat4 *)&b); return r; }
 inline gbVec4 operator*(gbMat4 const &a, gbVec4 v) { gbVec4 r; gb_mat4_mul_vec4(&r, (gbMat4 *)&a, v); return r; }
-inline gbMat4
-operator*(gbMat4 const &a, float scalar)
-{
+inline gbMat4 operator*(gbMat4 const &a, float scalar) {
 	gbMat4 r = {0};
 	int i;
 	for (i = 0; i < 4*4; i++) r.e[i] = a.e[i] * scalar;
@@ -753,9 +736,7 @@ inline gbVec3 operator*(gbQuat q, gbVec3 v) { gbVec3 r; gb_quat_rotate_vec3(&r, 
 
 
 /* NOTE(bill): To remove the need for memcpy */
-static void
-gb__memcpy_4byte(void *dest, void const *src, size_t size)
-{
+static void gb__memcpy_4byte(void *dest, void const *src, size_t size) {
 	size_t i;
 	unsigned int *d, *s;
 	d = (unsigned int *)dest;
@@ -766,9 +747,7 @@ gb__memcpy_4byte(void *dest, void const *src, size_t size)
 }
 
 /* NOTE(bill): To remove the need for memset */
-static void
-gb__memzero_byte4(void *dest, size_t size)
-{
+static void gb__memzero_byte4(void *dest, size_t size) {
 	unsigned *d = (unsigned *)dest;
 	unsigned i;
 	for (i = 0; i < size/4; i++)
@@ -780,18 +759,14 @@ gb__memzero_byte4(void *dest, size_t size)
 float gb_to_radians(float degrees) { return degrees * GB_MATH_TAU / 360.0f; }
 float gb_to_degrees(float radians) { return radians * 360.0f / GB_MATH_TAU; }
 
-float
-gb_angle_diff(float radians_a, float radians_b)
-{
+float gb_angle_diff(float radians_a, float radians_b) {
 	float delta = gb_mod(radians_b-radians_a, GB_MATH_TAU);
 	delta = gb_mod(delta + 1.5f*GB_MATH_TAU, GB_MATH_TAU);
 	delta -= 0.5f*GB_MATH_TAU;
 	return delta;
 }
 
-float
-gb_copy_sign(float x, float y)
-{
+float gb_copy_sign(float x, float y) {
 	int ix, iy;
 	ix = *(int *)&x;
 	iy = *(int *)&y;
@@ -801,15 +776,11 @@ gb_copy_sign(float x, float y)
 	return *(float *)&ix;
 }
 
-float
-gb_remainder(float x, float y)
-{
+float gb_remainder(float x, float y) {
 	return x - (gb_round(x/y)*y);
 }
 
-float
-gb_mod(float x, float y)
-{
+float gb_mod(float x, float y) {
 	float result;
 	y = gb_abs(y);
 	result = gb_remainder(gb_abs(x), y);
@@ -818,9 +789,7 @@ gb_mod(float x, float y)
 }
 
 
-float
-gb_quake_rsqrt(float a)
-{
+float gb_quake_rsqrt(float a) {
 	union {
 		int i;
 		float f;
@@ -1003,11 +972,9 @@ float gb_exp2(float x) { return gb_exp(GB_MATH_LOG_TWO * x); }
 float gb_log2(float x) { return gb_log(x) / GB_MATH_LOG_TWO; }
 
 
-float
-gb_fast_exp(float x)
-{
+float gb_fast_exp(float x) {
 	/* NOTE(bill): Only works in the range -1 <= x <= +1 */
-	float e = 1.0f + x*(1.0f + x*0.5f*(1.0f + x*0.3333333333f*(1.0f + x*0.25*(1.0f + x*0.2f))));
+	float e = 1.0f + x*(1.0f + x*0.5f*(1.0f + x*0.3333333333f*(1.0f + x*0.25f*(1.0f + x*0.2f))));
 	return e;
 }
 
@@ -1023,9 +990,7 @@ float gb_ceil(float x)  { return (float)((x < 0) ? (int)x : ((int)x)+1); }
 
 
 
-float
-gb_half_to_float(gbHalf value)
-{
+float gb_half_to_float(gbHalf value) {
 	union { unsigned int i; float f; } result;
 	int s = (value >> 15) & 0x001;
 	int e = (value >> 10) & 0x01f;
@@ -1065,9 +1030,7 @@ gb_half_to_float(gbHalf value)
 	return result.f;
 }
 
-gbHalf
-gb_float_to_half(float value)
-{
+gbHalf gb_float_to_half(float value) {
 	union { unsigned int i; float f; } v;
 	int i, s, e, m;
 
@@ -1154,17 +1117,17 @@ gb_float_to_half(float value)
 	a->w = b.w op c.w post;
 
 
-gbVec2 gb_vec2_zero(void)        { gbVec2 v = {0, 0};       return v; }
-gbVec2 gb_vec2(float x, float y) { gbVec2 v = {x, y};       return v; }
-gbVec2 gb_vec2v(float x[2])      { gbVec2 v = {x[0], x[1]}; return v; }
+gbVec2 gb_vec2_zero(void)        { gbVec2 v = {0, 0};                return v; }
+gbVec2 gb_vec2(float x, float y) { gbVec2 v; v.x = x;    v.y = y;    return v; }
+gbVec2 gb_vec2v(float x[2])      { gbVec2 v; v.x = x[0]; v.y = x[1]; return v; }
 
-gbVec3 gb_vec3_zero(void)                 { gbVec3 v = {0, 0, 0};          return v; }
-gbVec3 gb_vec3(float x, float y, float z) { gbVec3 v = {x, y, z};          return v; }
-gbVec3 gb_vec3v(float x[3])               { gbVec3 v = {x[0], x[1], x[2]}; return v; }
+gbVec3 gb_vec3_zero(void)                 { gbVec3 v = {0, 0, 0};                         return v; }
+gbVec3 gb_vec3(float x, float y, float z) { gbVec3 v; v.x = x; v.y = y; v.z = z;          return v; }
+gbVec3 gb_vec3v(float x[3])               { gbVec3 v; v.x = x[0]; v.y = x[1]; v.z = x[2]; return v; }
 
-gbVec4 gb_vec4_zero(void)                          { gbVec4 v = {0, 0, 0, 0};             return v; }
-gbVec4 gb_vec4(float x, float y, float z, float w) { gbVec4 v = {x, y, z, w};             return v; }
-gbVec4 gb_vec4v(float x[4])                        { gbVec4 v = {x[0], x[1], x[2], x[3]}; return v; }
+gbVec4 gb_vec4_zero(void)                          { gbVec4 v = {0, 0, 0, 0};                                  return v; }
+gbVec4 gb_vec4(float x, float y, float z, float w) { gbVec4 v; v.x = x; v.y = y; v.z = z; v.w = w;             return v; }
+gbVec4 gb_vec4v(float x[4])                        { gbVec4 v; v.x = x[0]; v.y = x[1]; v.z = x[2]; v.w = x[3]; return v; }
 
 
 void gb_vec2_add(gbVec2 *d, gbVec2 v0, gbVec2 v1) { GB_VEC2_3OP(d,v0,+,v1,+0); }
@@ -1227,46 +1190,34 @@ float gb_vec2_mag(gbVec2 v) { return gb_sqrt(gb_vec2_dot(v, v)); }
 float gb_vec3_mag(gbVec3 v) { return gb_sqrt(gb_vec3_dot(v, v)); }
 float gb_vec4_mag(gbVec4 v) { return gb_sqrt(gb_vec4_dot(v, v)); }
 
-void
-gb_vec2_norm(gbVec2 *d, gbVec2 v)
-{
+void gb_vec2_norm(gbVec2 *d, gbVec2 v) {
 	float inv_mag = gb_rsqrt(gb_vec2_dot(v, v));
 	gb_vec2_mul(d, v, inv_mag);
 }
-void
-gb_vec3_norm(gbVec3 *d, gbVec3 v)
-{
+void gb_vec3_norm(gbVec3 *d, gbVec3 v) {
 	float mag = gb_vec3_mag(v);
 	gb_vec3_div(d, v, mag);
 }
-void
-gb_vec4_norm(gbVec4 *d, gbVec4 v)
-{
+void gb_vec4_norm(gbVec4 *d, gbVec4 v) {
 	float mag = gb_vec4_mag(v);
 	gb_vec4_div(d, v, mag);
 }
 
-void
-gb_vec2_norm0(gbVec2 *d, gbVec2 v)
-{
+void gb_vec2_norm0(gbVec2 *d, gbVec2 v) {
 	float mag = gb_vec2_mag(v);
 	if (mag > 0)
 		gb_vec2_div(d, v, mag);
 	else
 		*d = gb_vec2_zero();
 }
-void
-gb_vec3_norm0(gbVec3 *d, gbVec3 v)
-{
+void gb_vec3_norm0(gbVec3 *d, gbVec3 v) {
 	float mag = gb_vec3_mag(v);
 	if (mag > 0)
 		gb_vec3_div(d, v, mag);
 	else
 		*d = gb_vec3_zero();
 }
-void
-gb_vec4_norm0(gbVec4 *d, gbVec4 v)
-{
+void gb_vec4_norm0(gbVec4 *d, gbVec4 v) {
 	float mag = gb_vec4_mag(v);
 	if (mag > 0)
 		gb_vec4_div(d, v, mag);
@@ -1275,25 +1226,19 @@ gb_vec4_norm0(gbVec4 *d, gbVec4 v)
 }
 
 
-void
-gb_vec2_reflect(gbVec2 *d, gbVec2 i, gbVec2 n)
-{
+void gb_vec2_reflect(gbVec2 *d, gbVec2 i, gbVec2 n) {
 	gbVec2 b = n;
 	gb_vec2_muleq(&b, 2.0f*gb_vec2_dot(n, i));
 	gb_vec2_sub(d, i, b);
 }
 
-void
-gb_vec3_reflect(gbVec3 *d, gbVec3 i, gbVec3 n)
-{
+void gb_vec3_reflect(gbVec3 *d, gbVec3 i, gbVec3 n) {
 	gbVec3 b = n;
 	gb_vec3_muleq(&b, 2.0f*gb_vec3_dot(n, i));
 	gb_vec3_sub(d, i, b);
 }
 
-void
-gb_vec2_refract(gbVec2 *d, gbVec2 i, gbVec2 n, float eta)
-{
+void gb_vec2_refract(gbVec2 *d, gbVec2 i, gbVec2 n, float eta) {
 	gbVec2 a, b;
 	float dv, k;
 
@@ -1305,9 +1250,7 @@ gb_vec2_refract(gbVec2 *d, gbVec2 i, gbVec2 n, float eta)
 	gb_vec2_muleq(d, (float)(k >= 0.0f));
 }
 
-void
-gb_vec3_refract(gbVec3 *d, gbVec3 i, gbVec3 n, float eta)
-{
+void gb_vec3_refract(gbVec3 *d, gbVec3 i, gbVec3 n, float eta) {
 	gbVec3 a, b;
 	float dv, k;
 
@@ -1333,9 +1276,7 @@ void gb_mat2_transpose(gbMat2 *m) { gb_float22_transpose(gb_float22_m(m)); }
 void gb_mat2_identity(gbMat2 *m)  { gb_float22_identity(gb_float22_m(m));  }
 void gb_mat2_mul(gbMat2 *out, gbMat2 *m1, gbMat2 *m2) { gb_float22_mul(gb_float22_m(out), gb_float22_m(m1), gb_float22_m(m2)); }
 
-void
-gb_float22_identity(float m[2][2])
-{
+void gb_float22_identity(float m[2][2]) {
 	m[0][0] = 1; m[0][1] = 0;
 	m[1][0] = 0; m[1][1] = 1;
 }
@@ -1349,9 +1290,7 @@ gbFloat2 *gb_float22_m(gbMat2 *m)   { return (gbFloat2 *)m; }
 gbFloat2 *gb_float22_v(gbVec2 m[2]) { return (gbFloat2 *)m; }
 gbFloat2 *gb_float22_4(float m[4])  { return (gbFloat2 *)m; }
 
-void
-gb_float22_transpose(float (*vec)[2])
-{
+void gb_float22_transpose(float (*vec)[2]) {
 	int i, j;
 	for (j = 0; j < 2; j++) {
 		for (i = j + 1; i < 2; i++) {
@@ -1364,9 +1303,7 @@ gb_float22_transpose(float (*vec)[2])
 
 
 
-void
-gb_float22_mul(float (*out)[2], float (*mat1)[2], float (*mat2)[2])
-{
+void gb_float22_mul(float (*out)[2], float (*mat1)[2], float (*mat2)[2]) {
 	int i, j;
 	float temp1[2][2], temp2[2][2];
 	if (mat1 == out) { gb__memcpy_4byte(temp1, mat1, sizeof(temp1)); mat1 = temp1; }
@@ -1379,9 +1316,7 @@ gb_float22_mul(float (*out)[2], float (*mat1)[2], float (*mat2)[2])
 	}
 }
 
-void
-gb_float22_mul_vec2(gbVec2 *out, float m[2][2], gbVec2 v)
-{
+void gb_float22_mul_vec2(gbVec2 *out, float m[2][2], gbVec2 v) {
 	out->x = m[0][0]*v.x + m[0][1]*v.y;
 	out->y = m[1][0]*v.x + m[1][1]*v.y;
 }
@@ -1395,9 +1330,7 @@ void gb_mat3_transpose(gbMat3 *m) { gb_float33_transpose(gb_float33_m(m)); }
 void gb_mat3_identity(gbMat3 *m)  { gb_float33_identity(gb_float33_m(m));  }
 void gb_mat3_mul(gbMat3 *out, gbMat3 *m1, gbMat3 *m2) { gb_float33_mul(gb_float33_m(out), gb_float33_m(m1), gb_float33_m(m2)); }
 
-void
-gb_float33_identity(float m[3][3])
-{
+void gb_float33_identity(float m[3][3]) {
 	m[0][0] = 1; m[0][1] = 0; m[0][2] = 0;
 	m[1][0] = 0; m[1][1] = 1; m[1][2] = 0;
 	m[2][0] = 0; m[2][1] = 0; m[2][2] = 1;
@@ -1412,9 +1345,7 @@ gbFloat3 *gb_float33_m(gbMat3 *m)   { return (gbFloat3 *)m; }
 gbFloat3 *gb_float33_v(gbVec3 m[3]) { return (gbFloat3 *)m; }
 gbFloat3 *gb_float33_16(float m[9]) { return (gbFloat3 *)m; }
 
-void
-gb_float33_transpose(float (*vec)[3])
-{
+void gb_float33_transpose(float (*vec)[3]) {
 	int i, j;
 	for (j = 0; j < 3; j++) {
 		for (i = j + 1; i < 3; i++) {
@@ -1425,9 +1356,7 @@ gb_float33_transpose(float (*vec)[3])
 	}
 }
 
-void
-gb_float33_mul(float (*out)[3], float (*mat1)[3], float (*mat2)[3])
-{
+void gb_float33_mul(float (*out)[3], float (*mat1)[3], float (*mat2)[3]) {
 	int i, j;
 	float temp1[3][3], temp2[3][3];
 	if (mat1 == out) { gb__memcpy_4byte(temp1, mat1, sizeof(temp1)); mat1 = temp1; }
@@ -1441,9 +1370,7 @@ gb_float33_mul(float (*out)[3], float (*mat1)[3], float (*mat2)[3])
 	}
 }
 
-void
-gb_float33_mul_vec3(gbVec3 *out, float m[3][3], gbVec3 v)
-{
+void gb_float33_mul_vec3(gbVec3 *out, float m[3][3], gbVec3 v) {
 	out->x = m[0][0]*v.x + m[0][1]*v.y + m[0][2]*v.z;
 	out->y = m[1][0]*v.x + m[1][1]*v.y + m[1][2]*v.z;
 	out->z = m[2][0]*v.x + m[2][1]*v.y + m[2][2]*v.z;
@@ -1461,18 +1388,14 @@ void gb_mat4_transpose(gbMat4 *m) { gb_float44_transpose(gb_float44_m(m)); }
 void gb_mat4_identity(gbMat4 *m)  { gb_float44_identity(gb_float44_m(m));  }
 void gb_mat4_mul(gbMat4 *out, gbMat4 *m1, gbMat4 *m2) { gb_float44_mul(gb_float44_m(out), gb_float44_m(m1), gb_float44_m(m2)); }
 
-void
-gb_float44_identity(float m[4][4])
-{
+void gb_float44_identity(float m[4][4]) {
 	m[0][0] = 1; m[0][1] = 0; m[0][2] = 0; m[0][3] = 0;
 	m[1][0] = 0; m[1][1] = 1; m[1][2] = 0; m[1][3] = 0;
 	m[2][0] = 0; m[2][1] = 0; m[2][2] = 1; m[2][3] = 0;
 	m[3][0] = 0; m[3][1] = 0; m[3][2] = 0; m[3][3] = 1;
 }
 
-void
-gb_mat4_mul_vec4(gbVec4 *out, gbMat4 *m, gbVec4 in)
-{
+void gb_mat4_mul_vec4(gbVec4 *out, gbMat4 *m, gbVec4 in) {
 	gb_float44_mul_vec4(out, gb_float44_m(m), in);
 }
 
@@ -1483,9 +1406,7 @@ gbFloat4 *gb_float44_m(gbMat4 *m)    { return (gbFloat4 *)m; }
 gbFloat4 *gb_float44_v(gbVec4 m[4])  { return (gbFloat4 *)m; }
 gbFloat4 *gb_float44_16(float m[16]) { return (gbFloat4 *)m; }
 
-void
-gb_float44_transpose(float (*vec)[4])
-{
+void gb_float44_transpose(float (*vec)[4]) {
 	int i, j;
 	for (j = 0; j < 4; j++) {
 		for (i = j + 1; i < 4; i++) {
@@ -1496,9 +1417,7 @@ gb_float44_transpose(float (*vec)[4])
 	}
 }
 
-void
-gb_float44_mul(float (*out)[4], float (*mat1)[4], float (*mat2)[4])
-{
+void gb_float44_mul(float (*out)[4], float (*mat1)[4], float (*mat2)[4]) {
 	int i, j;
 	float temp1[4][4], temp2[4][4];
 	if (mat1 == out) { gb__memcpy_4byte(temp1, mat1, sizeof(temp1)); mat1 = temp1; }
@@ -1513,9 +1432,7 @@ gb_float44_mul(float (*out)[4], float (*mat1)[4], float (*mat2)[4])
 	}
 }
 
-void
-gb_float44_mul_vec4(gbVec4 *out, float m[4][4], gbVec4 v)
-{
+void gb_float44_mul_vec4(gbVec4 *out, float m[4][4], gbVec4 v) {
 	out->x = m[0][0]*v.x + m[0][1]*v.y + m[0][2]*v.z + m[0][3]*v.w;
 	out->y = m[1][0]*v.x + m[1][1]*v.y + m[1][2]*v.z + m[1][3]*v.w;
 	out->z = m[2][0]*v.x + m[2][1]*v.y + m[2][2]*v.z + m[2][3]*v.w;
@@ -1524,17 +1441,13 @@ gb_float44_mul_vec4(gbVec4 *out, float m[4][4], gbVec4 v)
 
 
 
-void
-gb_mat4_translate(gbMat4 *out, gbVec3 v)
-{
+void gb_mat4_translate(gbMat4 *out, gbVec3 v) {
 	gb_mat4_identity(out);
 	out->col[3].xyz = v;
 	out->col[3].w  = 1;
 }
 
-void
-gb_mat4_rotate(gbMat4 *out, gbVec3 v, float angle_radians)
-{
+void gb_mat4_rotate(gbMat4 *out, gbVec3 v, float angle_radians) {
 	float c, s;
 	gbVec3 axis, t;
 	gbFloat4 *rot;
@@ -1564,18 +1477,14 @@ gb_mat4_rotate(gbMat4 *out, gbVec3 v, float angle_radians)
 	rot[2][3] = 0;
 }
 
-void
-gb_mat4_scale(gbMat4 *out, gbVec3 v)
-{
+void gb_mat4_scale(gbMat4 *out, gbVec3 v) {
 	gb_mat4_identity(out);
 	out->e[0]  = v.x;
 	out->e[5]  = v.y;
 	out->e[10] = v.z;
 }
 
-void
-gb_mat4_scalef(gbMat4 *out, float s)
-{
+void gb_mat4_scalef(gbMat4 *out, float s) {
 	gb_mat4_identity(out);
 	out->e[0]  = s;
 	out->e[5]  = s;
@@ -1583,9 +1492,7 @@ gb_mat4_scalef(gbMat4 *out, float s)
 }
 
 
-void
-gb_mat4_ortho2d(gbMat4 *out, float left, float right, float bottom, float top)
-{
+void gb_mat4_ortho2d(gbMat4 *out, float left, float right, float bottom, float top) {
 	gbFloat4 *m;
 	gb_mat4_identity(out);
 	m = gb_float44_m(out);
@@ -1597,9 +1504,7 @@ gb_mat4_ortho2d(gbMat4 *out, float left, float right, float bottom, float top)
 	m[3][1] = -(top + bottom) / (top - bottom);
 }
 
-void
-gb_mat4_ortho3d(gbMat4 *out, float left, float right, float bottom, float top, float z_near, float z_far)
-{
+void gb_mat4_ortho3d(gbMat4 *out, float left, float right, float bottom, float top, float z_near, float z_far) {
 	gbFloat4 *m;
 	gb_mat4_identity(out);
 	m = gb_float44_m(out);
@@ -1613,9 +1518,7 @@ gb_mat4_ortho3d(gbMat4 *out, float left, float right, float bottom, float top, f
 }
 
 
-void
-gb_mat4_perspective(gbMat4 *out, float fovy, float aspect, float z_near, float z_far)
-{
+void gb_mat4_perspective(gbMat4 *out, float fovy, float aspect, float z_near, float z_far) {
 	float tan_half_fovy = gb_tan(0.5f * fovy);
 
 	gbFloat4 *m = gb_float44_m(out);
@@ -1628,9 +1531,7 @@ gb_mat4_perspective(gbMat4 *out, float fovy, float aspect, float z_near, float z
 	m[3][2] = -2.0f*z_far*z_near / (z_far - z_near);
 }
 
-void
-gb_mat4_infinite_perspective(gbMat4 *out, float fovy, float aspect, float z_near)
-{
+void gb_mat4_infinite_perspective(gbMat4 *out, float fovy, float aspect, float z_near) {
 	float range  = gb_tan(0.5f * fovy) * z_near;
 	float left   = -range * aspect;
 	float right  =  range * aspect;
@@ -1647,9 +1548,7 @@ gb_mat4_infinite_perspective(gbMat4 *out, float fovy, float aspect, float z_near
 	m[3][2] = -2.0f*z_near;
 }
 
-void
-gb_mat4_look_at(gbMat4 *out, gbVec3 eye, gbVec3 centre, gbVec3 up)
-{
+void gb_mat4_look_at(gbMat4 *out, gbVec3 eye, gbVec3 centre, gbVec3 up) {
 	gbVec3 f, s, u;
 	gbFloat4 *m;
 
@@ -1692,12 +1591,10 @@ gb_mat4_look_at(gbMat4 *out, gbVec3 eye, gbVec3 centre, gbVec3 up)
 
 
 
-gbQuat gb_quat(float x, float y, float z, float w) { gbQuat q = {x, y, z, w}; return q; }
-gbQuat gb_quatv(float e[4]) { gbQuat q = {e[0], e[1], e[2], e[3]}; return q; }
+gbQuat gb_quat(float x, float y, float z, float w) { gbQuat q; q.x = x; q.y = y; q.z = z; q.w = w; return q; }
+gbQuat gb_quatv(float e[4]) { gbQuat q; q.x = e[0]; q.y = e[1]; q.z = e[2]; q.w = e[3]; return q; }
 
-gbQuat
-gb_quat_axis_angle(gbVec3 axis, float angle_radians)
-{
+gbQuat gb_quat_axis_angle(gbVec3 axis, float angle_radians) {
 	gbQuat q;
 	gb_vec3_norm(&q.xyz, axis);
 	gb_vec3_muleq(&q.xyz, gb_sin(0.5f*angle_radians));
@@ -1705,9 +1602,7 @@ gb_quat_axis_angle(gbVec3 axis, float angle_radians)
 	return q;
 }
 
-gbQuat
-gb_quat_euler_angles(float pitch, float yaw, float roll)
-{
+gbQuat gb_quat_euler_angles(float pitch, float yaw, float roll) {
 	/* TODO(bill): Do without multiplication, i.e. make it faster */
 	gbQuat q, p, y, r;
 	p = gb_quat_axis_angle(gb_vec3(1, 0, 0), pitch);
@@ -1726,9 +1621,7 @@ gbQuat gb_quat_identity(void) { gbQuat q = {0, 0, 0, 1}; return q; }
 void gb_quat_add(gbQuat *d, gbQuat q0, gbQuat q1) { gb_vec4_add(&d->xyzw, q0.xyzw, q1.xyzw); }
 void gb_quat_sub(gbQuat *d, gbQuat q0, gbQuat q1) { gb_vec4_sub(&d->xyzw, q0.xyzw, q1.xyzw); }
 
-void
-gb_quat_mul(gbQuat *d, gbQuat q0, gbQuat q1)
-{
+void gb_quat_mul(gbQuat *d, gbQuat q0, gbQuat q1) {
 	d->x = q0.w * q1.x + q0.x * q1.w + q0.y * q1.z - q0.z * q1.y;
 	d->y = q0.w * q1.y - q0.x * q1.z + q0.y * q1.w + q0.z * q1.x;
 	d->z = q0.w * q1.z + q0.x * q1.y - q0.y * q1.x + q0.z * q1.w;
@@ -1758,16 +1651,12 @@ void gb_quat_conj(gbQuat *d, gbQuat q)    { d->xyz = gb_vec3(-q.x, -q.y, -q.z); 
 void gb_quat_inverse(gbQuat *d, gbQuat q) { gb_quat_conj(d, q); gb_quat_diveqf(d, gb_quat_dot(q, q)); }
 
 
-void
-gb_quat_axis(gbVec3 *axis, gbQuat q)
-{
+void gb_quat_axis(gbVec3 *axis, gbQuat q) {
 	gbQuat n; gb_quat_norm(&n, q);
 	gb_vec3_div(axis, n.xyz, gb_sin(gb_arccos(q.w)));
 }
 
-float
-gb_quat_angle(gbQuat q)
-{
+float gb_quat_angle(gbQuat q) {
 	float mag = gb_quat_mag(q);
 	float c = q.w * (1.0f/mag);
 	float angle = 2.0f*gb_arccos(c);
@@ -1779,9 +1668,7 @@ float gb_quat_roll(gbQuat q)  { return gb_arctan2(2.0f*q.x*q.y + q.z*q.w, q.x*q.
 float gb_quat_pitch(gbQuat q) { return gb_arctan2(2.0f*q.y*q.z + q.w*q.x, q.w*q.w - q.x*q.x - q.y*q.y + q.z*q.z); }
 float gb_quat_yaw(gbQuat q)   { return gb_arcsin(-2.0f*(q.x*q.z - q.w*q.y)); }
 
-void
-gb_quat_rotate_vec3(gbVec3 *d, gbQuat q, gbVec3 v)
-{
+void gb_quat_rotate_vec3(gbVec3 *d, gbQuat q, gbVec3 v) {
 	/* gbVec3 t = 2.0f * cross(q.xyz, v);
 	 * *d = q.w*t + v + cross(q.xyz, t);
 	 */
@@ -1797,9 +1684,7 @@ gb_quat_rotate_vec3(gbVec3 *d, gbQuat q, gbVec3 v)
 }
 
 
-void
-gb_mat4_from_quat(gbMat4 *out, gbQuat q)
-{
+void gb_mat4_from_quat(gbMat4 *out, gbQuat q) {
 	gbFloat4 *m;
 	gbQuat a;
 	float xx, yy, zz,
@@ -1827,9 +1712,7 @@ gb_mat4_from_quat(gbMat4 *out, gbQuat q)
 	m[2][2] = 1.0f - 2.0f*(xx + yy);
 }
 
-void
-gb_quat_from_mat4(gbQuat *out, gbMat4 *mat)
-{
+void gb_quat_from_mat4(gbQuat *out, gbMat4 *mat) {
 	gbFloat4 *m;
 	float four_x_squared_minus_1, four_y_squared_minus_1,
 	      four_z_squared_minus_1, four_w_squared_minus_1,
@@ -1918,9 +1801,7 @@ void gb_vec4_lerp(gbVec4 *d, gbVec4 a, gbVec4 b, float t) { GB_VEC_LERPN(4, d, a
 void gb_quat_lerp(gbQuat *d, gbQuat a, gbQuat b, float t)  { gb_vec4_lerp(&d->xyzw, a.xyzw, b.xyzw, t); }
 void gb_quat_nlerp(gbQuat *d, gbQuat a, gbQuat b, float t) { gb_quat_lerp(d, a, b, t); gb_quat_norm(d, *d); }
 
-void
-gb_quat_slerp(gbQuat *d, gbQuat a, gbQuat b, float t)
-{
+void gb_quat_slerp(gbQuat *d, gbQuat a, gbQuat b, float t) {
 	gbQuat x, y, z;
 	float cos_theta, angle;
 	float s1, s0, is;
@@ -1949,9 +1830,7 @@ gb_quat_slerp(gbQuat *d, gbQuat a, gbQuat b, float t)
 	gb_quat_muleqf(d, is);
 }
 
-void
-gb_quat_slerp_approx(gbQuat *d, gbQuat a, gbQuat b, float t)
-{
+void gb_quat_slerp_approx(gbQuat *d, gbQuat a, gbQuat b, float t) {
 	/* NOTE(bill): Derived by taylor expanding the geometric interpolation equation
 	 *             Even works okay for nearly anti-parallel versors!!!
 	 */
@@ -1960,27 +1839,21 @@ gb_quat_slerp_approx(gbQuat *d, gbQuat a, gbQuat b, float t)
 	gb_quat_nlerp(d, a, b, tp);
 }
 
-void
-gb_quat_nquad(gbQuat *d, gbQuat p, gbQuat a, gbQuat b, gbQuat q, float t)
-{
+void gb_quat_nquad(gbQuat *d, gbQuat p, gbQuat a, gbQuat b, gbQuat q, float t) {
 	gbQuat x, y;
 	gb_quat_nlerp(&x, p, q, t);
 	gb_quat_nlerp(&y, a, b, t);
 	gb_quat_nlerp(d, x, y, 2.0f*t*(1.0f-t));
 }
 
-void
-gb_quat_squad(gbQuat *d, gbQuat p, gbQuat a, gbQuat b, gbQuat q, float t)
-{
+void gb_quat_squad(gbQuat *d, gbQuat p, gbQuat a, gbQuat b, gbQuat q, float t) {
 	gbQuat x, y;
 	gb_quat_slerp(&x, p, q, t);
 	gb_quat_slerp(&y, a, b, t);
 	gb_quat_slerp(d, x, y, 2.0f*t*(1.0f-t));
 }
 
-void
-gb_quat_squad_approx(gbQuat *d, gbQuat p, gbQuat a, gbQuat b, gbQuat q, float t)
-{
+void gb_quat_squad_approx(gbQuat *d, gbQuat p, gbQuat a, gbQuat b, gbQuat q, float t) {
 	gbQuat x, y;
 	gb_quat_slerp_approx(&x, p, q, t);
 	gb_quat_slerp_approx(&y, a, b, t);
@@ -1992,27 +1865,21 @@ gb_quat_squad_approx(gbQuat *d, gbQuat p, gbQuat a, gbQuat b, gbQuat q, float t)
 
 
 
-gbRect2
-gb_rect2(gbVec2 pos, gbVec2 dim)
-{
+gbRect2 gb_rect2(gbVec2 pos, gbVec2 dim) {
 	gbRect2 r;
 	r.pos = pos;
 	r.dim = dim;
 	return r;
 }
 
-gbRect3
-gb_rect3(gbVec3 pos, gbVec3 dim)
-{
+gbRect3 gb_rect3(gbVec3 pos, gbVec3 dim) {
 	gbRect3 r;
 	r.pos = pos;
 	r.dim = dim;
 	return r;
 }
 
-int
-gb_rect2_contains(gbRect2 a, float x, float y)
-{
+int gb_rect2_contains(gbRect2 a, float x, float y) {
 	float min_x = gb_min(a.pos.x, a.pos.x+a.dim.x);
 	float max_x = gb_max(a.pos.x, a.pos.x+a.dim.x);
 	float min_y = gb_min(a.pos.y, a.pos.y+a.dim.y);
@@ -2023,16 +1890,12 @@ gb_rect2_contains(gbRect2 a, float x, float y)
 
 int gb_rect2_contains_vec2(gbRect2 a, gbVec2 p) { return gb_rect2_contains(a, p.x, p.y); }
 
-int
-gb_rect2_intersects(gbRect2 a, gbRect2 b)
-{
+int gb_rect2_intersects(gbRect2 a, gbRect2 b) {
 	gbRect2 r = {0};
 	return gb_rect2_intersection_result(a, b, &r);
 }
 
-int
-gb_rect2_intersection_result(gbRect2 a, gbRect2 b, gbRect2 *intersection)
-{
+int gb_rect2_intersection_result(gbRect2 a, gbRect2 b, gbRect2 *intersection) {
 	float a_min_x = gb_min(a.pos.x, a.pos.x+a.dim.x);
 	float a_max_x = gb_max(a.pos.x, a.pos.x+a.dim.x);
 	float a_min_y = gb_min(a.pos.y, a.pos.y+a.dim.y);
@@ -2061,9 +1924,7 @@ gb_rect2_intersection_result(gbRect2 a, gbRect2 b, gbRect2 *intersection)
 
 
 #if defined(_WIN64) || defined(__x86_64__) || defined(__ppc64__)
-	gb_math_u64
-	gb_hash_murmur64(void const *key, size_t num_bytes, gb_math_u64 seed)
-	{
+	gb_math_u64 gb_hash_murmur64(void const *key, size_t num_bytes, gb_math_u64 seed) {
 		gb_math_u64 const m = 0xc6a4a7935bd1e995ULL;
 		gb_math_u64 const r = 47;
 
@@ -2102,9 +1963,7 @@ gb_rect2_intersection_result(gbRect2 a, gbRect2 b, gbRect2 *intersection)
 		return h;
 	}
 #else
-	gb_math_u64
-	gb_hash_murmur64(void const *key, size_t num_bytes, gb_math_u64 seed)
-	{
+	gb_math_u64 gb_hash_murmur64(void const *key, size_t num_bytes, gb_math_u64 seed) {
 		gb_math_u32 const m = 0x5bd1e995;
 		gb_math_u32 const r = 24;
 
@@ -2169,9 +2028,7 @@ gb_rect2_intersection_result(gbRect2 a, gbRect2 b, gbRect2 *intersection)
 
 
 /* TODO(bill): Make better random number generators */
-float
-gb_random_range_float(float min_inc, float max_inc)
-{
+float gb_random_range_float(float min_inc, float max_inc) {
 	int int_result = gb_random_range_int(0, 2147483646); /* Prevent integer overflow */
 	float result = int_result/(float)2147483646;
 	result *= max_inc - min_inc;
@@ -2179,9 +2036,7 @@ gb_random_range_float(float min_inc, float max_inc)
 	return result;
 }
 
-int
-gb_random_range_int(int min_inc, int max_inc)
-{
+int gb_random_range_int(int min_inc, int max_inc) {
 	static int random_value = 0xdeadbeef; /* Random Value */
 	int diff, result;
 	random_value = random_value * 2147001325 + 715136305; /* BCPL generator */
