@@ -1,4 +1,4 @@
-/* gb.h - v0.17  - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.17a - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -32,11 +32,12 @@
 Conventions used:
 	gbTypesAreLikeThis (None core types)
 	gb_functions_and_variables_like_this
-	Prefer C90 Comments
+	Prefer C99 // Comments
 	Never use _t suffix for types (I think they are stupid...)
 
 
 Version History:
+	0.17a - Dropped C90 Support
 	0.17  - Instantiated Hash Table
 	0.16a - Minor code layout changes
 	0.16  - New file API and improved platform layer
@@ -130,7 +131,7 @@ extern "C" {
 #endif
 
 
-/* NOTE(bill): Redefine for DLL, etc. */
+// NOTE(bill): Redefine for DLL, etc.
 #ifndef GB_DEF
 	#ifdef GB_STATIC
 		#define GB_DEF static
@@ -151,7 +152,7 @@ extern "C" {
 	#endif
 #endif
 
-/* TODO(bill): Check if this works on clang */
+// TODO(bill): Check if this works on clang
 #if defined(__GNUC__)
 	#if defined(__x86_64__) || defined(__ppc64__)
 		#ifndef GB_ARCH_64_BIT
@@ -202,19 +203,18 @@ extern "C" {
 
 #ifndef GB_STATIC_ASSERT
 	#define GB_STATIC_ASSERT3(cond, msg) typedef char static_assertion_##msg[(!!(cond))*2-1]
-	/* NOTE(bill): Token pasting madness!! */
+	// NOTE(bill): Token pasting madness!!
 	#define GB_STATIC_ASSERT2(cond, line) GB_STATIC_ASSERT3(cond, static_assertion_at_line_##line)
 	#define GB_STATIC_ASSERT1(cond, line) GB_STATIC_ASSERT2(cond, line)
 	#define GB_STATIC_ASSERT(cond)        GB_STATIC_ASSERT1(cond, __LINE__)
 #endif
 
 
-
-/***************************************************************
- *
- * Headers
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Headers
+//
+//
 
 #if defined(_WIN32) && !defined(__MINGW32__)
 	#ifndef _CRT_SECURE_NO_WARNINGS
@@ -228,7 +228,7 @@ extern "C" {
 #endif
 
 
-/* TODO(bill): How many of these headers do I really need? */
+// TODO(bill): How many of these headers do I really need?
 #include <stdarg.h>
 #include <stddef.h>
 
@@ -243,10 +243,10 @@ extern "C" {
 	#undef WIN32_MEAN_AND_LEAN
 	#undef VC_EXTRALEAN
 
-	#include <malloc.h> /* NOTE(bill): _aligned_*() */
+	#include <malloc.h> // NOTE(bill): _aligned_*()
 	#include <intrin.h>
 #else
-	#include <stdlib.h> /* NOTE(bill): malloc */
+	#include <stdlib.h> // NOTE(bill): malloc
 	#include <dlfcn.h>
 	#include <fcntl.h>
 	#include <pthread.h>
@@ -270,11 +270,11 @@ extern "C" {
 #endif
 
 
-/***************************************************************
- *
- * Base Types
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Base Types
+//
+//
 
 #if defined(_MSC_VER)
 	#if _MSC_VER < 1300
@@ -321,13 +321,13 @@ typedef ptrdiff_t isize;
 
 GB_STATIC_ASSERT(sizeof(usize) == sizeof(isize));
 
-/* NOTE(bill): (u)intptr is only here for semantic reasons really as this library will only support 32/64 bit OSes. */
-/* NOTE(bill): Are there any modern OSes (not 16 bit) where intptr != isize ? */
+// NOTE(bill): (u)intptr is only here for semantic reasons really as this library will only support 32/64 bit OSes.
+// NOTE(bill): Are there any modern OSes (not 16 bit) where intptr != isize ?
 #if defined(_WIN64)
 	typedef signed   __int64  intptr;
 	typedef unsigned __int64 uintptr;
 #elif defined(_WIN32)
-	/* NOTE(bill); To mark types changing their size, e.g. intptr */
+	// NOTE(bill); To mark types changing their size, e.g. intptr
 	#ifndef _W64
 		#if !defined(__midl) && (defined(_X86_) || defined(_M_IX86)) && _MSC_VER >= 1300
 			#define _W64 __w64
@@ -349,18 +349,17 @@ typedef double f64;
 GB_STATIC_ASSERT(sizeof(f32) == 4);
 GB_STATIC_ASSERT(sizeof(f64) == 8);
 
-typedef char char8;  /* NOTE(bill): Probably redundant but oh well! */
+typedef char char8;  // NOTE(bill): Probably redundant but oh well!
 typedef u16  char16;
 typedef u32  char32;
 
-/* NOTE(bill): I think C99 and C++ `bool` is stupid for numerous reasons but there are too many
- * to write in this small comment.
- */
+// NOTE(bill): I think C99 and C++ `bool` is stupid for numerous reasons but there are too many
+// to write in this small comment.
 typedef i8  b8;
 typedef i16 b16;
-typedef i32 b32; /* NOTE(bill): Prefer this!!! */
+typedef i32 b32; // NOTE(bill): Prefer this!!!
 
-/* NOTE(bill): Get true and false */
+// NOTE(bill): Get true and false
 #if !defined(__cplusplus)
 	#if (defined(_MSC_VER) && _MSC_VER <= 1800) || !defined(__STDC_VERSION__)
 		#ifndef true
@@ -374,7 +373,7 @@ typedef i32 b32; /* NOTE(bill): Prefer this!!! */
 	#endif
 #endif
 
-/* NOTE(bill): These do are not prefixed with gb because the types are not. */
+// NOTE(bill): These do are not prefixed with gb because the types are not.
 #ifndef U8_MIN
 #define U8_MIN 0u
 #define U8_MAX 0xffu
@@ -436,7 +435,7 @@ typedef i32 b32; /* NOTE(bill): Prefer this!!! */
 #endif
 
 
-/* TODO(bill): Is this enough to get inline working? */
+// TODO(bill): Is this enough to get inline working?
 #if !defined(__cplusplus)
 	#if defined(_MSC_VER) && _MSC_VER <= 1800
 	#define inline __inline
@@ -458,7 +457,7 @@ typedef i32 b32; /* NOTE(bill): Prefer this!!! */
 	#endif
 #endif
 
-/* TODO(bill): Should force inline be a separate keyword and gb_inline be inline? */
+// TODO(bill): Should force inline be a separate keyword and gb_inline be inline?
 #if !defined(gb_inline)
 	#if defined(_MSC_VER)
 		#if _MSC_VER < 1300
@@ -479,14 +478,14 @@ typedef i32 b32; /* NOTE(bill): Prefer this!!! */
 	#endif
 #endif
 
-/* NOTE(bill): Easy to grep */
-/* NOTE(bill): Not needed in macros */
+// NOTE(bill): Easy to grep
+// NOTE(bill): Not needed in macros
 #ifndef cast
 #define cast(Type) (Type)
 #endif
 
 
-/* NOTE(bill): Because a signed sizeof is more useful */
+// NOTE(bill): Because a signed sizeof is more useful
 #ifndef gb_size_of
 #define gb_size_of(x) (isize)(sizeof(x))
 #endif
@@ -505,7 +504,7 @@ typedef i32 b32; /* NOTE(bill): Prefer this!!! */
 		#define gb_align_of(Type) (isize)alignof(Type)
 	#else
 extern "C++" {
-		/* NOTE(bill): Fucking Templates! */
+		// NOTE(bill): Fucking Templates!
 		template <typename T> struct gbAlignment_Trick { char c; T member; };
 		#define gb_align_of(Type) gb_offset_of(gbAlignment_Trick<Type>, member)
 }
@@ -517,16 +516,16 @@ extern "C++" {
 	#endif
 #endif
 
-/* NOTE(bill): I do wish I had a type_of that was portable */
+// NOTE(bill): I do wish I had a type_of that was portable
 #ifndef gb_swap
 #define gb_swap(Type, a, b) do { Type tmp = (a); (a) = (b); (b) = tmp; } while (0)
 #endif
 
-/* NOTE(bill): Because static means 3/4 different things in C/C++. Great design (!) */
+// NOTE(bill): Because static means 3/4 different things in C/C++. Great design (!)
 #ifndef gb_global
-#define gb_global        static /* Global variables */
-#define gb_internal      static /* Internal linkage */
-#define gb_local_persist static /* Local Persisting variables */
+#define gb_global        static // Global variables
+#define gb_internal      static // Internal linkage
+#define gb_local_persist static // Local Persisting variables
 #endif
 
 
@@ -537,50 +536,46 @@ extern "C++" {
 
 
 
-
-/***************************************************************
- *
- * Defer statement
- * Akin to D's SCOPE_EXIT or
- * similar to Go's defer but scope-based
- *
- * NOTE: C++11 (and above) only!
- */
+////////////////////////////////////////////////////////////////
+//
+// Defer statement
+// Akin to D's SCOPE_EXIT or
+// similar to Go's defer but scope-based
+//
+// NOTE: C++11 (and above) only!
+//
 #if defined(__cplusplus) && __cplusplus >= 201103L
 #if 1
 extern "C++" {
 #endif
-namespace gb {
+	// NOTE(bill): Stupid fucking templates
+	template <typename T> struct gbRemoveReference       { typedef T Type; };
+	template <typename T> struct gbRemoveReference<T &>  { typedef T Type; };
+	template <typename T> struct gbRemoveReference<T &&> { typedef T Type; };
 
-	/* NOTE(bill): Stupid fucking templates */
-	template <typename T> struct RemoveReference       { typedef T Type; };
-	template <typename T> struct RemoveReference<T &>  { typedef T Type; };
-	template <typename T> struct RemoveReference<T &&> { typedef T Type; };
-
-	/* NOTE(bill): "Move" semantics - invented because the C++ committee are idiots (as a collective not as indiviuals (well a least some aren't)) */
-	template <typename T> inline T &&forward(typename RemoveReference<T>::Type &t)  { return static_cast<T &&>(t); }
-	template <typename T> inline T &&forward(typename RemoveReference<T>::Type &&t) { return static_cast<T &&>(t); }
-	template <typename T> inline T &&move   (T &&t)                                 { return static_cast<typename RemoveReference<T>::Type &&>(t); }
+	/// NOTE(bill): "Move" semantics - invented because the C++ committee are idiots (as a collective not as indiviuals (well a least some aren't))
+	template <typename T> inline T &&gb_forward(typename gbRemoveReference<T>::Type &t)  { return static_cast<T &&>(t); }
+	template <typename T> inline T &&gb_forward(typename gbRemoveReference<T>::Type &&t) { return static_cast<T &&>(t); }
+	template <typename T> inline T &&gb_move   (T &&t)                                   { return static_cast<typename gbRemoveReference<T>::Type &&>(t); }
 	template <typename F>
-	struct privDefer {
+	struct gbprivDefer {
 		F f;
-		privDefer(F &&f) : f(forward<F>(f)) {}
-		~privDefer() { f(); }
+		gbprivDefer(F &&f) : f(gb_forward<F>(f)) {}
+		~gbprivDefer() { f(); }
 	};
-	template <typename F> privDefer<F> priv_defer_func(F &&f) { return privDefer<F>(forward<F>(f)); }
+	template <typename F> gbprivDefer<F> gb__defer_func(F &&f) { return gbprivDefer<F>(gb_forward<F>(f)); }
 
 	#ifndef defer
 	#define GB_DEFER_1(x, y) x##y
 	#define GB_DEFER_2(x, y) GB_DEFER_1(x, y)
 	#define GB_DEFER_3(x)    GB_DEFER_2(x, __COUNTER__)
-	#define defer(code)      auto GB_DEFER_3(_defer_) = gb::priv_defer_func([&](){code;})
+	#define defer(code)      auto GB_DEFER_3(_defer_) = gb__defer_func([&](){code;})
 	#endif
-} /* namespace gb */
 #if 1
 }
 #endif
 
-/* Example */
+// Example
 #if 0
 	gbMutex m;
 	gb_mutex_init(&m);
@@ -595,11 +590,11 @@ namespace gb {
 #endif
 
 
-/***************************************************************
- *
- * Macro Fun!
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Macro Fun!
+//
+//
 
 #ifndef GB_JOIN_MACROS
 #define GB_JOIN_MACROS
@@ -636,24 +631,24 @@ namespace gb {
 #endif
 
 
-/* NOTE(bill): Some compilers support applying printf-style warnings to user functions. */
+// NOTE(bill): Some compilers support applying printf-style warnings to user functions.
 #if defined(__clang__) || defined(__GNUC__)
 #define GB_PRINTF_ARGS(FMT) __attribute__((format(printf, FMT, (FMT+1))))
 #else
 #define GB_PRINTF_ARGS(FMT)
 #endif
 
-/***************************************************************
- *
- * Debug
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Debug
+//
+//
 
 
 #ifndef GB_DEBUG_TRAP
 	#if defined(_MSC_VER)
 	 	#if _MSC_VER < 1300
-		#define GB_DEBUG_TRAP() __asm int 3; /* Trap to debugger! */
+		#define GB_DEBUG_TRAP() __asm int 3; // Trap to debugger!
 		#else
 		#define GB_DEBUG_TRAP() __debugbreak()
 		#endif
@@ -663,9 +658,9 @@ namespace gb {
 #endif
 
 #ifndef GB_ASSERT_MSG
-#define GB_ASSERT_MSG(cond, msg) do { \
+#define GB_ASSERT_MSG(cond, msg, ...) do { \
 	if (!(cond)) { \
-		gb_assert_handler(#cond, __FILE__, cast(i64)__LINE__, msg); \
+		gb_assert_handler(#cond, __FILE__, cast(i64)__LINE__, msg, ##__VA_ARGS__); \
 		GB_DEBUG_TRAP(); \
 	} \
 } while (0)
@@ -679,20 +674,20 @@ namespace gb {
 #define GB_ASSERT_NOT_NULL(ptr) GB_ASSERT_MSG((ptr) != NULL, #ptr " must not be NULL")
 #endif
 
-/* NOTE(bill): Things that shouldn't happen with a message! */
+// NOTE(bill): Things that shouldn't happen with a message!
 #ifndef GB_PANIC
 #define GB_PANIC(msg) GB_ASSERT_MSG(0, msg)
 #endif
 
-GB_DEF void gb_assert_handler(char const *condition, char const *file, i32 line, char const *msg);
+GB_DEF void gb_assert_handler(char const *condition, char const *file, i32 line, char const *msg, ...);
 
 
 
-/***************************************************************
- *
- * Memory
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Memory
+//
+//
 
 
 GB_DEF b32 gb_is_power_of_two(isize x);
@@ -708,7 +703,7 @@ GB_DEF isize       gb_pointer_diff     (void const *begin, void const *end);
 
 GB_DEF void gb_zero_size(void *ptr, isize size);
 #ifndef     gb_zero_item
-#define     gb_zero_item(t) gb_zero_size((t), gb_size_of(*(t))) /* NOTE(bill): Pass pointer of struct */
+#define     gb_zero_item(t) gb_zero_size((t), gb_size_of(*(t))) // NOTE(bill): Pass pointer of struct
 #define     gb_zero_array(a, count) gb_zero_size((a), gb_size_of(*(a))*count)
 #endif
 
@@ -719,7 +714,7 @@ GB_DEF i32   gb_memcompare(void const *s1, void const *s2, isize size);
 GB_DEF void  gb_memswap   (void *i, void *j, isize size);
 
 
-/* NOTE(bill): Very similar to doing `*cast(T *)(&u)` */
+// NOTE(bill): Very similar to doing `*cast(T *)(&u)`
 #ifndef GB_BIT_CAST
 #define GB_BIT_CAST(dest, source) do { \
 	GB_STATIC_ASSERT(gb_size_of(*(dest)) <= gb_size_of(source)); \
@@ -740,7 +735,7 @@ GB_DEF void  gb_memswap   (void *i, void *j, isize size);
 
 
 
-/* Atomics */
+// Atomics
 #if defined(_MSC_VER)
 typedef struct gbAtomic32  { i32   volatile value; } gbAtomic32;
 typedef struct gbAtomic64  { i64   volatile value; } gbAtomic64;
@@ -824,7 +819,7 @@ GB_DEF void gb_semaphore_post   (gbSemaphore *s, i32 count);
 GB_DEF void gb_semaphore_wait   (gbSemaphore *s);
 
 
-/* Mutex */
+// Mutex
 typedef struct gbMutex {
 	gbSemaphore semaphore;
 	gbAtomic32 counter;
@@ -838,9 +833,8 @@ GB_DEF void gb_mutex_lock    (gbMutex *m);
 GB_DEF b32  gb_mutex_try_lock(gbMutex *m);
 GB_DEF void gb_mutex_unlock  (gbMutex *m);
 
-/* NOTE(bill): If you wanted a Scoped Mutex in C++, why not use the defer() construct?
- * No need for a silly wrapper class and it's clear!
- */
+// NOTE(bill): If you wanted a Scoped Mutex in C++, why not use the defer() construct?
+// No need for a silly wrapper class and it's clear!
 #if 0
 gbMutex m = {0};
 gb_mutex_init(&m);
@@ -848,11 +842,11 @@ gb_mutex_init(&m);
 	gb_mutex_lock(&m);
 	defer (gb_mutex_unlock(&m));
 
-	/* Do whatever as the mutex is now scoped based! */
+	// Do whatever as the mutex is now scoped based!
 }
 #endif
 
-/* TODO(bill): Should I create a Condition Type? (gbCond vs gbCondition) */
+// TODO(bill): Should I create a Condition Type? (gbCond vs gbCondition)
 
 
 
@@ -886,14 +880,15 @@ GB_DEF u32  gb_thread_current_id      (void);
 GB_DEF void gb_thread_set_name        (gbThread *t, char const *name);
 
 
-/***************************************************************
- *
- * Virtual Memory
- *
- * Still incomplete and needs working on a lot as it's shit!
- */
+////////////////////////////////////////////////////////////////
+//
+// Virtual Memory
+//
+// Still incomplete and needs working on a lot as it's shit!
+//
 
-/* TODO(bill): Track a lot more than just the pointer and size! */
+
+// TODO(bill): Track a lot more than just the pointer and size!
 
 typedef struct gbVirtualMemory {
 	void *data;
@@ -908,11 +903,11 @@ GB_DEF b32             gb_vm_purge(gbVirtualMemory vm);
 
 
 
-/***************************************************************
- *
- * Custom Allocation
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Custom Allocation
+//
+//
 
 typedef enum gbAllocationType {
 	GB_ALLOCATION_ALLOC,
@@ -921,7 +916,7 @@ typedef enum gbAllocationType {
 	GB_ALLOCATION_RESIZE
 } gbAllocationType;
 
-/* NOTE(bill): This is useful so you can define an allocator of the same type and parameters */
+// NOTE(bill): This is useful so you can define an allocator of the same type and parameters
 #define GB_ALLOCATOR_PROC(name)                         \
 void *name(void *allocator_data, gbAllocationType type, \
            isize size, isize alignment,                 \
@@ -944,7 +939,7 @@ GB_DEF void  gb_free        (gbAllocator a, void *ptr);
 GB_DEF void  gb_free_all    (gbAllocator a);
 GB_DEF void *gb_resize      (gbAllocator a, void *ptr, isize old_size, isize new_size);
 GB_DEF void *gb_resize_align(gbAllocator a, void *ptr, isize old_size, isize new_size, isize alignment);
-/* TODO(bill): For gb_resize, should the use need to pass the old_size or only the new_size? */
+// TODO(bill): For gb_resize, should the use need to pass the old_size or only the new_size?
 
 GB_DEF void *gb_alloc_copy      (gbAllocator a, void const *src, isize size);
 GB_DEF void *gb_alloc_copy_align(gbAllocator a, void const *src, isize size, isize alignment);
@@ -952,34 +947,32 @@ GB_DEF void *gb_alloc_copy_align(gbAllocator a, void const *src, isize size, isi
 GB_DEF char *gb_alloc_str(gbAllocator a, char const *str);
 
 
-/* NOTE(bill): These are very useful and the type cast has saved me from numerous bugs */
+// NOTE(bill): These are very useful and the type cast has saved me from numerous bugs
 #ifndef gb_alloc_struct
 #define gb_alloc_struct(allocator, Type)       (Type *)gb_alloc(allocator, gb_size_of(Type))
 #define gb_alloc_array(allocator, Type, count) (Type *)gb_alloc(allocator, gb_size_of(Type) * (count))
 #endif
 
-/* NOTE(bill): Use this if you don't need a "fancy" resize allocation */
+// NOTE(bill): Use this if you don't need a "fancy" resize allocation
 GB_DEF void *gb_default_resize_align(gbAllocator a, void *ptr, isize old_size, isize new_size, isize alignment);
 
 
 
-/* TODO(bill): Probably use a custom heap allocator system that doesn't depend on malloc/free
- * Base it off TCMalloc or something else? Or something entirely custom?
- */
+// TODO(bill): Probably use a custom heap allocator system that doesn't depend on malloc/free
+// Base it off TCMalloc or something else? Or something entirely custom?
 GB_DEF gbAllocator gb_heap_allocator(void);
 GB_DEF GB_ALLOCATOR_PROC(gb_heap_allocator_proc);
 
-/* NOTE(bill): Yep, I use my own allocator system! */
+// NOTE(bill): Yep, I use my own allocator system!
 #ifndef gb_malloc
 #define gb_malloc(sz) gb_alloc(gb_heap_allocator(), sz)
 #define gb_mfree(ptr) gb_free(gb_heap_allocator(), ptr)
 #endif
 
 
-/*
- * Arena Allocator
- */
-
+//
+// Arena Allocator
+//
 typedef struct gbArena {
 	gbAllocator backing;
 	void *physical_start;
@@ -998,7 +991,7 @@ GB_DEF isize gb_arena_size_remaining(gbArena *arena, isize alignment);
 GB_DEF void  gb_arena_check         (gbArena *arena);
 
 
-/* Allocation Types: alloc, free_all, resize */
+// Allocation Types: alloc, free_all, resize
 GB_DEF gbAllocator gb_arena_allocator(gbArena *arena);
 GB_DEF GB_ALLOCATOR_PROC(gb_arena_allocator_proc);
 
@@ -1018,9 +1011,9 @@ GB_DEF void              gb_temp_arena_memory_end  (gbTempArenaMemory tmp_mem);
 
 
 
-/*
- * Pool Allocator
- */
+//
+// Pool Allocator
+//
 
 
 typedef struct gbPool {
@@ -1038,13 +1031,13 @@ GB_DEF void gb_pool_init      (gbPool *pool, gbAllocator backing, isize num_bloc
 GB_DEF void gb_pool_init_align(gbPool *pool, gbAllocator backing, isize num_blocks, isize block_size, isize block_align);
 GB_DEF void gb_pool_free      (gbPool *pool);
 
-/* Allocation Types: alloc, free */
+// Allocation Types: alloc, free
 GB_DEF gbAllocator gb_pool_allocator(gbPool *pool);
 GB_DEF GB_ALLOCATOR_PROC(gb_pool_allocator_proc);
 
 
 
-/* NOTE(bill): Used for allocators to keep track of sizes */
+// NOTE(bill): Used for allocators to keep track of sizes
 typedef struct gbAllocationHeader {
 	isize size;
 } gbAllocationHeader;
@@ -1052,7 +1045,7 @@ typedef struct gbAllocationHeader {
 GB_DEF gbAllocationHeader *gb_allocation_header     (void *data);
 GB_DEF void                gb_allocation_header_fill(gbAllocationHeader *header, void *data, isize size);
 
-/* TODO(bill): Find better way of doing this without #if #elif etc. */
+// TODO(bill): Find better way of doing this without #if #elif etc.
 #if defined(GB_ARCH_32_BIT)
 #define GB_ISIZE_HIGH_BIT 0x80000000
 #elif defined(GB_ARCH_64_BIT)
@@ -1061,15 +1054,15 @@ GB_DEF void                gb_allocation_header_fill(gbAllocationHeader *header,
 #error
 #endif
 
-/*
- * Free List Allocator
- */
+//
+// Free List Allocator
+//
 
-/* IMPORTANT TODO(bill): Thoroughly test the free list allocator! */
-/* NOTE(bill): This is a very shitty free list as it just picks the first free block not the best size
- * as I am just being lazy. Also, I will probably remove it later; it's only here because why not?!
- */
-/* NOTE(bill): I may also complete remove this if I completely implement a fixed heap allocator */
+// IMPORTANT TODO(bill): Thoroughly test the free list allocator!
+// NOTE(bill): This is a very shitty free list as it just picks the first free block not the best size
+// as I am just being lazy. Also, I will probably remove it later; it's only here because why not?!
+//
+// NOTE(bill): I may also complete remove this if I completely implement a fixed heap allocator
 
 
 typedef struct gbFreeListBlock {
@@ -1090,15 +1083,15 @@ typedef struct gbFreeList {
 GB_DEF void gb_free_list_init               (gbFreeList *fl, void *start, isize size);
 GB_DEF void gb_free_list_init_from_allocator(gbFreeList *fl, gbAllocator backing, isize size);
 
-/* Allocation Types: alloc, free, free_all, resize */
+// Allocation Types: alloc, free, free_all, resize
 GB_DEF gbAllocator gb_free_list_allocator(gbFreeList *fl);
 GB_DEF GB_ALLOCATOR_PROC(gb_free_list_allocator_proc);
 
 
 
-/*
- * Scratch Memory Allocator - Ring Buffer Based Arena
- */
+//
+// Scratch Memory Allocator - Ring Buffer Based Arena
+//
 
 typedef struct gbScratchMemory {
 	void *physical_start;
@@ -1110,31 +1103,30 @@ GB_DEF void gb_scratch_memory_init     (gbScratchMemory *s, void *start, isize s
 GB_DEF b32  gb_scratch_memory_is_in_use(gbScratchMemory *s, void *ptr);
 
 
-/* Allocation Types: alloc, free, free_all, resize */
+// Allocation Types: alloc, free, free_all, resize
 GB_DEF gbAllocator gb_scratch_allocator(gbScratchMemory *s);
 GB_DEF GB_ALLOCATOR_PROC(gb_scratch_allocator_proc);
 
-/* TODO(bill): Stack allocator */
-/* TODO(bill): Fixed heap allocator */
-/* TODO(bill): General heap allocator. Maybe a TCMalloc like clone? */
+// TODO(bill): Stack allocator
+// TODO(bill): Fixed heap allocator
+// TODO(bill): General heap allocator. Maybe a TCMalloc like clone?
 
 
-/***************************************************************
- *
- * Sort & Search
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Sort & Search
+//
+//
 
 #define GB_COMPARE_PROC(name) int name(void const *a, void const *b)
 typedef GB_COMPARE_PROC(gbCompareProc);
 
 #define GB_COMPARE_PROC_PTR(def) GB_COMPARE_PROC((*def))
 
-/* Producure pointers */
-/* NOTE(bill): The offset parameter specifies the offset in the structure
- * e.g. gb_i32_cmp(gb_offset_of(Thing, value))
- * Use 0 if it's just the type instead.
- */
+// Producure pointers
+// NOTE(bill): The offset parameter specifies the offset in the structure
+// e.g. gb_i32_cmp(gb_offset_of(Thing, value))
+// Use 0 if it's just the type instead.
 
 GB_DEF GB_COMPARE_PROC_PTR(gb_i16_cmp  (isize offset));
 GB_DEF GB_COMPARE_PROC_PTR(gb_i32_cmp  (isize offset));
@@ -1145,12 +1137,12 @@ GB_DEF GB_COMPARE_PROC_PTR(gb_f32_cmp  (isize offset));
 GB_DEF GB_COMPARE_PROC_PTR(gb_f64_cmp  (isize offset));
 GB_DEF GB_COMPARE_PROC_PTR(gb_char_cmp (isize offset));
 
-/* TODO(bill): Better sorting algorithms */
-/* NOTE(bill): Uses quick sort for large arrays but insertion sort for small */
+// TODO(bill): Better sorting algorithms
+// NOTE(bill): Uses quick sort for large arrays but insertion sort for small
 #define gb_sort_array(array, count, compare_proc) gb_sort(array, count, gb_size_of(*(array)), compare_proc)
 GB_DEF void gb_sort(void *base, isize count, isize size, gbCompareProc compare_proc);
 
-/* NOTE(bill): the count of temp == count of items */
+// NOTE(bill): the count of temp == count of items
 #define gb_radix_sort(Type) gb_radix_sort_##Type
 #define GB_RADIX_SORT_PROC(Type) void gb_radix_sort(Type)(Type *gb_restrict items, Type *gb_restrict temp, isize count)
 
@@ -1160,17 +1152,17 @@ GB_DEF GB_RADIX_SORT_PROC(u32);
 GB_DEF GB_RADIX_SORT_PROC(u64);
 
 
-/* NOTE(bill): Returns index or -1 if not found */
+// NOTE(bill): Returns index or -1 if not found
 #define gb_binary_search_array(array, count, key, compare_proc) gb_binary_search(array, count, gb_size_of(*(array)), key, compare_proc)
 GB_DEF isize gb_binary_search(void const *base, isize count, isize size, void const *key, gbCompareProc compare_proc);
 
 
 
-/***************************************************************
- *
- * Char Functions
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Char Functions
+//
+//
 
 GB_DEF char gb_char_to_lower       (char c);
 GB_DEF char gb_char_to_upper       (char c);
@@ -1182,7 +1174,7 @@ GB_DEF b32  gb_char_is_alphanumeric(char c);
 GB_DEF i32  gb_digit_to_int        (char c);
 GB_DEF i32  gb_hex_digit_to_int    (char c);
 
-/* NOTE(bill): ASCII only */
+// NOTE(bill): ASCII only
 GB_DEF void gb_str_to_lower(char *str);
 GB_DEF void gb_str_to_upper(char *str);
 
@@ -1193,11 +1185,9 @@ GB_DEF i32   gb_strncmp(char const *s1, char const *s2, isize len);
 GB_DEF char *gb_strcpy (char *dest, char const *source);
 GB_DEF char *gb_strncpy(char *dest, char const *source, isize len);
 GB_DEF isize gb_strlcpy(char *dest, char const *source, isize len);
-GB_DEF char *gb_strrev (char *str);
+GB_DEF char *gb_strrev (char *str); // NOTE(bill): ASCII only
 
-
-
-/* NOTE(bill): A less fucking crazy strtok! */
+// NOTE(bill): A less fucking crazy strtok!
 GB_DEF char const *gb_strtok(char *output, char const *src, char const *delimit);
 
 GB_DEF b32 gb_str_has_prefix(char const *str, char const *prefix);
@@ -1210,36 +1200,37 @@ GB_DEF void gb_str_concat(char *dest, isize dest_len,
                           char const *src_a, isize src_a_len,
                           char const *src_b, isize src_b_len);
 
-GB_DEF i64   gb_str_to_i64(char const *str, char **end_ptr, i32 base); /* TODO(bill): Support more than just decimal and hexadecimal */
+GB_DEF i64   gb_str_to_i64(char const *str, char **end_ptr, i32 base); // TODO(bill): Support more than just decimal and hexadecimal
 GB_DEF void  gb_i64_to_str(i64 value, char *string, i32 base);
 GB_DEF void  gb_u64_to_str(u64 value, char *string, i32 base);
 
 
-/***************************************************************
- *
- * UTF-8 Handling
- *
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// UTF-8 Handling
+//
+//
 
 GB_DEF isize gb_utf8_strlen (char const *str);
 GB_DEF isize gb_utf8_strnlen(char const *str, isize max_len);
 
-/* Windows doesn't handle 8 bit filenames well ('cause Micro$hit) */
-GB_DEF char16 *gb_utf8_to_ucs2(char16 *buffer, isize len, char const *str);
-GB_DEF char *  gb_ucs2_to_utf8(char *buffer, isize len, char16 const *str);
+// NOTE(bill): Windows doesn't handle 8 bit filenames well ('cause Micro$hit)
+GB_DEF char16 *gb_utf8_to_ucs2    (char16 *buffer, isize len, char const *str);
+GB_DEF char *  gb_ucs2_to_utf8    (char *buffer, isize len, char16 const *str);
+GB_DEF char16 *gb_utf8_to_ucs2_buf(char const *str);   // NOTE(bill): Uses locally persisting buffer
+GB_DEF char *  gb_ucs2_to_utf8_buf(char16 const *str); // NOTE(bill): Uses locally persisting buffer
 
-/* NOTE(bill): Returns size of codepoint in bytes */
+// NOTE(bill): Returns size of codepoint in bytes
 GB_DEF isize gb_utf8_decode    (char const *str, char32 *codepoint);
 GB_DEF isize gb_utf8_decode_len(char const *str, isize str_len, char32 *codepoint);
 
 
-/***************************************************************
- *
- * gbString - C Read-Only-Compatible
- *
- *
-
+////////////////////////////////////////////////////////////////
+//
+// gbString - C Read-Only-Compatible
+//
+//
+/*
 Reasoning:
 
 	By default, strings in C are null terminated which means you have to count
@@ -1293,7 +1284,7 @@ Disadvantages:
       This could be changed to gb_string_appendc(&str, "another string"); but I'm still not sure.
 
 	* This is incompatible with "gb_string.h" strings
- */
+*/
 
 #if 0
 #include <stdio.h>
@@ -1309,12 +1300,12 @@ int main(int argc, char **argv)
 	str = gb_string_append(str, other_str);
 	str = gb_string_appendc(str, "world!");
 
-	printf("%s\n", str); /* Hello, world! */
+	printf("%s\n", str); // Hello, world!
 
 	printf("str length = %d\n", gb_string_length(str));
 
 	str = gb_string_set(str, "Potato soup");
-	printf("%s\n", str); /* Potato soup */
+	printf("%s\n", str); // Potato soup
 
 	str = gb_string_set(str, "Hello");
 	other_str = gb_string_set(other_str, "Pizza");
@@ -1325,7 +1316,7 @@ int main(int argc, char **argv)
 
 	str = gb_string_set(str, "Ab.;!...AHello World       ??");
 	str = gb_string_trim(str, "Ab.;!. ?");
-	printf("%s\n", str); /* "Hello World" */
+	printf("%s\n", str); // "Hello World"
 
 	gb_string_free(str);
 	gb_string_free(other_str);
@@ -1336,7 +1327,7 @@ int main(int argc, char **argv)
 
 typedef char *gbString;
 
-/* NOTE(bill): If you only need a small string, just use a standard c string or change the size from isize to u16, etc. */
+// NOTE(bill): If you only need a small string, just use a standard c string or change the size from isize to u16, etc.
 typedef struct gbStringHeader {
 	gbAllocator allocator;
 	isize length;
@@ -1361,19 +1352,18 @@ GB_DEF gbString gb_string_make_space_for (gbString str, isize add_len);
 GB_DEF isize    gb_string_allocation_size(gbString const str);
 GB_DEF b32      gb_string_are_equal      (gbString const lhs, gbString const rhs);
 GB_DEF gbString gb_string_trim           (gbString str, char const *cut_set);
-GB_DEF gbString gb_string_trim_space     (gbString str); /* Whitespace ` \t\r\n\v\f` */
+GB_DEF gbString gb_string_trim_space     (gbString str); // Whitespace ` \t\r\n\v\f`
 
 
 
-/***************************************************************
- *
- * Fixed Capacity Buffer (POD Types)
- *
- *
-	gbBuffer(Type) works like gbString or gbArray where the actual type is just a pointer to the first
-	element.
-
- */
+////////////////////////////////////////////////////////////////
+//
+// Fixed Capacity Buffer (POD Types)
+//
+//
+// gbBuffer(Type) works like gbString or gbArray where the actual type is just a pointer to the first
+// element.
+//
 
 typedef struct gbBufferHeader {
 	isize count;
@@ -1411,34 +1401,33 @@ typedef struct gbBufferHeader {
 
 
 
-/***************************************************************
- *
- * Dynamic Array (POD Types)
- *
-	NOTE(bill): I know this is a macro hell but C is an old (and shit) language with no proper arrays
-	Also why the fuck not?! It fucking works! And it has custom allocation, which is already better than C++!
+////////////////////////////////////////////////////////////////
+//
+// Dynamic Array (POD Types)
+//
+// NOTE(bill): I know this is a macro hell but C is an old (and shit) language with no proper arrays
+// Also why the fuck not?! It fucking works! And it has custom allocation, which is already better than C++!
+//
+// gbArray(Type) works like gbString or gbBuffer where the actual type is just a pointer to the first
+// element.
+//
 
 
-	gbArray(Type) works like gbString or gbBuffer where the actual type is just a pointer to the first
-	element.
 
- */
+// Available Procedures for gbArray(Type)
+// gb_array_init
+// gb_array_free
+// gb_array_set_capacity
+// gb_array_grow
+// gb_array_append
+// gb_array_appendv
+// gb_array_pop
+// gb_array_clear
+// gb_array_resize
+// gb_array_reserve
+//
 
-
-/* Available Procedures for gbArray(Type)
- *     gb_array_init
- *     gb_array_free
- *     gb_array_set_capacity
- *     gb_array_grow
- *     gb_array_append
- *     gb_array_appendv
- *     gb_array_pop
- *     gb_array_clear
- *     gb_array_resize
- *     gb_array_reserve
- */
-
-#if 0 /* Example */
+#if 0 // Example
 void foo(void)
 {
 	isize i;
@@ -1453,27 +1442,25 @@ void foo(void)
 	gb_array_append(items, 9);
 	gb_array_append(items, 16);
 
-	items[1] = 3; /* Manually set value */
-	                /* NOTE: No array bounds checking */
+	items[1] = 3; // Manually set value
+	              // NOTE: No array bounds checking
 
 	for (i = 0; i < items.count; i++)
 		gb_printf("%d\n", items[i]);
-	/* 1
-	 * 3
-	 * 9
-	 * 16
-	 */
+	// 1
+	// 3
+	// 9
+	// 16
 
 	gb_array_clear(items);
 
 	gb_array_appendv(items, test_values, gb_count_of(test_values));
 	for (i = 0; i < items.count; i++)
 		gb_printf("%d\n", items[i]);
-	/* 4
-	 * 2
-	 * 1
-	 * 7
-	 */
+	// 4
+	// 2
+	// 1
+	// 7
 
 	gb_array_free(items);
 }
@@ -1485,7 +1472,7 @@ typedef struct gbArrayHeader {
 	isize capacity;
 } gbArrayHeader;
 
-/* NOTE(bill): This thing is magic! */
+// NOTE(bill): This thing is magic!
 #define gbArray(Type) Type *
 
 #ifndef GB_ARRAY_GROW_FORMULA
@@ -1499,7 +1486,7 @@ GB_STATIC_ASSERT(GB_ARRAY_GROW_FORMULA(0) > 0);
 #define gb_array_count(x)     (GB_ARRAY_HEADER(x)->count)
 #define gb_array_capacity(x)  (GB_ARRAY_HEADER(x)->capacity)
 
-/* TODO(bill): Have proper alignment! */
+// TODO(bill): Have proper alignment!
 #define gb_array_init_reserve(x, allocator_, cap) do { \
 	void **gb__array_ = cast(void **)&(x); \
 	gbArrayHeader *gb__ah = cast(gbArrayHeader *)gb_alloc(allocator_, gb_size_of(gbArrayHeader)+gb_size_of(*(x))*(cap)); \
@@ -1508,7 +1495,7 @@ GB_STATIC_ASSERT(GB_ARRAY_GROW_FORMULA(0) > 0);
 	*gb__array_ = cast(void *)(gb__ah+1); \
 } while (0)
 
-/* NOTE(bill): Give it an initial default capacity */
+// NOTE(bill): Give it an initial default capacity
 #define gb_array_init(x, allocator) gb_array_init_reserve(x, allocator, GB_ARRAY_GROW_FORMULA(0))
 
 #define gb_array_free(x) do { \
@@ -1523,11 +1510,11 @@ GB_STATIC_ASSERT(GB_ARRAY_GROW_FORMULA(0) > 0);
 	} \
 } while (0)
 
-/* NOTE(bill): Do not use the thing below directly, use the macro */
+// NOTE(bill): Do not use the thing below directly, use the macro
 GB_DEF void *gb__array_set_capacity(void *array, isize capacity, isize element_size);
 
 
-/* TODO(bill): Decide on a decent growing formula for gbArray */
+// TODO(bill): Decide on a decent growing formula for gbArray
 #define gb_array_grow(x, min_capacity) do { \
 	isize new_capacity = GB_ARRAY_GROW_FORMULA(gb_array_capacity(x)); \
 	if (new_capacity < (min_capacity)) \
@@ -1572,11 +1559,11 @@ GB_DEF void *gb__array_set_capacity(void *array, isize capacity, isize element_s
 
 
 
-/***************************************************************
- *
- * Hashing and Checksum Functions
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Hashing and Checksum Functions
+//
+//
 
 GB_EXTERN u32 gb_adler32(void const *data, isize len);
 
@@ -1588,8 +1575,8 @@ GB_EXTERN u64 gb_fnv64 (void const *data, isize len);
 GB_EXTERN u32 gb_fnv32a(void const *data, isize len);
 GB_EXTERN u64 gb_fnv64a(void const *data, isize len);
 
-/* NOTE(bill): Default seed of 0x9747b28c */
-/* NOTE(bill): I prefer using murmur64 for most hashes */
+// NOTE(bill): Default seed of 0x9747b28c
+// NOTE(bill): I prefer using murmur64 for most hashes
 GB_EXTERN u32 gb_murmur32(void const *data, isize len);
 GB_EXTERN u64 gb_murmur64(void const *data, isize len);
 
@@ -1597,24 +1584,24 @@ GB_EXTERN u32 gb_murmur32_seed(void const *data, isize len, u32 seed);
 GB_EXTERN u64 gb_murmur64_seed(void const *data, isize len, u64 seed);
 
 
-/***************************************************************
- *
- * Instantiated Hash Table
- *
- * This is an attempt to implement a templated hash table
- * NOTE(bill): The key is aways a u64 for simplicity and you will _probably_ _never_ need anything bigger.
- *
- * Hash table type and function declaration, call: GB_TABLE_DECLARE(PREFIX, NAME, N, VALUE)
- * Hash table function definitions, call: GB_TABLE_DEFINE(NAME, N, VALUE)
- *
- *     PREFIX  - a prefix for function prototypes e.g. extern, static, etc.
- *     NAME    - Name of the Hash Table
- *     N       - the name will prefix function names
- *     VALUE   - the type of the value to be stored
- *
- * NOTE(bill): This also allows for a multi-valued keys with the multi_* functions
- * NOTE(bill): I really wish C had decent metaprogramming capabilities (and no I don't mean C++'s templates either)
- */
+////////////////////////////////////////////////////////////////
+//
+// Instantiated Hash Table
+//
+// This is an attempt to implement a templated hash table
+// NOTE(bill): The key is aways a u64 for simplicity and you will _probably_ _never_ need anything bigger.
+//
+// Hash table type and function declaration, call: GB_TABLE_DECLARE(PREFIX, NAME, N, VALUE)
+// Hash table function definitions, call: GB_TABLE_DEFINE(NAME, N, VALUE)
+//
+//     PREFIX  - a prefix for function prototypes e.g. extern, static, etc.
+//     NAME    - Name of the Hash Table
+//     N       - the name will prefix function names
+//     VALUE   - the type of the value to be stored
+//
+// NOTE(bill): This also allows for a multi-valued keys with the multi_* functions
+// NOTE(bill): I really wish C had decent metaprogramming capabilities (and no I don't mean C++'s templates either)
+//
 
 
 typedef struct gbHashTableFindResult {
@@ -1901,11 +1888,11 @@ GB_JOIN2(N,clear)(NAME *h) \
 } \
 
 
-/***************************************************************
- *
- * File Handling
- *
- */
+
+////////////////////////////////////////////////////////////////
+//
+// File Handling
+//
 
 
 typedef u32 gbFileMode;
@@ -1916,7 +1903,7 @@ typedef enum gbFileFlag {
 	GB_FILE_RW         = GB_BIT(3)
 } gbFileFlag;
 
-/* TODO(bill): Is seek a silly idea? */
+// TODO(bill): Is seek a silly idea?
 typedef enum gbSeekWhence {
 	GB_SEEK_BEGIN   = 0,
 	GB_SEEK_CURRENT = 1,
@@ -1960,36 +1947,38 @@ struct gbFileOperations {
 
 extern gbFileOperations const GB_DEFAULT_FILE_OPERATIONS;
 
-/*
-typedef struct gbDirInfo {
-	u8 *buf;
-	isize buf_count;
-	isize buf_pos;
-} gbDirInfo;
-*/
+
+// typedef struct gbDirInfo {
+// 	u8 *buf;
+// 	isize buf_count;
+// 	isize buf_pos;
+// } gbDirInfo;
+
 typedef u64 gbFileTime;
 
 typedef struct gbFile {
-	gbFileDescriptor fd;
 	gbFileOperations const *ops;
+	gbFileDescriptor fd;
 	char const *filename;
-	/* gbDirInfo *dir_info; */ /* TODO(bill): Get directory info */
 	gbFileTime last_write_time;
+	// gbDirInfo *dir_info; // TODO(bill): Get directory info
 } gbFile;
 
 typedef enum gbFileStandardType {
 	GB_FILE_STANDARD_INPUT,
 	GB_FILE_STANDARD_OUTPUT,
-	GB_FILE_STANDARD_ERROR
+	GB_FILE_STANDARD_ERROR,
+
+	GB_FILE_STANDARD_COUNT
 } gbFileStandardType;
 
-GB_DEF gbFile gb_file_get_std(gbFileStandardType std);
+GB_DEF gbFile *const gb_file_get_standard(gbFileStandardType std);
 
 GB_DEF gbFileError gb_file_create        (gbFile *file, char const *filename, ...) GB_PRINTF_ARGS(2);
 GB_DEF gbFileError gb_file_open          (gbFile *file, char const *filename, ...) GB_PRINTF_ARGS(2);
-/* TODO(bill): Get a better name for it */
+// TODO(bill): Get a better name for it
 GB_DEF gbFileError gb_file_open_mode     (gbFile *file, gbFileMode mode, char const *filename, ...) GB_PRINTF_ARGS(3);
-GB_DEF gbFileError gb_file_new           (gbFile *file, gbFileDescriptor fd, gbFileOperations const *ops, gbFileMode mode, char const *filename);
+GB_DEF gbFileError gb_file_new           (gbFile *file, gbFileDescriptor fd, gbFileOperations const *ops, char const *filename);
 GB_DEF b32         gb_file_read_at_check (gbFile *file, void *buffer, isize size, i64 offset, isize *bytes_read);
 GB_DEF b32         gb_file_write_at_check(gbFile *file, void const *buffer, isize size, i64 offset, isize *bytes_written);
 GB_DEF b32         gb_file_read_at       (gbFile *file, void *buffer, isize size, i64 offset);
@@ -2002,11 +1991,10 @@ GB_DEF i64         gb_file_tell          (gbFile *file);
 GB_DEF i64         gb_file_size          (gbFile *file);
 GB_DEF char const *gb_file_name          (gbFile *file);
 GB_DEF gbFileError gb_file_truncate      (gbFile *file, i64 size);
-GB_DEF b32         gb_file_has_changed   (gbFile *file); /* NOTE(bill): Changed since lasted checked */
-/* TODO(bill):
-	gbFileError gb_file_temp(gbFile *file);
-
- */
+GB_DEF b32         gb_file_has_changed   (gbFile *file); // NOTE(bill): Changed since lasted checked
+// TODO(bill):
+// gbFileError gb_file_temp(gbFile *file);
+//
 
 typedef struct gbFileContents {
 	gbAllocator allocator;
@@ -2019,7 +2007,7 @@ GB_DEF gbFileContents gb_file_read_contents(gbAllocator a, b32 zero_terminate, c
 GB_DEF void           gb_file_free_contents(gbFileContents *fc);
 
 
-/* TODO(bill): Should these have different na,es as they do not take in a gbFile * ??? */
+// TODO(bill): Should these have different na,es as they do not take in a gbFile * ???
 GB_DEF b32        gb_file_exists         (char const *filepath);
 GB_DEF gbFileTime gb_file_last_write_time(char const *filepath, ...) GB_PRINTF_ARGS(1);
 GB_DEF b32        gb_file_copy           (char const *existing_filename, char const *new_filename, b32 fail_if_exists);
@@ -2041,14 +2029,14 @@ GB_DEF char const *gb_path_base_name  (char const *path);
 GB_DEF char const *gb_path_extension  (char const *path);
 
 
-/***************************************************************
- *
- * Printing
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Printing
+//
+//
 
 
-/* TODO(bill): Allow printf-ing to a gbFile!!! */
+// TODO(bill): Allow printf-ing to a gbFile!!!
 
 GB_DEF isize gb_printf        (char const *fmt, ...) GB_PRINTF_ARGS(1);
 GB_DEF isize gb_printf_va     (char const *fmt, va_list va);
@@ -2057,16 +2045,16 @@ GB_DEF isize gb_printf_err_va (char const *fmt, va_list va);
 GB_DEF isize gb_fprintf       (gbFile *f, char const *fmt, ...) GB_PRINTF_ARGS(2);
 GB_DEF isize gb_fprintf_va    (gbFile *f, char const *fmt, va_list va);
 
-GB_DEF char *gb_bprintf    (char const *fmt, ...) GB_PRINTF_ARGS(1); /* NOTE(bill): A locally persisting buffer is used internally */
-GB_DEF char *gb_bprintf_va (char const *fmt, va_list va);            /* NOTE(bill): A locally persisting buffer is used internally */
+GB_DEF char *gb_bprintf    (char const *fmt, ...) GB_PRINTF_ARGS(1); // NOTE(bill): A locally persisting buffer is used internally
+GB_DEF char *gb_bprintf_va (char const *fmt, va_list va);            // NOTE(bill): A locally persisting buffer is used internally
 GB_DEF isize gb_snprintf   (char *str, isize n, char const *fmt, ...) GB_PRINTF_ARGS(3);
 GB_DEF isize gb_snprintf_va(char *str, isize n, char const *fmt, va_list va);
 
-/***************************************************************
- *
- * DLL Handling
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// DLL Handling
+//
+//
 
 typedef void *gbDllHandle;
 typedef void (*gbDllProc)(void);
@@ -2076,24 +2064,23 @@ GB_DEF void        gb_dll_unload      (gbDllHandle dll);
 GB_DEF gbDllProc   gb_dll_proc_address(gbDllHandle dll, char const *proc_name);
 
 
-/***************************************************************
- *
- * Time
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Time
+//
+//
 
 GB_DEF u64  gb_rdtsc       (void);
-GB_DEF f64  gb_time_now    (void); /* NOTE(bill): This is only for relative time e.g. game loops */
-GB_DEF u64  gb_utc_time_now(void); /* NOTE(bill): Number of microseconds since 1601-01-01 UTC */
+GB_DEF f64  gb_time_now    (void); // NOTE(bill): This is only for relative time e.g. game loops
+GB_DEF u64  gb_utc_time_now(void); // NOTE(bill): Number of microseconds since 1601-01-01 UTC
 GB_DEF void gb_sleep_ms    (u32 ms);
 
 
-
-/***************************************************************
- *
- * Miscellany
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Miscellany
+//
+//
 
 typedef struct gbRandom {
 	u64 seed[2];
@@ -2118,13 +2105,13 @@ GB_DEF u64 gb_endian_swap64(u64 i);
 #if !defined(GB_NO_COLOUR_TYPE)
 
 
-/***************************************************************
- *
- * Colour Type
- * It's quite useful
- * TODO(bill): Does this need to be in this library?
- *             Can I remove the anonymous struct extension?
- */
+////////////////////////////////////////////////////////////////
+//
+// Colour Type
+// It's quite useful
+// TODO(bill): Does this need to be in this library?
+//             Can I remove the anonymous struct extension?
+//
 
 #if defined(_MSC_VER)
 #pragma warning(push)
@@ -2132,7 +2119,7 @@ GB_DEF u64 gb_endian_swap64(u64 i);
 #endif
 
 typedef union gbColour {
-	u32 rgba; /* NOTE(bill): 0xaabbggrr */
+	u32 rgba; // NOTE(bill): 0xaabbggrr in little endian
 	struct { u8 r, g, b, a; };
 	u8 e[4];
 } gbColour;
@@ -2158,15 +2145,15 @@ gb_global gbColour const GB_COLOUR_BLUE    = {0xffff0000};
 gb_global gbColour const GB_COLOUR_VIOLET  = {0xffff007f};
 gb_global gbColour const GB_COLOUR_MAGENTA = {0xffff00ff};
 
-#endif /* !defined(GB_NO_COLOUR_TYPE) */
+#endif // !defined(GB_NO_COLOUR_TYPE)
 
 
 
-/***************************************************************
- *
- * Platform Stuff
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Platform Stuff
+//
+//
 
 #if defined(GB_PLATFORM)
 
@@ -2190,9 +2177,10 @@ typedef enum gbWindowFlag {
 	GB_WINDOW_RESIZABLE          = GB_BIT(6),
 	GB_WINDOW_MINIMIZED          = GB_BIT(7),
 	GB_WINDOW_MAXIMIZED          = GB_BIT(8),
+	GB_WINDOW_FULLSCREEN_DESKTOP = GB_WINDOW_FULLSCREEN | GB_WINDOW_BORDERLESS,
 
-	GB_WINDOW_FULLSCREEN_DESKTOP = GB_WINDOW_FULLSCREEN | GB_WINDOW_BORDERLESS
-
+	GB_WINDOW_IS_CLOSED          = GB_BIT(9),
+	GB_WINDOW_HAS_FOCUS          = GB_BIT(10)
 } gbWindowFlag;
 
 #if defined(_MSC_VER)
@@ -2210,15 +2198,13 @@ typedef struct gbWindow {
 
 	i32 x, y;
 	i32 width, height;
-	b32 is_closed;
-	b32 has_focus;
+	u32 flags;
 
 #if defined(GB_SYSTEM_WINDOWS)
 	WINDOWPLACEMENT win32_placement;
 	HDC             win32_dc;
 #endif
 
-	u32 flags;
 	union {
 		struct {
 #if defined(GB_SYSTEM_WINDOWS)
@@ -2246,9 +2232,9 @@ typedef struct gbWindow {
 
 
 typedef enum gbKeyType {
-	GB_KEY_UNKNOWN = 0,  /* Unhandled key */
+	GB_KEY_UNKNOWN = 0,  // Unhandled key
 
-	/* NOTE(bill): Allow the basic printable keys to be aliased with their chars */
+	// NOTE(bill): Allow the basic printable keys to be aliased with their chars
 	GB_KEY_0 = '0',
 	GB_KEY_1,
 	GB_KEY_2,
@@ -2300,61 +2286,61 @@ typedef enum gbKeyType {
 	GB_KEY_MINUS     = '-',
 	GB_KEY_SPACE     = ' ',
 
-	GB_KEY__PAD = 128,   /* NOTE(bill): make sure ASCII is reserved */
+	GB_KEY__PAD = 128,   // NOTE(bill): make sure ASCII is reserved
 
-	GB_KEY_ESCAPE,       /* Escape */
-	GB_KEY_LCONTROL,     /* Left Control */
-	GB_KEY_LSHIFT,       /* Left Shift */
-	GB_KEY_LALT,         /* Left Alt */
-	GB_KEY_LSYSTEM,      /* Left OS specific: window (Windows and Linux), apple (MacOS X), ... */
-	GB_KEY_RCONTROL,     /* Right Control */
-	GB_KEY_RSHIFT,       /* Right Shift */
-	GB_KEY_RALT,         /* Right Alt */
-	GB_KEY_RSYSTEM,      /* Right OS specific: window (Windows and Linux), apple (MacOS X), ... */
-	GB_KEY_MENU,         /* Menu */
-	GB_KEY_RETURN,       /* Return */
-	GB_KEY_BACKSPACE,    /* Backspace */
-	GB_KEY_TAB,          /* Tabulation */
-	GB_KEY_PAGEUP,       /* Page up */
-	GB_KEY_PAGEDOWN,     /* Page down */
-	GB_KEY_END,          /* End */
-	GB_KEY_HOME,         /* Home */
-	GB_KEY_INSERT,       /* Insert */
-	GB_KEY_DELETE,       /* Delete */
-	GB_KEY_PLUS,         /* + */
-	GB_KEY_SUBTRACT,     /* - */
-	GB_KEY_MULTIPLY,     /* * */
-	GB_KEY_DIVIDE,       /* / */
-	GB_KEY_LEFT,         /* Left arrow */
-	GB_KEY_RIGHT,        /* Right arrow */
-	GB_KEY_UP,           /* Up arrow */
-	GB_KEY_DOWN,         /* Down arrow */
-	GB_KEY_NUMPAD0,      /* Numpad 0 */
-	GB_KEY_NUMPAD1,      /* Numpad 1 */
-	GB_KEY_NUMPAD2,      /* Numpad 2 */
-	GB_KEY_NUMPAD3,      /* Numpad 3 */
-	GB_KEY_NUMPAD4,      /* Numpad 4 */
-	GB_KEY_NUMPAD5,      /* Numpad 5 */
-	GB_KEY_NUMPAD6,      /* Numpad 6 */
-	GB_KEY_NUMPAD7,      /* Numpad 7 */
-	GB_KEY_NUMPAD8,      /* Numpad 8 */
-	GB_KEY_NUMPAD9,      /* Numpad 9 */
-	GB_KEY_F1,           /* F1 */
-	GB_KEY_F2,           /* F2 */
-	GB_KEY_F3,           /* F3 */
-	GB_KEY_F4,           /* F4 */
-	GB_KEY_F5,           /* F5 */
-	GB_KEY_F6,           /* F6 */
-	GB_KEY_F7,           /* F7 */
-	GB_KEY_F8,           /* F8 */
-	GB_KEY_F9,           /* F8 */
-	GB_KEY_F10,          /* F10 */
-	GB_KEY_F11,          /* F11 */
-	GB_KEY_F12,          /* F12 */
-	GB_KEY_F13,          /* F13 */
-	GB_KEY_F14,          /* F14 */
-	GB_KEY_F15,          /* F15 */
-	GB_KEY_PAUSE,        /* Pause */
+	GB_KEY_ESCAPE,       // Escape
+	GB_KEY_LCONTROL,     // Left Control
+	GB_KEY_LSHIFT,       // Left Shift
+	GB_KEY_LALT,         // Left Alt
+	GB_KEY_LSYSTEM,      // Left OS specific: window (Windows and Linux), apple (MacOS X), ...
+	GB_KEY_RCONTROL,     // Right Control
+	GB_KEY_RSHIFT,       // Right Shift
+	GB_KEY_RALT,         // Right Alt
+	GB_KEY_RSYSTEM,      // Right OS specific: window (Windows and Linux), apple (MacOS X), ...
+	GB_KEY_MENU,         // Menu
+	GB_KEY_RETURN,       // Return
+	GB_KEY_BACKSPACE,    // Backspace
+	GB_KEY_TAB,          // Tabulation
+	GB_KEY_PAGEUP,       // Page up
+	GB_KEY_PAGEDOWN,     // Page down
+	GB_KEY_END,          // End
+	GB_KEY_HOME,         // Home
+	GB_KEY_INSERT,       // Insert
+	GB_KEY_DELETE,       // Delete
+	GB_KEY_PLUS,         // +
+	GB_KEY_SUBTRACT,     // -
+	GB_KEY_MULTIPLY,     // *
+	GB_KEY_DIVIDE,       // /
+	GB_KEY_LEFT,         // Left arrow
+	GB_KEY_RIGHT,        // Right arrow
+	GB_KEY_UP,           // Up arrow
+	GB_KEY_DOWN,         // Down arrow
+	GB_KEY_NUMPAD0,      // Numpad 0
+	GB_KEY_NUMPAD1,      // Numpad 1
+	GB_KEY_NUMPAD2,      // Numpad 2
+	GB_KEY_NUMPAD3,      // Numpad 3
+	GB_KEY_NUMPAD4,      // Numpad 4
+	GB_KEY_NUMPAD5,      // Numpad 5
+	GB_KEY_NUMPAD6,      // Numpad 6
+	GB_KEY_NUMPAD7,      // Numpad 7
+	GB_KEY_NUMPAD8,      // Numpad 8
+	GB_KEY_NUMPAD9,      // Numpad 9
+	GB_KEY_F1,           // F1
+	GB_KEY_F2,           // F2
+	GB_KEY_F3,           // F3
+	GB_KEY_F4,           // F4
+	GB_KEY_F5,           // F5
+	GB_KEY_F6,           // F6
+	GB_KEY_F7,           // F7
+	GB_KEY_F8,           // F8
+	GB_KEY_F9,           // F8
+	GB_KEY_F10,          // F10
+	GB_KEY_F11,          // F11
+	GB_KEY_F12,          // F12
+	GB_KEY_F13,          // F13
+	GB_KEY_F14,          // F14
+	GB_KEY_F15,          // F15
+	GB_KEY_PAUSE,        // Pause
 
 	GB_KEY_COUNT
 } gbKeyType;
@@ -2435,7 +2421,7 @@ typedef GB_XINPUT_SET_STATE(gbXInputSetStateProc);
 typedef struct gbPlatform {
 	gbWindow window;
 
-	gbKeyState keys[GB_KEY_COUNT]; /* NOTE(bill): test with flags */
+	gbKeyState keys[GB_KEY_COUNT]; // NOTE(bill): test with flags
 	struct {
 		gbKeyState control;
 		gbKeyState alt;
@@ -2469,7 +2455,7 @@ GB_DEF void gb_platform_set_mouse_position(gbPlatform *p, gbWindow *rel_win, i32
 
 GB_DEF gbGameController *gb_platform_get_controller(gbPlatform *p, isize index);
 
-/* NOTE(bill): Title is UTF-8 */
+// NOTE(bill): Title is UTF-8
 GB_DEF gbWindow *gb_window_init                (gbPlatform *p, char const *title, gbVideoMode mode, u32 flags);
 GB_DEF void      gb_window_destroy             (gbWindow *w);
 GB_DEF void      gb_window_set_position        (gbWindow *w, i32 x, i32 y);
@@ -2478,76 +2464,76 @@ GB_DEF void      gb_window_toggle_fullscreen   (gbWindow *w, b32 fullscreen_desk
 GB_DEF void      gb_window_make_context_current(gbWindow *w);
 GB_DEF void      gb_window_show                (gbWindow *w);
 GB_DEF void      gb_window_hide                (gbWindow *w);
+GB_DEF b32       gb_window_is_open             (gbWindow const *w);
 
 
-GB_DEF gbVideoMode gb_video_mode                     (i32 width, i32 height);
-GB_DEF gbVideoMode gb_video_mode_bits                (i32 width, i32 height, i32 bits_per_pixel);
+GB_DEF gbVideoMode gb_video_mode                     (i32 width, i32 height, i32 bits_per_pixel);
 GB_DEF b32         gb_video_mode_is_valid            (gbVideoMode mode);
 GB_DEF gbVideoMode gb_video_mode_get_desktop         (void);
-GB_DEF isize       gb_video_mode_get_fullscreen_modes(gbVideoMode *modes, isize max_mode_count); /* NOTE(bill): returns mode count */
-GB_DEF GB_COMPARE_PROC(gb_video_mode_cmp);     /* NOTE(bill): Sort smallest to largest (Ascending) */
-GB_DEF GB_COMPARE_PROC(gb_video_mode_dsc_cmp); /* NOTE(bill): Sort largest to smallest (Descending) */
+GB_DEF isize       gb_video_mode_get_fullscreen_modes(gbVideoMode *modes, isize max_mode_count); // NOTE(bill): returns mode count
+GB_DEF GB_COMPARE_PROC(gb_video_mode_cmp);     // NOTE(bill): Sort smallest to largest (Ascending)
+GB_DEF GB_COMPARE_PROC(gb_video_mode_dsc_cmp); // NOTE(bill): Sort largest to smallest (Descending)
 
-#endif /* GB_PLATFORM */
+#endif // GB_PLATFORM
 
 #if defined(__cplusplus)
 }
 #endif
 
-#endif /* GB_INCLUDE_GB_H */
+#endif // GB_INCLUDE_GB_H
 
 
 
 
 
 
-/***************************************************************
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- * Implementation
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- *
- * It's turtles all the way down!
- ***************************************************************/
+////////////////////////////////////////////////////////////////
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+// Implementation
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+// It's turtles all the way down!
+////////////////////////////////////////////////////////////////
 #if defined(GB_IMPLEMENTATION) && !defined(GB_IMPLEMENTATION_DONE)
 #define GB_IMPLEMENTATION_DONE
 
@@ -2563,17 +2549,21 @@ extern "C" {
 
 #if defined(_MSC_VER)
 #pragma warning(push)
-#pragma warning(disable:4127) /* Conditional expression is constant */
+#pragma warning(disable:4127) // Conditional expression is constant
 #endif
 
 void
-gb_assert_handler(char const *condition, char const *file, i32 line, char const *msg)
+gb_assert_handler(char const *condition, char const *file, i32 line, char const *msg, ...)
 {
 	gb_printf_err("%s:%d: Assert Failure: ", file, line);
 	if (condition)
 		gb_printf_err( "`%s` ", condition);
-	if (msg)
-		gb_printf_err("%s", msg);
+	if (msg) {
+		va_list va;
+		va_start(va, msg);
+		gb_printf_err_va(msg, va);
+		va_end(va);
+	}
 	gb_printf_err("\n");
 }
 
@@ -2621,9 +2611,9 @@ gb_memcopy(void *gb_restrict dest, void const *gb_restrict source, isize size)
 #elif (defined(__i386__) || defined(__x86_64___))
 	__asm__ __volatile__("rep movsb" : "+D"(cast(u8 *gb_restrict)dest), "+S"(cast(u8 *gb_restrict)source), "+c"(size) : : "memory");
 #else
-	/* TODO(bill): Heavily optimize */
+	// TODO(bill): Heavily optimize
 	if ((cast(intptr)dest & 0x3) || (cast(intptr)source & 0x3)) {
-		/* NOTE(bill): Do an unaligned byte copy */
+		// NOTE(bill): Do an unaligned byte copy
 		u8 *gb_restrict dp8 = cast(u8 *)dest;
 		u8 *sp8 = cast(u8 *)source;
 
@@ -2652,7 +2642,7 @@ gb_memcopy(void *gb_restrict dest, void const *gb_restrict source, isize size)
 		}
 	}
 
-	/* TODO(bill): More betterer memcpys!!!! */
+	// TODO(bill): More betterer memcpys!!!!
 #endif
 	return dest;
 }
@@ -2660,7 +2650,7 @@ gb_memcopy(void *gb_restrict dest, void const *gb_restrict source, isize size)
 gb_inline void *
 gb_memmove(void *dest, void const *source, isize size)
 {
-	/* TODO(bill): Heavily optimize */
+	// TODO(bill): Heavily optimize
 	u8 *dp8 = cast(u8 *)dest;
 	u8 *sp8 = cast(u8 *)source;
 
@@ -2679,15 +2669,15 @@ gb_memmove(void *dest, void const *source, isize size)
 gb_inline void *
 gb_memset(void *data, u8 c, isize size)
 {
-	/* TODO(bill): Heavily optimize */
+	// TODO(bill): Heavily optimize
 	isize left;
 	u32 *dp32;
 	u8 *dp8 = cast(u8 *)data;
 	u32 c32 = (c | (c << 8) | (c << 16) | (c << 24));
 
-	/* NOTE(bill): The destination pointer needs to be aligned on a 4-byte
-	* boundary to execute a 32-bit set. Set first bytes manually if needed
-	* until it is aligned. */
+	// NOTE(bill): The destination pointer needs to be aligned on a 4-byte
+	// boundary to execute a 32-bit set. Set first bytes manually if needed
+	// until it is aligned.
 	while (cast(intptr)dp8 & 0x3) {
 		if (size--)
 			*dp8++ = c;
@@ -2714,7 +2704,7 @@ gb_memset(void *data, u8 c, isize size)
 gb_inline i32
 gb_memcompare(void const *s1, void const *s2, isize size)
 {
-	/* TODO(bill): Heavily optimize */
+	// TODO(bill): Heavily optimize
 
 	u8 const *s1p8 = cast(u8 const *)s1;
 	u8 const *s2p8 = cast(u8 const *)s2;
@@ -2747,7 +2737,7 @@ gb_memswap(void *i, void *j, isize size)
 	} else {
 		char buffer[256];
 
-		/* TODO(bill): Is the recursion ever a problem? */
+		// TODO(bill): Is the recursion ever a problem?
 		while (size > gb_size_of(buffer)) {
 			gb_memswap(i, j, gb_size_of(buffer));
 			i = gb_pointer_add(i, gb_size_of(buffer));
@@ -2810,11 +2800,11 @@ gb_default_resize_align(gbAllocator a, void *old_memory, isize old_size, isize n
 
 
 
-/***************************************************************
- *
- * Concurrency
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Concurrency
+//
+//
 #if defined(_MSC_VER) && !defined(__clang__)
 gb_inline i32  gb_atomic32_load (gbAtomic32 const volatile *a)      { return a->value;  }
 gb_inline void gb_atomic32_store(gbAtomic32 volatile *a, i32 value) { a->value = value; }
@@ -2851,7 +2841,7 @@ gb_atomic64_load(gbAtomic64 const volatile *a)
 #if defined(GB_ARCH_64_BIT)
 	return a->value;
 #else
-	/* NOTE(bill): The most compatible way to get an atomic 64-bit load on x86 is with cmpxchg8b */
+	// NOTE(bill): The most compatible way to get an atomic 64-bit load on x86 is with cmpxchg8b
 	i64 result;
 	__asm {
 		mov esi, a;
@@ -2871,7 +2861,7 @@ gb_atomic64_store(gbAtomic64 volatile *a, i64 value)
 #if defined(GB_ARCH_64_BIT)
 	a->value = value;
 #else
-	/* NOTE(bill): The most compatible way to get an atomic 64-bit store on x86 is with cmpxchg8b */
+	// NOTE(bill): The most compatible way to get an atomic 64-bit store on x86 is with cmpxchg8b
 	__asm {
 		mov esi, a;
 		mov ebx, dword ptr value;
@@ -2955,7 +2945,7 @@ gb_atomic64_fetch_or(gbAtomic64 volatile *a, i64 operand)
 
 
 
-#else /* GCC */
+#else // GCC
 
 
 gb_inline i32  gb_atomic32_load (gbAtomic32 const volatile *a)      { return a->value;  }
@@ -2976,7 +2966,7 @@ gb_atomic32_compare_exchange(gbAtomic32 volatile *a, i32 expected, i32 desired)
 gb_inline i32
 gb_atomic32_exchanged(gbAtomic32 volatile *a, i32 desired)
 {
-	/* NOTE(bill): No lock prefix is necessary for xchgl */
+	// NOTE(bill): No lock prefix is necessary for xchgl
 	i32 original;
 	__asm__ volatile(
 		"xchgl %0, %1"
@@ -3347,8 +3337,8 @@ gb_atomic_ptr_spin_unlock(gbAtomicPtr volatile *a)
 #error
 #endif
 
-/* NOTE(bill): THIS IS FUCKING AWESOME THAT THIS "MUTEX" IS FAST AND RECURSIVE TOO! */
-/* NOTE(bill): WHO THE FUCK NEEDS A NORMAL MUTEX NOW?!?!?!?! */
+// NOTE(bill): THIS IS FUCKING AWESOME THAT THIS "MUTEX" IS FAST AND RECURSIVE TOO!
+// NOTE(bill): WHO THE FUCK NEEDS A NORMAL MUTEX NOW?!?!?!?!
 gb_inline void
 gb_mutex_init(gbMutex *m)
 {
@@ -3521,7 +3511,7 @@ void
 gb_thread_set_name(gbThread *t, char const *name)
 {
 #if defined(_MSC_VER)
-	/* TODO(bill): Bloody Windows!!! */
+	// TODO(bill): Bloody Windows!!!
 	#pragma pack(push, 8)
 		typedef struct {
 			DWORD      type;
@@ -3542,13 +3532,13 @@ gb_thread_set_name(gbThread *t, char const *name)
 		}
 
 #elif defined(GB_SYSTEM_WINDOWS) && !defined(_MSC_VER)
-	/* IMPORTANT TODO(bill): Set thread name for GCC/Clang on windows */
+	// IMPORTANT TODO(bill): Set thread name for GCC/Clang on windows
 	return;
 #elif defined(GB_SYSTEM_OSX)
-	/* TODO(bill): Test if this works */
+	// TODO(bill): Test if this works
 	pthread_setname_np(name);
 #else
-	/* TODO(bill): Test if this works */
+	// TODO(bill): Test if this works
 	pthread_setname_np(t->posix_handle, name);
 #endif
 }
@@ -3571,14 +3561,14 @@ GB_ALLOCATOR_PROC(gb_heap_allocator_proc)
 	gb_unused(allocator_data);
 	gb_unused(options);
 	gb_unused(old_size);
-/* TODO(bill): Throughly test! */
+// TODO(bill): Throughly test!
 	switch (type) {
 #if defined(_MSC_VER)
 	case GB_ALLOCATION_ALLOC:  return _aligned_malloc(size, alignment);
 	case GB_ALLOCATION_FREE:   _aligned_free(old_memory); break;
 	case GB_ALLOCATION_RESIZE: return _aligned_realloc(old_memory, size, alignment);
 #else
-	/* TODO(bill): *nix version that's decent */
+	// TODO(bill): *nix version that's decent
 	case GB_ALLOCATION_ALLOC: {
 		isize total_size = size + alignment + gb_size_of(gbAllocationHeader);
 		void *ptr = malloc(total_size);
@@ -3602,15 +3592,15 @@ GB_ALLOCATOR_PROC(gb_heap_allocator_proc)
 		break;
 	}
 
-	return NULL; /* NOTE(bill): Default return value */
+	return NULL; // NOTE(bill): Default return value
 }
 
 
-/***************************************************************
- *
- * Virtual Memory
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Virtual Memory
+//
+//
 
 gbVirtualMemory
 gb_virtual_memory(void *data, isize size)
@@ -3661,7 +3651,7 @@ gb_inline b32
 gb_vm_purge(gbVirtualMemory vm)
 {
 	VirtualAlloc(vm.data, vm.size, MEM_RESET, PAGE_READWRITE);
-	/* NOTE(bill): Can this really fail? */
+	// NOTE(bill): Can this really fail?
 	return true;
 }
 #else
@@ -3718,16 +3708,16 @@ gb_vm_purge(gbVirtualMemory vm)
 
 
 
-/***************************************************************
- *
- * Custom Allocation
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Custom Allocation
+//
+//
 
 
-/*
- * Arena Allocator
- */
+//
+// Arena Allocator
+//
 
 gb_inline void
 gb_arena_init_from_memory(gbArena *arena, void *start, isize size)
@@ -3744,7 +3734,7 @@ gb_inline void
 gb_arena_init_from_allocator(gbArena *arena, gbAllocator backing, isize size)
 {
 	arena->backing         = backing;
-	arena->physical_start  = gb_alloc(backing, size); /* NOTE(bill): Uses default alignment */
+	arena->physical_start  = gb_alloc(backing, size); // NOTE(bill): Uses default alignment
 	arena->total_size      = size;
 	arena->total_allocated = 0;
 	arena->temp_count      = 0;
@@ -3815,7 +3805,7 @@ GB_ALLOCATOR_PROC(gb_arena_allocator_proc)
 		void *end = gb_pointer_add(arena->physical_start, arena->total_allocated);
 		isize total_size = size + alignment;
 
-		/* NOTE(bill): Out of memory */
+		// NOTE(bill): Out of memory
 		if (arena->total_allocated + total_size > cast(isize)arena->total_size)
 			return NULL;
 
@@ -3825,8 +3815,8 @@ GB_ALLOCATOR_PROC(gb_arena_allocator_proc)
 	} break;
 
 	case GB_ALLOCATION_FREE:
-		/* NOTE(bill): Free all at once
-		 * Use Temp_Arena_Memory if you want to free a block */
+		// NOTE(bill): Free all at once
+		// Use Temp_Arena_Memory if you want to free a block
 		break;
 
 	case GB_ALLOCATION_FREE_ALL:
@@ -3834,13 +3824,13 @@ GB_ALLOCATOR_PROC(gb_arena_allocator_proc)
 		break;
 
 	case GB_ALLOCATION_RESIZE: {
-		/* TODO(bill): Check if ptr is on top of stack and just extend */
+		// TODO(bill): Check if ptr is on top of stack and just extend
 		gbAllocator a = gb_arena_allocator(arena);
 		return gb_default_resize_align(a, old_memory, old_size, size, alignment);
 	} break;
 	}
 
-	return NULL; /* NOTE(bill): Default return value */
+	return NULL; // NOTE(bill): Default return value
 }
 
 
@@ -3866,9 +3856,9 @@ gb_temp_arena_memory_end(gbTempArenaMemory tmp)
 
 
 
-/*
- * Pool Allocator
- */
+//
+// Pool Allocator
+//
 
 
 gb_inline void
@@ -3895,7 +3885,7 @@ gb_pool_init_align(gbPool *pool, gbAllocator backing, isize num_blocks, isize bl
 
 	data = gb_alloc_align(backing, pool_size, block_align);
 
-	/* NOTE(bill): Init intrusive freelist */
+	// NOTE(bill): Init intrusive freelist
 	curr = data;
 	for (block_index = 0; block_index < num_blocks-1; block_index++) {
 		uintptr *next = cast(uintptr *)curr;
@@ -3961,11 +3951,11 @@ GB_ALLOCATOR_PROC(gb_pool_allocator_proc)
 	} break;
 
 	case GB_ALLOCATION_FREE_ALL:
-		/* TODO(bill): */
+		// TODO(bill):
 		break;
 
 	case GB_ALLOCATION_RESIZE:
-		/* NOTE(bill): Cannot resize */
+		// NOTE(bill): Cannot resize
 		GB_ASSERT(false);
 		break;
 	}
@@ -3997,9 +3987,9 @@ gb_inline void gb_allocation_header_fill(gbAllocationHeader *header, void *data,
 
 
 
-/*
- * Free List Allocator
- */
+//
+// Free List Allocator
+//
 
 gb_inline void
 gb_free_list_init(gbFreeList *fl, void *start, isize size)
@@ -4065,7 +4055,7 @@ GB_ALLOCATOR_PROC(gb_free_list_allocator_proc)
 				else
 					fl->curr_block = curr_block->next;
 			} else {
-				/* NOTE(bill): Create a new block for the remaining memory */
+				// NOTE(bill): Create a new block for the remaining memory
 				gbFreeListBlock *next_block;
 				next_block = cast(gbFreeListBlock *)gb_pointer_add(curr_block, total_size);
 
@@ -4081,7 +4071,7 @@ GB_ALLOCATOR_PROC(gb_free_list_allocator_proc)
 			}
 
 
-			/* TODO(bill): Set Header Info */
+			// TODO(bill): Set Header Info
 			header = cast(gbAllocationHeader *)curr_block;
 			ptr = gb_align_forward(header+1, alignment);
 			gb_allocation_header_fill(header, ptr, size);
@@ -4093,7 +4083,7 @@ GB_ALLOCATOR_PROC(gb_free_list_allocator_proc)
 			return ptr;
 		}
 
-		/* NOTE(bill): Ran out of free list memory! FUCK! */
+		// NOTE(bill): Ran out of free list memory! FUCK!
 		return NULL;
 	} break;
 
@@ -4199,7 +4189,7 @@ GB_ALLOCATOR_PROC(gb_scratch_allocator_proc)
 		size = ((size + 3)/4)*4;
 		ptr = gb_pointer_add(ptr, size);
 
-		/* NOTE(bill): Wrap around */
+		// NOTE(bill): Wrap around
 		if (ptr > end) {
 			header->size = gb_pointer_diff(header, end) | GB_ISIZE_HIGH_BIT;
 			ptr = s->physical_start;
@@ -4221,7 +4211,7 @@ GB_ALLOCATOR_PROC(gb_scratch_allocator_proc)
 			if (old_memory < s->physical_start || old_memory >= end) {
 				GB_ASSERT(false);
 			} else {
-				/* NOTE(bill): Mark as free */
+				// NOTE(bill): Mark as free
 				gbAllocationHeader *h = gb_allocation_header(old_memory);
 				GB_ASSERT((h->size & GB_ISIZE_HIGH_BIT) == 0);
 				h->size = h->size | GB_ISIZE_HIGH_BIT;
@@ -4256,13 +4246,13 @@ GB_ALLOCATOR_PROC(gb_scratch_allocator_proc)
 
 
 
-/***************************************************************
- *
- * Sorting
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Sorting
+//
+//
 
-/* TODO(bill): Should I make all the macros local? */
+// TODO(bill): Should I make all the macros local?
 
 #define GB__COMPARE_PROC(Type) \
 gb_global isize gb__##Type##_cmp_offset; \
@@ -4287,7 +4277,7 @@ GB__COMPARE_PROC(f32);
 GB__COMPARE_PROC(f64);
 GB__COMPARE_PROC(char);
 
-/* NOTE(bill): str_cmp is special as it requires a funny type and funny comparison*/
+// NOTE(bill): str_cmp is special as it requires a funny type and funny comparison
 gb_global isize gb__str_cmp_offset;
 GB_COMPARE_PROC(gb__str_cmp)
 {
@@ -4303,7 +4293,10 @@ GB_COMPARE_PROC_PTR(gb_str_cmp(isize offset))
 
 #undef GB__COMPARE_PROC
 
-/* TODO(bill): Make user definable? */
+
+
+
+// TODO(bill): Make user definable?
 #define GB__SORT_STACK_SIZE   64
 #define GB__SORT_INSERT_SORT_THRESHOLD  8
 
@@ -4330,13 +4323,13 @@ gb_sort(void *base_, isize count, isize size, gbCompareProc cmp)
 	u8 *limit = base + count*size;
 	isize threshold = GB__SORT_INSERT_SORT_THRESHOLD * size;
 
-	/* NOTE(bill): Prepare the stack */
+	// NOTE(bill): Prepare the stack
 	u8 *stack[GB__SORT_STACK_SIZE] = {0};
 	u8 **stack_ptr = stack;
 
 	for (;;) {
 		if ((limit-base) > threshold) {
-			/* NOTE(bill): Quick sort */
+			// NOTE(bill): Quick sort
 			i = base + size;
 			j = limit - size;
 
@@ -4367,7 +4360,7 @@ gb_sort(void *base_, isize count, isize size, gbCompareProc cmp)
 				limit = j;
 			}
 		} else {
-			/* NOTE(bill): Insertion sort */
+			// NOTE(bill): Insertion sort
 			for (j = base, i = j+size;
 			     i < limit;
 			     j = i, i += size) {
@@ -4379,7 +4372,7 @@ gb_sort(void *base_, isize count, isize size, gbCompareProc cmp)
 			}
 
 			if (stack_ptr == stack)
-				break; /* NOTE(bill): Sorting is done! */
+				break; // NOTE(bill): Sorting is done!
 			GB__SORT_POP(base, limit);
 		}
 	}
@@ -4447,11 +4440,11 @@ gb_binary_search(void const *base, isize count, isize size, void const *key, gbC
 
 
 
-/***************************************************************
- *
- * Char things
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Char things
+//
+//
 
 
 
@@ -4523,7 +4516,6 @@ gb_digit_to_int(char c)
 {
 	return gb_char_is_digit(c) ? c - '0' : c - 'W';
 }
-
 
 gb_inline i32
 gb_hex_digit_to_int(char c)
@@ -4997,7 +4989,7 @@ gb_string_make_space_for(gbString str, isize add_len)
 {
 	isize available = gb_string_available_space(str);
 
-	/* Return if there is enough space left */
+	// NOTE(bill): Return if there is enough space left
 	if (available >= add_len) {
 		return str;
 	} else {
@@ -5075,11 +5067,11 @@ gb_inline gbString gb_string_trim_space(gbString str) { return gb_string_trim(st
 
 
 
-/***************************************************************
- *
- * Windows UTF-8 Handling
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Windows UTF-8 Handling
+//
+//
 
 
 char16 *
@@ -5105,7 +5097,7 @@ gb_utf8_to_ucs2(char16 *buffer, isize len, char const *s)
 			if (*str == 0xe0 &&
 			    (str[1] < 0xa0 || str[1] > 0xbf))
 				return NULL;
-			if (*str == 0xed && str[1] > 0x9f) /* str[1] < 0x80 is checked below */
+			if (*str == 0xed && str[1] > 0x9f) // str[1] < 0x80 is checked below
 				return NULL;
 			c = (*str++ & 0x0f) << 12;
 			if ((*str & 0xc0) != 0x80)
@@ -5119,7 +5111,7 @@ gb_utf8_to_ucs2(char16 *buffer, isize len, char const *s)
 				return NULL;
 			if (*str == 0xf0 && (str[1] < 0x90 || str[1] > 0xbf))
 				return NULL;
-			if (*str == 0xf4 && str[1] > 0x8f) /* str[1] < 0x80 is checked below */
+			if (*str == 0xf4 && str[1] > 0x8f) // str[1] < 0x80 is checked below
 				return NULL;
 			c = (*str++ & 0x07) << 18;
 			if ((*str & 0xc0) != 0x80)
@@ -5131,7 +5123,7 @@ gb_utf8_to_ucs2(char16 *buffer, isize len, char const *s)
 			if ((*str & 0xc0) != 0x80)
 				return NULL;
 			c += (*str++ & 0x3f);
-			/* UTF-8 encodings of values used in surrogate pairs are invalid */
+			// UTF-8 encodings of values used in surrogate pairs are invalid
 			if ((c & 0xfffff800) == 0xd800)
 				return NULL;
 			if (c >= 0x10000) {
@@ -5189,6 +5181,22 @@ gb_ucs2_to_utf8(char *buffer, isize len, char16 const *str)
 	buffer[i] = 0;
 	return buffer;
 }
+
+char16 *
+gb_utf8_to_ucs2_buf(char const *str)   // NOTE(bill): Uses locally persisting buffer
+{
+	gb_local_persist char16 buf[4096];
+	return gb_utf8_to_ucs2(buf, gb_count_of(buf), str);
+}
+
+char *
+gb_ucs2_to_utf8_buf(char16 const *str) // NOTE(bill): Uses locally persisting buffer
+{
+	gb_local_persist char buf[4096];
+	return gb_ucs2_to_utf8(buf, gb_count_of(buf), str);
+}
+
+
 
 
 #define GB__UTF_SIZE 4
@@ -5260,11 +5268,11 @@ gb_utf8_decode_len(char const *s, isize str_len, char32 *c)
 
 
 
-/***************************************************************
- *
- * Array
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// gbArray
+//
+//
 
 
 gb_no_inline void *
@@ -5300,11 +5308,11 @@ gb__array_set_capacity(void *array, isize capacity, isize element_size)
 }
 
 
-/***************************************************************
- *
- * Hashing functions
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Hashing functions
+//
+//
 
 u32
 gb_adler32(void const *data, isize len)
@@ -5707,22 +5715,13 @@ gb_murmur64_seed(void const *data_, isize len, u64 seed)
 
 
 
-/***************************************************************
- *
- * Hash Table
- *
- */
 
 
-
-
-
-
-/***************************************************************
- *
- * File Handling
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// File Handling
+//
+//
 
 #if defined(GB_SYSTEM_WINDOWS)
 
@@ -5826,7 +5825,7 @@ GB_FILE_OPEN_PROC(gb__win32_file_open)
 	                     FILE_SHARE_READ|FILE_SHARE_DELETE, NULL,
 	                     creation_disposition, FILE_ATTRIBUTE_NORMAL, NULL);
 
-	/* TODO(bill): More file errors */
+	// TODO(bill): More file errors
 	if (handle == INVALID_HANDLE_VALUE) {
 		return GB_FILE_ERR_INVALID;
 	}
@@ -5844,7 +5843,7 @@ GB_FILE_OPEN_PROC(gb__win32_file_open)
 	return GB_FILE_ERR_NONE;
 }
 
-#else /* POSIX */
+#else // POSIX
 
 
 gb_internal
@@ -5921,7 +5920,7 @@ GB_FILE_OPEN_PROC(gb__posix_file_open)
 
 	fd->i = open(filename, os_mode, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 	if (fd->i < 0) {
-		/* TODO(bill): More file errors */
+		// TODO(bill): More file errors
 		return GB_FILE_ERR_INVALID;
 	}
 
@@ -5934,7 +5933,7 @@ GB_FILE_OPEN_PROC(gb__posix_file_open)
 
 
 gbFileError
-gb_file_new(gbFile *f, gbFileDescriptor fd, gbFileOperations const *ops, gbFileMode mode, char const *filename)
+gb_file_new(gbFile *f, gbFileDescriptor fd, gbFileOperations const *ops, char const *filename)
 {
 	gbFileError err = GB_FILE_ERR_NONE;
 
@@ -5960,7 +5959,7 @@ gb_file_open_mode_va(gbFile *f, gbFileMode mode, char const *filename, va_list v
 	err = gb__posix_file_open(&f->fd, &f->ops, mode, buffer);
 #endif
 	if (!err)
-		return gb_file_new(f, f->fd, f->ops, mode, buffer);
+		return gb_file_new(f, f->fd, f->ops, buffer);
 	return err;
 }
 
@@ -6072,22 +6071,24 @@ gb_file_has_changed(gbFile *f)
 }
 
 
+gb_global b32 gb__std_file_set = false;
+gb_global gbFile gb__std_files[GB_FILE_STANDARD_COUNT] = {0};
 
 
 #if defined(GB_SYSTEM_WINDOWS)
 
-gb_inline gbFile
-gb_file_get_std(gbFileStandardType std)
+gb_inline gbFile *const
+gb_file_get_standard(gbFileStandardType std)
 {
-	gbFile file = {0};
-	file.ops = &GB_DEFAULT_FILE_OPERATIONS;
-	switch (std) {
-	case GB_FILE_STANDARD_INPUT:  file.fd.p = GetStdHandle(STD_INPUT_HANDLE);  break;
-	case GB_FILE_STANDARD_OUTPUT: file.fd.p = GetStdHandle(STD_OUTPUT_HANDLE); break;
-	case GB_FILE_STANDARD_ERROR:  file.fd.p = GetStdHandle(STD_ERROR_HANDLE);  break;
-	default: GB_PANIC("Invalid standard file"); break;
+	if (!gb__std_file_set) {
+	#define GB__SET_STD_FILE(type, v) gb__std_files[type].fd.p = v; gb__std_files[type].ops = &GB_DEFAULT_FILE_OPERATIONS
+		GB__SET_STD_FILE(GB_FILE_STANDARD_INPUT,  GetStdHandle(STD_INPUT_HANDLE));
+		GB__SET_STD_FILE(GB_FILE_STANDARD_OUTPUT, GetStdHandle(STD_OUTPUT_HANDLE));
+		GB__SET_STD_FILE(GB_FILE_STANDARD_ERROR,  GetStdHandle(STD_ERROR_HANDLE));
+	#undef GB__SET_STD_FILE
+		gb__std_file_set = true;
 	}
-	return file;
+	return &gb__std_files[std];
 }
 
 gb_inline i64
@@ -6114,28 +6115,28 @@ gb_file_truncate(gbFile *f, i64 size)
 b32
 gb_file_exists(char const *name)
 {
-	WIN32_FIND_DATA data;
-	HANDLE handle = FindFirstFile(name, &data);
+	WIN32_FIND_DATAW data;
+	HANDLE handle = FindFirstFileW(cast(LPCWSTR)gb_utf8_to_ucs2_buf(name), &data);
 	b32 found = handle != INVALID_HANDLE_VALUE;
 	if (found) FindClose(handle);
 	return found;
 }
 
-#else
+#else // POSIX
 
-gb_inline gbFile
-gb_file_get_std(gbFileStandardType std)
+gb_inline gbFile *const
+gb_file_get_standard(gbFileStandardType std)
 {
-	gbFile file = {0};
-	switch (std) {
-	case GB_FILE_STANDARD_INPUT:  file.fd.i = 0; break;
-	case GB_FILE_STANDARD_OUTPUT: file.fd.i = 1; break;
-	case GB_FILE_STANDARD_ERROR:  file.fd.i = 2; break;
-	default: GB_PANIC("Invalid standard file"); break;
+	if (!gb__std_file_set) {
+	#define GB__SET_STD_FILE(type, v) gb__std_files[type].fd.i = v; gb__std_files[type].ops = &GB_DEFAULT_FILE_OPERATIONS
+		GB__SET_STD_FILE(GB_FILE_STANDARD_INPUT,  0);
+		GB__SET_STD_FILE(GB_FILE_STANDARD_OUTPUT, 1);
+		GB__SET_STD_FILE(GB_FILE_STANDARD_ERROR,  2);
+	#undef GB__SET_STD_FILE
+		gb__std_file_set = true;
 	}
-	return file;
+	return &gb__std_files[std];
 }
-
 
 gb_inline i64
 gb_file_size(gbFile *f)
@@ -6170,16 +6171,16 @@ gb_file_exists(char const *name)
 gbFileTime
 gb_file_last_write_time(char const *filepath, ...)
 {
+	gb_local_persist char16 path[2048];
 	ULARGE_INTEGER li = {0};
 	FILETIME last_write_time = {0};
 	WIN32_FILE_ATTRIBUTE_DATA data = {0};
 
 	va_list va;
 	va_start(va, filepath);
-
-	if (GetFileAttributesExA(gb_bprintf_va(filepath, va), GetFileExInfoStandard, &data))
+	if (GetFileAttributesExW(cast(LPCWSTR)gb_utf8_to_ucs2(path, gb_count_of(path), gb_bprintf_va(filepath, va)),
+	                         GetFileExInfoStandard, &data))
 		last_write_time = data.ftLastWriteTime;
-
 	va_end(va);
 
 	li.LowPart = last_write_time.dwLowDateTime;
@@ -6191,13 +6192,22 @@ gb_file_last_write_time(char const *filepath, ...)
 gb_inline b32
 gb_file_copy(char const *existing_filename, char const *new_filename, b32 fail_if_exists)
 {
-	return CopyFileA(existing_filename, new_filename, fail_if_exists);
+	gb_local_persist char16 old_f[2048];
+	gb_local_persist char16 new_f[2048];
+
+	return CopyFileW(cast(LPCWSTR)gb_utf8_to_ucs2(old_f, gb_count_of(old_f), existing_filename),
+	                 cast(LPCWSTR)gb_utf8_to_ucs2(new_f, gb_count_of(new_f), new_filename),
+	                 fail_if_exists);
 }
 
 gb_inline b32
 gb_file_move(char const *existing_filename, char const *new_filename)
 {
-	return MoveFileA(existing_filename, new_filename);
+	gb_local_persist char16 old_f[2048];
+	gb_local_persist char16 new_f[2048];
+
+	return MoveFileW(cast(LPCWSTR)gb_utf8_to_ucs2(old_f, gb_count_of(old_f), existing_filename),
+	                 cast(LPCWSTR)gb_utf8_to_ucs2(new_f, gb_count_of(new_f), new_filename));
 }
 
 
@@ -6348,11 +6358,11 @@ gb_path_extension(char const *path)
 }
 
 
-/***************************************************************
- *
- * Printing
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Printing
+//
+//
 
 
 isize
@@ -6416,15 +6426,13 @@ gb_snprintf(char *str, isize n, char const *fmt, ...)
 gb_inline isize
 gb_printf_va(char const *fmt, va_list va)
 {
-	gbFile f = gb_file_get_std(GB_FILE_STANDARD_OUTPUT);
-	return gb_fprintf_va(&f, fmt, va);
+	return gb_fprintf_va(gb_file_get_standard(GB_FILE_STANDARD_OUTPUT), fmt, va);
 }
 
 gb_inline isize
 gb_printf_err_va(char const *fmt, va_list va)
 {
-	gbFile f = gb_file_get_std(GB_FILE_STANDARD_ERROR);
-	return gb_fprintf_va(&f, fmt, va);
+	return gb_fprintf_va(gb_file_get_standard(GB_FILE_STANDARD_ERROR), fmt, va);
 }
 
 gb_inline isize
@@ -6480,9 +6488,10 @@ typedef struct {
 gb_internal isize
 gb__print_string(char *text, isize max_len, gbprivFmtInfo *info, char const *str)
 {
-	/* TODO(bill): Get precision and width to work correctly. How does it actually work?! */
-	/* TODO(bill): This looks very buggy indeed. */
+	// TODO(bill): Get precision and width to work correctly. How does it actually work?!
+	// TODO(bill): This looks very buggy indeed.
 	isize res = 0, len;
+	isize remaining = max_len;
 
 	if (info && info->precision >= 0)
 		len = gb_strnlen(str, info->precision);
@@ -6494,22 +6503,24 @@ gb__print_string(char *text, isize max_len, gbprivFmtInfo *info, char const *str
 			len = info->precision < len ? info->precision : len;
 
 		res += gb_strlcpy(text, str, len);
+		res -= remaining;
 
 		if (info->width > res) {
 			isize padding = info->width - len;
 			char pad = (info->flags & GB__FMT_ZERO) ? '0' : ' ';
-			while (padding --> 0)
+			while (padding --> 0 && remaining --> 0)
 				*text++ = pad, res++;
 		}
 	} else {
 		if (info && (info->width > res)) {
 			isize padding = info->width - len;
 			char pad = (info->flags & GB__FMT_ZERO) ? '0' : ' ';
-			while (padding --> 0)
+			while (padding --> 0 && remaining --> 0)
 				*text++ = pad, res++;
 		}
 
 		res += gb_strlcpy(text, str, len);
+		remaining -= res;
 	}
 
 
@@ -6552,7 +6563,7 @@ gb__print_u64(char *text, isize max_len, gbprivFmtInfo *info, u64 value)
 gb_internal isize
 gb__print_f64(char *text, isize max_len, gbprivFmtInfo *info, f64 arg)
 {
-	/* TODO(bill): Handle exponent notation */
+	// TODO(bill): Handle exponent notation
 	isize width, len, remaining = max_len;
 	char *text_begin = text;
 
@@ -6656,34 +6667,17 @@ gb_snprintf_va(char *text, isize max_len, char const *fmt, va_list va)
 		if (*fmt == '%') {
 			do {
 				switch (*fmt++) {
-				case '-':
-					info.flags |= GB__FMT_MINUS;
-					fmt++;
-					break;
-				case '+':
-					info.flags |= GB__FMT_PLUS;
-					fmt++;
-					break;
-				case '#':
-					info.flags |= GB__FMT_ALT;
-					fmt++;
-					break;
-				case ' ':
-					info.flags |= GB__FMT_SPACE;
-					fmt++;
-					break;
-				case '0':
-					info.flags |= GB__FMT_ZERO;
-					fmt++;
-					break;
-				default:
-					info.flags |= GB__FMT_DONE;
-					break;
+				case '-': info.flags |= GB__FMT_MINUS; fmt++; break;
+				case '+': info.flags |= GB__FMT_PLUS;  fmt++; break;
+				case '#': info.flags |= GB__FMT_ALT;   fmt++; break;
+				case ' ': info.flags |= GB__FMT_SPACE; fmt++; break;
+				case '0': info.flags |= GB__FMT_ZERO;  fmt++; break;
+				default:  info.flags |= GB__FMT_DONE;         break;
 				}
 			} while (!(info.flags & GB__FMT_DONE));
 		}
 
-		/* NOTE(bill): Optional Width */
+		// NOTE(bill): Optional Width
 		if (*fmt == '*') {
 			int width = va_arg(va, int);
 			if (width < 0) {
@@ -6697,9 +6691,9 @@ gb_snprintf_va(char *text, isize max_len, char const *fmt, va_list va)
 			info.width = cast(i32)gb_str_to_i64(fmt, cast(char **)&fmt, 10);
 		}
 
-		/* NOTE(bill): Optional Precision */
+		// NOTE(bill): Optional Precision
 		if (*fmt == '.') {
-				fmt++;
+			fmt++;
 			if (*fmt == '*') {
 				info.precision = va_arg(va, int);
 				fmt++;
@@ -6711,46 +6705,40 @@ gb_snprintf_va(char *text, isize max_len, char const *fmt, va_list va)
 
 		switch (*fmt++) {
 		case 'h':
-			if (*fmt == 'h') {
-				/* hh => char */
+			if (*fmt == 'h') { // hh => char
 				info.flags |= GB__FMT_CHAR;
 				fmt++;
-			} else {
-				/* h => short */
+			} else { // h => short
 				info.flags |= GB__FMT_SHORT;
 			}
 			break;
 
 		case 'l':
-			if (*fmt == 'l') {
-				/* ll => long long */
+			if (*fmt == 'l') { // ll => long long
 				info.flags |= GB__FMT_LLONG;
 				fmt++;
-			} else {
-				/* l => long */
+			} else { // l => long
 				info.flags |= GB__FMT_LONG;
 			}
 			break;
 
 			break;
 
-		case 'z': /* NOTE(bill): usize */
+		case 'z': // NOTE(bill): usize
 			info.flags |= GB__FMT_UNSIGNED;
-			/* FALLTHROUGH */
-		case 't': /* NOTE(bill): isize */
+			// fallthrough
+		case 't': // NOTE(bill): isize
 			info.flags |= GB__FMT_SIZE;
 			break;
 
-		default:
-			fmt--;
-			break;
+		default: fmt--; break;
 		}
 
 
 		switch (*fmt) {
 		case 'u':
 			info.flags |= GB__FMT_UNSIGNED;
-			/* FALLTHROUGH */
+			// fallthrough
 		case 'd':
 		case 'i':
 			info.base = 10;
@@ -6779,7 +6767,7 @@ gb_snprintf_va(char *text, isize max_len, char const *fmt, va_list va)
 
 		case 'a':
 		case 'A':
-			/* TODO(bill): */
+			// TODO(bill):
 			break;
 
 		case 'c':
@@ -6795,13 +6783,10 @@ gb_snprintf_va(char *text, isize max_len, char const *fmt, va_list va)
 			info.flags |= (GB__FMT_LOWER|GB__FMT_UNSIGNED|GB__FMT_ALT|GB__FMT_INTPTR);
 			break;
 
-		default:
-			fmt--;
-			break;
+		default: fmt--; break;
 		}
 
 		fmt++;
-
 
 		if (info.base != 0) {
 			if (info.flags & GB__FMT_UNSIGNED) {
@@ -6861,11 +6846,11 @@ gb_snprintf_va(char *text, isize max_len, char const *fmt, va_list va)
 }
 
 
-/***************************************************************
- *
- * DLL Handling
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// DLL Handling
+//
+//
 
 #if defined(GB_SYSTEM_WINDOWS)
 
@@ -6882,7 +6867,7 @@ gb_dll_load(char const *filepath, ...)
 gb_inline void      gb_dll_unload      (gbDllHandle dll)                        { FreeLibrary(cast(HMODULE)dll); }
 gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) { return cast(gbDllProc)GetProcAddress(cast(HMODULE)dll, proc_name); }
 
-#else
+#else // POSIX
 
 gbDllHandle
 gb_dll_load(char const *filepath, ...)
@@ -6892,7 +6877,7 @@ gb_dll_load(char const *filepath, ...)
 	va_start(va, filepath);
 	gb_snprintf_va(buffer, gb_size_of(buffer), filepath, va);
 	va_end(va);
-	/* TODO(bill): Should this be RTLD_LOCAL? */
+	// TODO(bill): Should this be RTLD_LOCAL?
 	return cast(gbDllHandle)dlopen(buffer, RTLD_LAZY|RTLD_GLOBAL);
 }
 
@@ -6902,11 +6887,11 @@ gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) 
 #endif
 
 
-/***************************************************************
- *
- * Time
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Time
+//
+//
 
 #if defined(_MSC_VER) && !defined(__clang__)
 	gb_inline u64 gb_rdtsc(void) { return __rdtsc(); }
@@ -7008,7 +6993,7 @@ gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) 
 		struct timespec t;
 		f64 result;
 
-		/* TODO(bill): THIS IS A HACK  */
+		// IMPORTANT TODO(bill): THIS IS A HACK
 		clock_gettime(1 /*CLOCK_MONOTONIC*/, &t);
 		result = t.tv_sec + 1.0e-9 * t.tv_nsec;
 		return result;
@@ -7019,7 +7004,7 @@ gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) 
 	gb_utc_time_now(void)
 	{
 		struct timespec t;
-		/* TODO(bill): THIS IS A HACK */
+		// IMPORTANT TODO(bill): THIS IS A HACK
 		clock_gettime(0 /*CLOCK_REALTIME*/, &t);
 		return cast(u64)t.tv_sec * 1000000ull + t.tv_nsec/1000 + 11644473600000000ull;
 	}
@@ -7036,16 +7021,16 @@ gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) 
 
 
 
-/***************************************************************
- *
- * Miscellany
- *
- */
+////////////////////////////////////////////////////////////////
+//
+// Miscellany
+//
+//
 
 gb_internal gb_inline u64
 gb__basic_hash(u64 x)
 {
-	/* NOTE(bill): Used in Murmur Hash */
+	// NOTE(bill): Used in Murmur Hash
 	x ^= x >> 33;
     x *= 0xff51afd7ed558ccdull;
     x ^= x >> 33;
@@ -7095,7 +7080,7 @@ gb_random_range_i64(gbRandom *r, i64 lower_inc, i64 higher_inc)
 	return i;
 }
 
-/* NOTE(bill): Semi-cc'ed from gb_math to remove need for fmod */
+// NOTE(bill): Semi-cc'ed from gb_math to remove need for fmod and math.h
 f64
 gb__copy_sign64(f64 x, f64 y)
 {
@@ -7132,7 +7117,7 @@ gb_random_range_f64(gbRandom *r, f64 lower_inc, f64 higher_inc)
 	u64 u = gb_random_next(r);
 	f64 f = *cast(f64 *)&u;
 	f64 diff = higher_inc-lower_inc+1.0;
-	f = gb__mod64(f, diff); /* TODO(bill): Replace fmod, maybe... */
+	f = gb__mod64(f, diff);
 	f += lower_inc;
 	return f;
 }
@@ -7159,6 +7144,7 @@ gb_inline void
 gb_set_env(char const *name, char const *value)
 {
 #if defined(GB_SYSTEM_WINDOWS)
+	// TODO(bill): Should this be a Wide version?
 	SetEnvironmentVariableA(name, value);
 #else
 	setenv(name, value, 1);
@@ -7169,6 +7155,7 @@ gb_inline void
 gb_unset_env(char const *name)
 {
 #if defined(GB_SYSTEM_WINDOWS)
+	// TODO(bill): Should this be a Wide version?
 	SetEnvironmentVariableA(name, NULL);
 #else
 	unsetenv(name);
@@ -7186,17 +7173,17 @@ gb_inline u32
 gb_endian_swap32(u32 i)
 {
 	return (i>>24) |(i<<24) |
-	       ((i&0x00ff0000)>>8)  | ((i&0x0000ff00)<<8);
+	       ((i&0x00ff0000u)>>8)  | ((i&0x0000ff00u)<<8);
 }
 
 gb_inline u64
 gb_endian_swap64(u64 i)
 {
-	/* TODO(bill): Do I really need the cast here? */
+	// TODO(bill): Do I really need the cast here?
 	return (i>>56) | (i<<56) |
-	       ((i&cast(u64)0x00ff000000000000)>>40) | ((i&cast(u64)0x000000000000ff00)<<40) |
-	       ((i&cast(u64)0x0000ff0000000000)>>24) | ((i&cast(u64)0x0000000000ff0000)<<24) |
-	       ((i&cast(u64)0x000000ff00000000)>>8)  | ((i&cast(u64)0x00000000ff000000)<<8);
+	       ((i&0x00ff000000000000ull)>>40) | ((i&0x000000000000ff00ull)<<40) |
+	       ((i&0x0000ff0000000000ull)>>24) | ((i&0x0000000000ff0000ull)<<24) |
+	       ((i&0x000000ff00000000ull)>>8)  | ((i&0x00000000ff000000ull)<<8);
 }
 
 
@@ -7205,11 +7192,11 @@ gb_endian_swap64(u64 i)
 
 
 
-/***************************************************************
- *
- * Colour Type
- * It's quite useful
- */
+////////////////////////////////////////////////////////////////
+//
+// Colour Type
+// It's quite useful
+//
 
 #if !defined(GB_NO_COLOUR_TYPE)
 gb_inline gbColour
@@ -7276,24 +7263,27 @@ gb__process_xinput_trigger_value(BYTE value)
 gb_internal void
 gb__window_resize_dib_section(gbWindow *window, i32 width, i32 height)
 {
-	if ((window->width != width) ||
-	    (window->height != height)) {
-		gbVideoMode mode = gb_video_mode_get_desktop();
+	if (!(window->width == width && window->height == height)) {
 		BITMAPINFO bmi = {0};
+
+		if (width == 0 || height == 0)
+			return;
+
 		window->width  = width;
 		window->height = height;
 
-		window->software.bits_per_pixel = mode.bits_per_pixel;
+		window->software.bits_per_pixel = gb_video_mode_get_desktop().bits_per_pixel;
 		window->software.pitch = (window->software.bits_per_pixel * width / 8);
 
 		bmi.bmiHeader.biSize = gb_size_of(bmi.bmiHeader);
 		bmi.bmiHeader.biWidth       = width;
-		bmi.bmiHeader.biHeight      = -height; /* NOTE(bill): -ve is top-down, +ve is bottom-up */
+		bmi.bmiHeader.biHeight      = -height; // NOTE(bill): -ve is top-down, +ve is bottom-up
 		bmi.bmiHeader.biPlanes      = 1;
 		bmi.bmiHeader.biBitCount    = cast(WORD)window->software.bits_per_pixel;
 		bmi.bmiHeader.biCompression = BI_RGB;
 
 		window->software.win32_bmi = bmi;
+
 
 		if (window->software.memory)
 			gb_vm_free(gb_virtual_memory(window->software.memory, window->software.memory_size));
@@ -7312,12 +7302,12 @@ gb_platform_init(gbPlatform *p)
 {
 	gb_zero_item(p);
 
-	{ /* Load XInput */
+	{ // Load XInput
 		gbDllHandle xinput_library = gb_dll_load("xinput1_4.dll");
 		if (!xinput_library) xinput_library = gb_dll_load("xinput9_1_0.dll");
 		if (!xinput_library) xinput_library = gb_dll_load("xinput1_3.dll");
 		if (!xinput_library) {
-			/* TODO(bill): Diagnostic */
+			// TODO(bill): Diagnostic
 			gb_printf_err("XInput could not be loaded. Controllers will not work!\n");
 		} else {
 			p->xinput.get_state = cast(gbXInputGetStateProc *) gb_dll_proc_address(xinput_library, "XInputGetState");
@@ -7328,7 +7318,7 @@ gb_platform_init(gbPlatform *p)
 		}
 	}
 
-	/* Init keys */
+	// Init keys
 	gb_zero_array(p->keys, gb_count_of(p->keys));
 }
 
@@ -7338,7 +7328,7 @@ gb_platform_update(gbPlatform *p)
 {
 	isize i;
 
-	{ /* NOTE(bill): Set window state */
+	{ // NOTE(bill): Set window state
 		RECT window_rect;
 		i32 x, y, w, h;
 
@@ -7359,7 +7349,10 @@ gb_platform_update(gbPlatform *p)
 		p->window.width = w;
 		p->window.height = h;
 
-		p->window.has_focus = (GetFocus() == cast(HWND)p->window.handle);
+		if (GetFocus() == cast(HWND)p->window.handle)
+			p->window.flags |= GB_WINDOW_HAS_FOCUS;
+		else
+			p->window.flags &= ~GB_WINDOW_HAS_FOCUS;
 		{
 			b32 is_minimized = IsIconic(cast(HWND)p->window.handle) != 0;
 			if (is_minimized)
@@ -7369,9 +7362,8 @@ gb_platform_update(gbPlatform *p)
 		}
 	}
 
-	{ /* NOTE(bill): Set mouse pos */
+	{ // NOTE(bill): Set mouse pos
 		POINT mouse_pos;
-
 		GetCursorPos(&mouse_pos);
 		ScreenToClient(cast(HWND)p->window.handle, &mouse_pos);
 
@@ -7381,7 +7373,7 @@ gb_platform_update(gbPlatform *p)
 		p->mouse.y = mouse_pos.y;
 	}
 
-	{ /* NOTE(bill): Set mouse buttons */
+	{ // NOTE(bill): Set mouse buttons
 		DWORD win_button_id[GB_MOUSE_BUTTON_COUNT] = {
 			VK_LBUTTON,
 			VK_MBUTTON,
@@ -7390,11 +7382,11 @@ gb_platform_update(gbPlatform *p)
 			VK_XBUTTON2,
 		};
 		for (i = 0; i < GB_MOUSE_BUTTON_COUNT; i++)
-			p->mouse.buttons[i] = GetAsyncKeyState(win_button_id[i]) < 0;
+			p->mouse.buttons[i] = GetKeyState(win_button_id[i]) < 0;
 	}
 
-	/* NOTE(bill): Set Key states */
-	if (p->window.has_focus) {
+	// NOTE(bill): Set Key states
+	if (p->window.flags & GB_WINDOW_HAS_FOCUS) {
 		#define GB_KEY_STATE_SET(platform, test, state) \
 			if (test) p->keys[platform] |=  state; \
 			else      p->keys[platform] &= ~state
@@ -7525,7 +7517,7 @@ gb_platform_update(gbPlatform *p)
 		p->key_modifiers.shift   = p->keys[GB_KEY_LSHIFT]   | p->keys[GB_KEY_RSHIFT];
 	}
 
-	{ /* NOTE(bill): Set Controller states */
+	{ // NOTE(bill): Set Controller states
 		DWORD max_controller_count = XUSER_MAX_COUNT;
 		if (max_controller_count > gb_count_of(p->game_controllers))
 			max_controller_count = gb_count_of(p->game_controllers);
@@ -7537,18 +7529,17 @@ gb_platform_update(gbPlatform *p)
 
 			XINPUT_STATE controller_state = {0};
 			if (p->xinput.get_state(cast(DWORD)i, &controller_state) != ERROR_SUCCESS) {
-				/* NOTE(bill): The controller is not available */
+				// NOTE(bill): The controller is not available
 				controller->is_connected = false;
 			} else {
-				/* NOTE(bill): This controller is plugged in */
-				/* TODO(bill): See if ControllerState.dwPacketNumber increments too rapidly */
+				// NOTE(bill): This controller is plugged in
+				// TODO(bill): See if ControllerState.dwPacketNumber increments too rapidly
 				XINPUT_GAMEPAD *pad = &controller_state.Gamepad;
 
 				controller->is_connected = true;
 
-				/* TODO(bill): This is a square deadzone, check XInput to
-				 * verify that the deadzone is "round" and do round deadzone processing.
-				 */
+				// TODO(bill): This is a square deadzone, check XInput to
+				// verify that the deadzone is "round" and do round deadzone processing.
 				controller->axes[GB_CONTROLLER_AXIS_LEFT_X]  = gb__process_xinput_stick_value(pad->sThumbLX, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
 				controller->axes[GB_CONTROLLER_AXIS_LEFT_Y]  = gb__process_xinput_stick_value(pad->sThumbLY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
 				controller->axes[GB_CONTROLLER_AXIS_RIGHT_Y] = gb__process_xinput_stick_value(pad->sThumbRX, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
@@ -7563,7 +7554,7 @@ gb_platform_update(gbPlatform *p)
 					controller->is_analog = true;
 				}
 
-				/* NOTE(bill): I know, I just wanted macros */
+				// NOTE(bill): I know, I just wanted macros
 			#define GB__PROCESS_PAD_BUTTON(stick_axis, sign, xinput_button) do { \
 					if (pad->wButtons & xinput_button) { \
 						controller->axes[stick_axis] = sign 1.0f; \
@@ -7600,7 +7591,7 @@ gb_platform_update(gbPlatform *p)
 		}
 	}
 
-	{ /* NOTE(bill): Process pending messages */
+	{ // NOTE(bill): Process pending messages
 		MSG message;
 		for (;;) {
 			BOOL is_okay = PeekMessage(&message, 0, 0, 0, PM_REMOVE);
@@ -7688,12 +7679,12 @@ gb__win32_main_window_callback(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	LRESULT result = 0;
 	gbWindow *window = cast(gbWindow *)GetWindowLongPtr(wnd, GWLP_USERDATA);
 
-	/* TODO(bill): Do more in here? */
+	// TODO(bill): Do more in here?
 
 	switch (msg) {
 	case WM_CLOSE:
 	case WM_DESTROY:
-		window->is_closed = true;
+		window->flags |= GB_WINDOW_IS_CLOSED;
 		break;
 
 	default:
@@ -7705,7 +7696,7 @@ gb__win32_main_window_callback(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam)
 }
 
 
-/* TODO(bill): Make this return errors rathern than silly message boxes */
+// TODO(bill): Make this return errors rathern than silly message boxes
 gbWindow *
 gb_window_init(gbPlatform *p, char const *title, gbVideoMode mode, u32 flags)
 {
@@ -7713,17 +7704,17 @@ gb_window_init(gbPlatform *p, char const *title, gbVideoMode mode, u32 flags)
 	WNDCLASSEXW wc = {gb_size_of(WNDCLASSEXW)};
 	DWORD ex_style, style;
 	RECT wr;
-	char16 title_buffer[256] = {0}; /* TODO(bill): gb_local_persist this? */
+	char16 title_buffer[256] = {0}; // TODO(bill): gb_local_persist this?
 
 	gb_zero_item(window);
 
-	wc.style = CS_HREDRAW | CS_VREDRAW; /* | CS_OWNDC */
+	wc.style = CS_HREDRAW | CS_VREDRAW; // | CS_OWNDC
 	wc.lpfnWndProc   = gb__win32_main_window_callback;
 	wc.hIcon         = LoadIcon(NULL, IDI_WINLOGO);
 	wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
 	wc.hbrBackground = cast(HBRUSH)GetStockObject(WHITE_BRUSH);
 	wc.lpszMenuName  = NULL;
-	wc.lpszClassName = L"gb-win32-wndclass"; /* TODO(bill): Is this enough? */
+	wc.lpszClassName = L"gb-win32-wndclass"; // TODO(bill): Is this enough?
 	wc.hInstance     = GetModuleHandle(NULL);
 	wc.hIconSm       = LoadIcon(NULL, IDI_WINLOGO);
 
@@ -7732,7 +7723,7 @@ gb_window_init(gbPlatform *p, char const *title, gbVideoMode mode, u32 flags)
 		return NULL;
 	}
 
-	if (flags & GB_WINDOW_FULLSCREEN) {
+	if ((flags & GB_WINDOW_FULLSCREEN) && !(flags & GB_WINDOW_BORDERLESS)) {
 		DEVMODEW screen_settings = {gb_size_of(DEVMODEW)};
 		GB_ASSERT(gb_video_mode_is_valid(mode));
 		screen_settings.dmPelsWidth	 = mode.width;
@@ -7767,7 +7758,7 @@ gb_window_init(gbPlatform *p, char const *title, gbVideoMode mode, u32 flags)
 	if (flags & GB_WINDOW_MINIMIZED)    style |=  WS_MINIMIZE;
 
 
-	/* NOTE(bill): Completely ignore the give mode and just change it */
+	// NOTE(bill): Completely ignore the give mode and just change it
 	if (flags & GB_WINDOW_FULLSCREEN_DESKTOP)
 		mode = gb_video_mode_get_desktop();
 
@@ -7933,14 +7924,7 @@ gb_window_hide(gbWindow *w)
 
 
 gb_inline gbVideoMode
-gb_video_mode(i32 width, i32 height)
-{
-	/* NOTE(bill): Oh do I wish C has default arguments for procs :( */
-	return gb_video_mode_bits(width, height, 8);
-}
-
-gb_inline gbVideoMode
-gb_video_mode_bits(i32 width, i32 height, i32 bits_per_pixel)
+gb_video_mode(i32 width, i32 height, i32 bits_per_pixel)
 {
 	gbVideoMode m;
 	m.width = width;
@@ -7949,14 +7933,12 @@ gb_video_mode_bits(i32 width, i32 height, i32 bits_per_pixel)
 	return m;
 }
 
-
-
 gb_inline gbVideoMode
 gb_video_mode_get_desktop(void)
 {
 	DEVMODE win32_mode = {gb_size_of(win32_mode)};
 	EnumDisplaySettings(NULL, ENUM_CURRENT_SETTINGS, &win32_mode);
-	return gb_video_mode_bits(win32_mode.dmPelsWidth, win32_mode.dmPelsHeight, win32_mode.dmBitsPerPel);
+	return gb_video_mode(win32_mode.dmPelsWidth, win32_mode.dmPelsHeight, win32_mode.dmBitsPerPel);
 }
 
 isize
@@ -7967,7 +7949,7 @@ gb_video_mode_get_fullscreen_modes(gbVideoMode *modes, isize max_mode_count)
 	for (count = 0;
 	     count < max_mode_count && count < EnumDisplaySettings(NULL, count, &win32_mode);
 	     count++) {
-		modes[count] = gb_video_mode_bits(win32_mode.dmPelsWidth, win32_mode.dmPelsHeight, win32_mode.dmBitsPerPel);
+		modes[count] = gb_video_mode(win32_mode.dmPelsWidth, win32_mode.dmPelsHeight, win32_mode.dmBitsPerPel);
 	}
 
 	gb_sort_array(modes, count, gb_video_mode_dsc_cmp);
@@ -7975,6 +7957,14 @@ gb_video_mode_get_fullscreen_modes(gbVideoMode *modes, isize max_mode_count)
 }
 
 #endif
+
+
+b32
+gb_window_is_open(gbWindow const *w)
+{
+	return (w->flags & GB_WINDOW_IS_CLOSED) == 0;
+}
+
 
 gb_inline b32
 gb_video_mode_is_valid(gbVideoMode mode)
@@ -8003,7 +7993,7 @@ GB_COMPARE_PROC(gb_video_mode_dsc_cmp)
 	return -gb_video_mode_cmp(a, b);
 }
 
-#endif /* GB_PLATFORM */
+#endif // GB_PLATFORM
 
 
 
@@ -8020,4 +8010,4 @@ GB_COMPARE_PROC(gb_video_mode_dsc_cmp)
 }
 #endif
 
-#endif /* GB_IMPLEMENTATION */
+#endif // GB_IMPLEMENTATION
