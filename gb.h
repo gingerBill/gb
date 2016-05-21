@@ -1,4 +1,4 @@
-/* gb.h - v0.16a - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.17  - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -37,6 +37,7 @@ Conventions used:
 
 
 Version History:
+	0.17  - Instantiated Hash Table
 	0.16a - Minor code layout changes
 	0.16  - New file API and improved platform layer
 	0.15d - Linux Experimental Support (DON'T USE IT PLEASE)
@@ -1344,31 +1345,23 @@ typedef struct gbStringHeader {
 
 #define GB_STRING_HEADER(str) (cast(gbStringHeader *)(str) - 1)
 
-GB_DEF gbString gb_string_make       (gbAllocator a, char const *str);
-GB_DEF gbString gb_string_make_length(gbAllocator a, void const *str, isize num_bytes);
-GB_DEF void     gb_string_free       (gbString str);
-
-GB_DEF gbString gb_string_duplicate(gbAllocator a, gbString const str);
-
-GB_DEF isize gb_string_length         (gbString const str);
-GB_DEF isize gb_string_capacity       (gbString const str);
-GB_DEF isize gb_string_available_space(gbString const str);
-
-GB_DEF void gb_string_clear(gbString str);
-
-GB_DEF gbString gb_string_append       (gbString str, gbString const other);
-GB_DEF gbString gb_string_append_length(gbString str, void const *other, isize num_bytes);
-GB_DEF gbString gb_string_appendc      (gbString str, char const *other);
-
-GB_DEF gbString gb_string_set(gbString str, char const *cstr);
-
-GB_DEF gbString gb_string_make_space_for(gbString str, isize add_len);
-GB_DEF isize gb_string_allocation_size  (gbString const str);
-
-GB_DEF b32 gb_string_are_equal(gbString const lhs, gbString const rhs);
-
-GB_DEF gbString gb_string_trim      (gbString str, char const *cut_set);
-GB_DEF gbString gb_string_trim_space(gbString str); /* Whitespace ` \t\r\n\v\f` */
+GB_DEF gbString gb_string_make           (gbAllocator a, char const *str);
+GB_DEF gbString gb_string_make_length    (gbAllocator a, void const *str, isize num_bytes);
+GB_DEF void     gb_string_free           (gbString str);
+GB_DEF gbString gb_string_duplicate      (gbAllocator a, gbString const str);
+GB_DEF isize    gb_string_length         (gbString const str);
+GB_DEF isize    gb_string_capacity       (gbString const str);
+GB_DEF isize    gb_string_available_space(gbString const str);
+GB_DEF void     gb_string_clear          (gbString str);
+GB_DEF gbString gb_string_append         (gbString str, gbString const other);
+GB_DEF gbString gb_string_append_length  (gbString str, void const *other, isize num_bytes);
+GB_DEF gbString gb_string_appendc        (gbString str, char const *other);
+GB_DEF gbString gb_string_set            (gbString str, char const *cstr);
+GB_DEF gbString gb_string_make_space_for (gbString str, isize add_len);
+GB_DEF isize    gb_string_allocation_size(gbString const str);
+GB_DEF b32      gb_string_are_equal      (gbString const lhs, gbString const rhs);
+GB_DEF gbString gb_string_trim           (gbString str, char const *cut_set);
+GB_DEF gbString gb_string_trim_space     (gbString str); /* Whitespace ` \t\r\n\v\f` */
 
 
 
@@ -1381,8 +1374,6 @@ GB_DEF gbString gb_string_trim_space(gbString str); /* Whitespace ` \t\r\n\v\f` 
 	element.
 
  */
-
-
 
 typedef struct gbBufferHeader {
 	isize count;
@@ -1509,7 +1500,7 @@ GB_STATIC_ASSERT(GB_ARRAY_GROW_FORMULA(0) > 0);
 #define gb_array_capacity(x)  (GB_ARRAY_HEADER(x)->capacity)
 
 /* TODO(bill): Have proper alignment! */
-#define gb_array_init_capacity(x, allocator_, cap) do { \
+#define gb_array_init_reserve(x, allocator_, cap) do { \
 	void **gb__array_ = cast(void **)&(x); \
 	gbArrayHeader *gb__ah = cast(gbArrayHeader *)gb_alloc(allocator_, gb_size_of(gbArrayHeader)+gb_size_of(*(x))*(cap)); \
 	gb__ah->allocator = allocator_; \
@@ -1518,7 +1509,7 @@ GB_STATIC_ASSERT(GB_ARRAY_GROW_FORMULA(0) > 0);
 } while (0)
 
 /* NOTE(bill): Give it an initial default capacity */
-#define gb_array_init(x, allocator) gb_array_init_capacity(x, allocator, GB_ARRAY_GROW_FORMULA(0))
+#define gb_array_init(x, allocator) gb_array_init_reserve(x, allocator, GB_ARRAY_GROW_FORMULA(0))
 
 #define gb_array_free(x) do { \
 	gbArrayHeader *gb__ah = GB_ARRAY_HEADER(x); \
@@ -1583,7 +1574,7 @@ GB_DEF void *gb__array_set_capacity(void *array, isize capacity, isize element_s
 
 /***************************************************************
  *
- * Hashing Functions
+ * Hashing and Checksum Functions
  *
  */
 
@@ -1606,53 +1597,308 @@ GB_EXTERN u32 gb_murmur32_seed(void const *data, isize len, u32 seed);
 GB_EXTERN u64 gb_murmur64_seed(void const *data, isize len, u64 seed);
 
 
-
 /***************************************************************
  *
- * Hash Table - Still experimental!
+ * Instantiated Hash Table
  *
+ * This is an attempt to implement a templated hash table
+ * NOTE(bill): The key is aways a u64 for simplicity and you will _probably_ _never_ need anything bigger.
+ *
+ * Hash table type and function declaration, call: GB_TABLE_DECLARE(PREFIX, NAME, N, VALUE)
+ * Hash table function definitions, call: GB_TABLE_DEFINE(NAME, N, VALUE)
+ *
+ *     PREFIX  - a prefix for function prototypes e.g. extern, static, etc.
+ *     NAME    - Name of the Hash Table
+ *     N       - the name will prefix function names
+ *     VALUE   - the type of the value to be stored
+ *
+ * NOTE(bill): This also allows for a multi-valued keys with the multi_* functions
+ * NOTE(bill): I really wish C had decent metaprogramming capabilities (and no I don't mean C++'s templates either)
  */
 
-/* NOTE(bill): Hash table for POD types with a u64 key
- * The hash table stores an isize for the data. This is because I don't want to macro hell to get this to work
- * With generic data types.
- * TODO(bill): Should the hash table store an isize or a void *? Which is more useful for the user?
- */
 
-typedef struct gbHashTableEntry {
-	u64   key;
-	isize next;
-	isize value;
-} gbHashTableEntry;
+typedef struct gbHashTableFindResult {
+	isize hash_index;
+	isize data_prev;
+	isize entry_index;
+} gbHashTableFindResult;
+#define GB__INVALID_FIND_RESULT {-1, -1, -1}
 
-typedef struct gbHashTable {
-	gbArray(isize)            hashes;
-	gbArray(gbHashTableEntry) entries;
-} gbHashTable;
+#define GB_TABLE(PREFIX, NAME, N, VALUE) \
+	GB_TABLE_DECLARE(PREFIX, NAME, N, VALUE) \
+	GB_TABLE_DEFINE(NAME, N, VALUE) \
+
+#if defined(_MSC_VER)
+#define GB_TABLE_DEFINE(NAME, N, VALUE) \
+	__pragma(warning(push)); \
+	__pragma(warning(disable:4127)); \
+	GB_TABLE_DEFINE_(NAME, N, VALUE); \
+	__pragma(warning(pop));
+#else
+#define GB_TABLE_DEFINE(NAME, N, VALUE) GB_TABLE_DEFINE_(NAME, N, VALUE)
+#endif
+
+#define GB_TABLE_DECLARE(PREFIX, NAME, N, VALUE) \
+typedef struct GB_JOIN2(NAME, Entry) { \
+	u64 key; \
+	isize next; \
+	VALUE value; \
+} GB_JOIN2(NAME, Entry); \
+\
+typedef struct NAME { \
+	gbArray(isize) hashes; \
+	gbArray(GB_JOIN2(NAME, Entry)) entries; \
+} NAME; \
+\
+PREFIX void  GB_JOIN2(N,init)   (NAME *h, gbAllocator a); \
+PREFIX void  GB_JOIN2(N,free)   (NAME *h); \
+PREFIX void  GB_JOIN2(N,clear)  (NAME *h); \
+PREFIX b32   GB_JOIN2(N,has)    (NAME const *h, u64 key); \
+PREFIX VALUE GB_JOIN2(N,get)    (NAME const *h, u64 key, VALUE default_value); \
+PREFIX void  GB_JOIN2(N,set)    (NAME *h, u64 key, VALUE value); \
+PREFIX void  GB_JOIN2(N,remove) (NAME *h, u64 key); \
+PREFIX void  GB_JOIN2(N,reserve)(NAME *h, isize capacity); \
+\
+/* NOTE(bill): multi-valued keys functions */ \
+PREFIX void  GB_JOIN2(N,multi_get)         (NAME const *h, u64 key, VALUE *values, isize count); \
+PREFIX isize GB_JOIN2(N,multi_count)       (NAME const *h, u64 key); \
+PREFIX void  GB_JOIN2(N,multi_insert)      (NAME *h, u64 key, isize value); \
+PREFIX void  GB_JOIN2(N,multi_remove_entry)(NAME *h, GB_JOIN2(NAME, Entry) const *e); \
+PREFIX void  GB_JOIN2(N,multi_remove_all)  (NAME *h, u64 key); \
+\
+PREFIX GB_JOIN2(NAME, Entry) const *GB_JOIN2(N,multi_find_first_entry)(NAME const *h, u64 key); \
+PREFIX GB_JOIN2(NAME, Entry) const *GB_JOIN2(N,multi_find_next_entry) (NAME const *h, GB_JOIN2(NAME, Entry) const *e); \
 
 
-/* TODO(bill): I'm not very sure on the naming of these procedures and if they should be named better. */
-GB_DEF void  gb_hash_table_init   (gbHashTable *h, gbAllocator a);
-GB_DEF void  gb_hash_table_free   (gbHashTable *h);
-GB_DEF void  gb_hash_table_clear  (gbHashTable *h);
-GB_DEF b32   gb_hash_table_has    (gbHashTable const *h, u64 key);
-GB_DEF isize gb_hash_table_get    (gbHashTable const *h, u64 key, isize default_value);
-GB_DEF void  gb_hash_table_set    (gbHashTable *h, u64 key, isize value);
-GB_DEF void  gb_hash_table_remove (gbHashTable *h, u64 key);
-GB_DEF void  gb_hash_table_reserve(gbHashTable *h, isize capacity);
-
-/* NOTE(bill): MultiHashTable (multiple entries with the same key) */
-GB_DEF void  gb_multi_hash_table_get         (gbHashTable const *h, u64 key, isize *values, isize count);
-GB_DEF isize gb_multi_hash_table_count       (gbHashTable const *h, u64 key);
-GB_DEF void  gb_multi_hash_table_insert      (gbHashTable *h, u64 key, isize value);
-GB_DEF void  gb_multi_hash_table_remove_entry(gbHashTable *h, gbHashTableEntry const *e);
-GB_DEF void  gb_multi_hash_table_remove_all  (gbHashTable *h, u64 key);
-
-GB_DEF gbHashTableEntry const *gb_multi_hash_table_find_first_entry(gbHashTable const *h, u64 key);
-GB_DEF gbHashTableEntry const *gb_multi_hash_table_find_next_entry (gbHashTable const *h, gbHashTableEntry const *e);
 
 
-
+#define GB_TABLE_DEFINE_(NAME, N, VALUE) \
+gb_inline void \
+GB_JOIN2(N,init)(NAME *h, gbAllocator a) \
+{ \
+	gb_array_init(h->hashes, a); \
+	gb_array_init(h->entries, a); \
+} \
+gb_inline void \
+GB_JOIN2(N,free)(NAME *h) \
+{ \
+	gb_array_free(&h->hashes); \
+	gb_array_free(&h->entries); \
+} \
+gbHashTableFindResult \
+GB_JOIN2(N,_find_result_from_key)(NAME const *h, u64 key) \
+{ \
+	gbHashTableFindResult fr = GB__INVALID_FIND_RESULT; \
+	if (gb_array_count(h->hashes) == 0) \
+		return fr; \
+	fr.hash_index = key % gb_array_count(h->hashes); \
+	fr.entry_index = h->hashes[fr.hash_index]; \
+	while (fr.entry_index >= 0) { \
+		if (h->entries[fr.entry_index].key == key) \
+			return fr; \
+		fr.data_prev = fr.entry_index; \
+		fr.entry_index = h->entries[fr.entry_index].next; \
+	} \
+	return fr; \
+} \
+gb_inline b32 \
+GB_JOIN2(N,has)(NAME const *h, u64 key) \
+{ \
+	return GB_JOIN2(N,_find_result_from_key)(h, key).entry_index >= 0; \
+} \
+gb_inline VALUE \
+GB_JOIN2(N,get)(NAME const *h, u64 key, VALUE default_value) \
+{ \
+	isize index = GB_JOIN2(N,_find_result_from_key)(h, key).entry_index; \
+	if (index < 0) \
+		return default_value; \
+	return h->entries[index].value; \
+} \
+gb_internal gb_inline isize \
+GB_JOIN2(N,_add_entry)(NAME *h, u64 key) \
+{ \
+	isize i = gb_array_count(h->entries); \
+	GB_JOIN2(NAME,Entry) e = {0}; \
+	e.key = key; \
+	e.next = -1; \
+	gb_array_append(h->entries, e); \
+	return i; \
+} \
+gb_internal gb_inline isize \
+GB_JOIN2(N,_is_full)(NAME *h) \
+{ \
+	f64 const MAXIMUM_LOAD_COEFFICIENT = 0.85; \
+	return gb_array_count(h->entries) >= MAXIMUM_LOAD_COEFFICIENT * gb_array_count(h->hashes); \
+} \
+gb_internal gb_inline void GB_JOIN2(N,_table_grow)(NAME *h); \
+gb_inline void \
+GB_JOIN2(N,multi_insert)(NAME *h, u64 key, VALUE value) \
+{ \
+	gbHashTableFindResult fr; \
+	isize next; \
+	if (gb_array_count(h->hashes) == 0) \
+		GB_JOIN2(N,_table_grow)(h); \
+	fr = GB_JOIN2(N,_find_result_from_key)(h, key); \
+	next = GB_JOIN2(N,_add_entry)(h, key); \
+	if (fr.data_prev < 0) \
+		h->hashes[fr.hash_index] = next; \
+	else \
+		h->entries[fr.data_prev].next = next; \
+	h->entries[next].next = fr.entry_index; \
+	h->entries[next].value = value; \
+	if (GB_JOIN2(N,_is_full)(h)) \
+		GB_JOIN2(N,_table_grow)(h); \
+} \
+gb_inline void \
+GB_JOIN2(N,multi_get)(NAME const *h, u64 key, VALUE *values, isize count) \
+{ \
+	isize i = 0; \
+	GB_JOIN2(NAME,Entry) const *e = GB_JOIN2(N,multi_find_first_entry)(h, key); \
+	while (e && count --> 0) { \
+		values[i++] = e->value; \
+		e = GB_JOIN2(N,multi_find_next_entry)(h, e); \
+	} \
+} \
+gb_inline isize \
+GB_JOIN2(N,multi_count)(NAME const *h, u64 key) \
+{ \
+	isize count = 0; \
+	GB_JOIN2(NAME,Entry) const *e = GB_JOIN2(N,multi_find_first_entry)(h, key); \
+	while (e) { \
+		count++; \
+		e = GB_JOIN2(N,multi_find_next_entry)(h, e); \
+	} \
+	return count; \
+} \
+GB_JOIN2(NAME,Entry) const * \
+GB_JOIN2(N,multi_find_first_entry)(NAME const *h, u64 key) \
+{ \
+	isize index = GB_JOIN2(N,_find_result_from_key)(h, key).entry_index; \
+	if (index < 0) return NULL; \
+	return &h->entries[index]; \
+} \
+GB_JOIN2(NAME,Entry) const * \
+GB_JOIN2(N,multi_find_next_entry)(NAME const *h, GB_JOIN2(NAME,Entry) const *e) \
+{ \
+	if (e) { \
+		isize index = e->next; \
+		while (index >= 0) { \
+			if (h->entries[index].key == e->key) \
+				return &h->entries[index]; \
+			index = h->entries[index].next; \
+		} \
+	} \
+	return NULL; \
+} \
+void \
+GB_JOIN2(N,_erase_find_result)(NAME *h, gbHashTableFindResult fr) \
+{ \
+	if (fr.data_prev < 0) \
+		h->hashes[fr.hash_index] = h->entries[fr.entry_index].next; \
+	else \
+		h->entries[fr.data_prev].next = h->entries[fr.entry_index].next; \
+	gb_array_pop(&h->entries); \
+	if (fr.entry_index != gb_array_count(h->entries)) { \
+		gbHashTableFindResult last; \
+		h->entries[fr.entry_index] = h->entries[gb_array_count(h->entries)]; \
+		last = GB_JOIN2(N,_find_result_from_key)(h, h->entries[fr.entry_index].key); \
+		if (last.data_prev < 0) \
+			h->hashes[last.hash_index] = fr.entry_index; \
+		else \
+			h->entries[last.entry_index].next = fr.entry_index; \
+	} \
+} \
+gb_inline void \
+GB_JOIN2(N,multi_remove_entry)(NAME *h, GB_JOIN2(NAME,Entry) const *e) \
+{ \
+	gbHashTableFindResult fr = GB__INVALID_FIND_RESULT; \
+	if (gb_array_count(h->hashes) && e) { \
+		fr.hash_index  = e->key % gb_array_count(h->hashes); \
+		fr.entry_index = h->hashes[fr.hash_index]; \
+		while (fr.entry_index >= 0) { \
+			if (&h->entries[fr.entry_index] == e) \
+				break; \
+			fr.data_prev = fr.entry_index; \
+			fr.entry_index = h->entries[fr.entry_index].next; \
+		} \
+	} \
+	if (fr.entry_index >= 0) \
+		GB_JOIN2(N,_erase_find_result)(h, fr); \
+} \
+gb_inline void \
+GB_JOIN2(N,multi_remove_all)(NAME *h, u64 key) \
+{ \
+	while (GB_JOIN2(N,has)(h, key)) \
+		GB_JOIN2(N,remove)(h, key); \
+} \
+void \
+GB_JOIN2(N,_rehash)(NAME *h, isize new_capacity) \
+{ \
+	NAME nh, empty; \
+	isize i; \
+	GB_JOIN2(N,init)(&nh, gb_array_allocator(h->hashes)); \
+	gb_array_resize(nh.hashes, new_capacity); \
+	gb_array_reserve(nh.entries, gb_array_count(h->entries)); \
+	for (i = 0; i < new_capacity; i++) \
+		nh.hashes[i] = -1; \
+	for (i = 0; i < gb_array_count(h->entries); i++) { \
+		GB_JOIN2(NAME,Entry) *e = &h->entries[i]; \
+		GB_JOIN2(N,multi_insert)(&nh, e->key, e->value); \
+	} \
+	GB_JOIN2(N,init)(&empty, gb_array_allocator(h->hashes)); \
+	GB_JOIN2(N,free)(h); \
+	gb_memcopy(&nh, &h, gb_size_of(NAME)); \
+	gb_memcopy(&empty, &nh, gb_size_of(NAME)); \
+} \
+gb_internal gb_inline void \
+GB_JOIN2(N,_table_grow)(NAME *h) \
+{ \
+	isize new_capacity = GB_ARRAY_GROW_FORMULA(gb_array_count(h->entries)); \
+	GB_JOIN2(N,_rehash)(h, new_capacity); \
+} \
+isize \
+GB_JOIN2(N,_find_or_make_entry)(NAME *h, u64 key) \
+{ \
+	isize index; \
+	gbHashTableFindResult fr = GB_JOIN2(N,_find_result_from_key)(h, key); \
+	if (fr.entry_index >= 0) \
+		return fr.entry_index; \
+	index = GB_JOIN2(N,_add_entry)(h, key); \
+	if (fr.data_prev < 0) \
+		h->hashes[fr.hash_index] = index; \
+	else \
+		h->entries[fr.data_prev].next = index; \
+	return index; \
+} \
+gb_inline void \
+GB_JOIN2(N,set)(NAME *h, u64 key, isize value) \
+{ \
+	isize i; \
+	if (gb_array_count(h->hashes) == 0) \
+		GB_JOIN2(N,_table_grow)(h); \
+	i = GB_JOIN2(N,_find_or_make_entry)(h, key); \
+	h->entries[i].value = value; \
+	if (GB_JOIN2(N,_is_full)(h)) \
+		GB_JOIN2(N,_table_grow)(h); \
+} \
+gb_inline void \
+GB_JOIN2(N,remove)(NAME *h, u64 key) \
+{ \
+	gbHashTableFindResult fr = GB_JOIN2(N,_find_result_from_key)(h, key); \
+	if (fr.entry_index >= 0) \
+		GB_JOIN2(N,_erase_find_result)(h, fr); \
+} \
+gb_inline void \
+GB_JOIN2(N,reserve)(NAME *h, isize capacity) \
+{ \
+	GB_JOIN2(N,_rehash)(h, capacity); \
+} \
+gb_inline void \
+GB_JOIN2(N,clear)(NAME *h) \
+{ \
+	gb_array_clear(&h->hashes); \
+	gb_array_clear(&h->entries); \
+} \
 
 
 /***************************************************************
@@ -1686,14 +1932,6 @@ typedef enum gbFileError {
 	GB_FILE_ERR_TRUNCATION_FAILURE
 } gbFileError;
 
-typedef enum gbFileStandardType {
-	GB_FILE_STANDARD_INPUT,
-	GB_FILE_STANDARD_OUTPUT,
-	GB_FILE_STANDARD_ERROR
-} gbFileStandardType;
-
-typedef u64 gbFileTime;
-
 typedef union gbFileDescriptor {
 	void *  p;
 	intptr  i;
@@ -1720,7 +1958,7 @@ struct gbFileOperations {
 	gbFileCloseProc *close;
 };
 
-extern gbFileOperations const GB_FILE_OPERATIONS_DEFAULT;
+extern gbFileOperations const GB_DEFAULT_FILE_OPERATIONS;
 
 /*
 typedef struct gbDirInfo {
@@ -1729,6 +1967,7 @@ typedef struct gbDirInfo {
 	isize buf_pos;
 } gbDirInfo;
 */
+typedef u64 gbFileTime;
 
 typedef struct gbFile {
 	gbFileDescriptor fd;
@@ -1738,14 +1977,13 @@ typedef struct gbFile {
 	gbFileTime last_write_time;
 } gbFile;
 
-typedef struct gbFileContents {
-	void *data;
-	isize size;
-} gbFileContents;
-
+typedef enum gbFileStandardType {
+	GB_FILE_STANDARD_INPUT,
+	GB_FILE_STANDARD_OUTPUT,
+	GB_FILE_STANDARD_ERROR
+} gbFileStandardType;
 
 GB_DEF gbFile gb_file_get_std(gbFileStandardType std);
-
 
 GB_DEF gbFileError gb_file_create        (gbFile *file, char const *filename, ...) GB_PRINTF_ARGS(2);
 GB_DEF gbFileError gb_file_open          (gbFile *file, char const *filename, ...) GB_PRINTF_ARGS(2);
@@ -1770,15 +2008,22 @@ GB_DEF b32         gb_file_has_changed   (gbFile *file); /* NOTE(bill): Changed 
 
  */
 
+typedef struct gbFileContents {
+	gbAllocator allocator;
+	void *data;
+	isize size;
+} gbFileContents;
+
+
 GB_DEF gbFileContents gb_file_read_contents(gbAllocator a, b32 zero_terminate, char const *filepath, ...) GB_PRINTF_ARGS(3);
+GB_DEF void           gb_file_free_contents(gbFileContents *fc);
+
 
 /* TODO(bill): Should these have different na,es as they do not take in a gbFile * ??? */
-GB_DEF b32        gb_file_is_exist       (char const *filepath);
-GB_DEF b32        gb_file_is_not_exist   (char const *filepath);
+GB_DEF b32        gb_file_exists         (char const *filepath);
 GB_DEF gbFileTime gb_file_last_write_time(char const *filepath, ...) GB_PRINTF_ARGS(1);
 GB_DEF b32        gb_file_copy           (char const *existing_filename, char const *new_filename, b32 fail_if_exists);
 GB_DEF b32        gb_file_move           (char const *existing_filename, char const *new_filename);
-
 
 
 #ifndef GB_PATH_SEPARATOR
@@ -1812,8 +2057,8 @@ GB_DEF isize gb_printf_err_va (char const *fmt, va_list va);
 GB_DEF isize gb_fprintf       (gbFile *f, char const *fmt, ...) GB_PRINTF_ARGS(2);
 GB_DEF isize gb_fprintf_va    (gbFile *f, char const *fmt, va_list va);
 
-GB_DEF char *gb_sprintf    (char const *fmt, ...) GB_PRINTF_ARGS(1); /* NOTE(bill): A locally persisting buffer is used internally */
-GB_DEF char *gb_sprintf_va (char const *fmt, va_list va);            /* NOTE(bill): A locally persisting buffer is used internally */
+GB_DEF char *gb_bprintf    (char const *fmt, ...) GB_PRINTF_ARGS(1); /* NOTE(bill): A locally persisting buffer is used internally */
+GB_DEF char *gb_bprintf_va (char const *fmt, va_list va);            /* NOTE(bill): A locally persisting buffer is used internally */
 GB_DEF isize gb_snprintf   (char *str, isize n, char const *fmt, ...) GB_PRINTF_ARGS(3);
 GB_DEF isize gb_snprintf_va(char *str, isize n, char const *fmt, va_list va);
 
@@ -1940,12 +2185,14 @@ typedef enum gbWindowFlag {
 	GB_WINDOW_SOFTWARE           = GB_BIT(0),
 	GB_WINDOW_OPENGL             = GB_BIT(1),
 	GB_WINDOW_FULLSCREEN         = GB_BIT(2),
-	GB_WINDOW_FULLSCREEN_DESKTOP = GB_BIT(3),
 	GB_WINDOW_HIDDEN             = GB_BIT(4),
 	GB_WINDOW_BORDERLESS         = GB_BIT(5),
 	GB_WINDOW_RESIZABLE          = GB_BIT(6),
 	GB_WINDOW_MINIMIZED          = GB_BIT(7),
-	GB_WINDOW_MAXIMIZED          = GB_BIT(8)
+	GB_WINDOW_MAXIMIZED          = GB_BIT(8),
+
+	GB_WINDOW_FULLSCREEN_DESKTOP = GB_WINDOW_FULLSCREEN | GB_WINDOW_BORDERLESS
+
 } gbWindowFlag;
 
 #if defined(_MSC_VER)
@@ -2227,7 +2474,7 @@ GB_DEF gbWindow *gb_window_init                (gbPlatform *p, char const *title
 GB_DEF void      gb_window_destroy             (gbWindow *w);
 GB_DEF void      gb_window_set_position        (gbWindow *w, i32 x, i32 y);
 GB_DEF void      gb_window_set_title           (gbWindow *w, char const *title, ...) GB_PRINTF_ARGS(2);
-GB_DEF void      gb_window_toggle_fullscreen   (gbWindow *w);
+GB_DEF void      gb_window_toggle_fullscreen   (gbWindow *w, b32 fullscreen_desktop);
 GB_DEF void      gb_window_make_context_current(gbWindow *w);
 GB_DEF void      gb_window_show                (gbWindow *w);
 GB_DEF void      gb_window_hide                (gbWindow *w);
@@ -2237,9 +2484,9 @@ GB_DEF gbVideoMode gb_video_mode                     (i32 width, i32 height);
 GB_DEF gbVideoMode gb_video_mode_bits                (i32 width, i32 height, i32 bits_per_pixel);
 GB_DEF b32         gb_video_mode_is_valid            (gbVideoMode mode);
 GB_DEF gbVideoMode gb_video_mode_get_desktop         (void);
-GB_DEF void        gb_video_mode_get_fullscreen_modes(gbVideoMode *modes, isize max_mode_count);
-GB_DEF GB_COMPARE_PROC(gb_video_mode_cmp);     /* NOTE(bill): Sort smallest to largest */
-GB_DEF GB_COMPARE_PROC(gb_video_mode_inv_cmp); /* NOTE(bill): Sort largest to smallest */
+GB_DEF isize       gb_video_mode_get_fullscreen_modes(gbVideoMode *modes, isize max_mode_count); /* NOTE(bill): returns mode count */
+GB_DEF GB_COMPARE_PROC(gb_video_mode_cmp);     /* NOTE(bill): Sort smallest to largest (Ascending) */
+GB_DEF GB_COMPARE_PROC(gb_video_mode_dsc_cmp); /* NOTE(bill): Sort largest to smallest (Descending) */
 
 #endif /* GB_PLATFORM */
 
@@ -2438,9 +2685,9 @@ gb_memset(void *data, u8 c, isize size)
 	u8 *dp8 = cast(u8 *)data;
 	u32 c32 = (c | (c << 8) | (c << 16) | (c << 24));
 
-	/* The destination pointer needs to be aligned on a 4-byte boundary to
-	* execute a 32-bit set. Set first bytes manually if needed until it is
-	* aligned. */
+	/* NOTE(bill): The destination pointer needs to be aligned on a 4-byte
+	* boundary to execute a 32-bit set. Set first bytes manually if needed
+	* until it is aligned. */
 	while (cast(intptr)dp8 & 0x3) {
 		if (size--)
 			*dp8++ = c;
@@ -2540,6 +2787,11 @@ gb_inline void *
 gb_default_resize_align(gbAllocator a, void *old_memory, isize old_size, isize new_size, isize alignment)
 {
 	if (!old_memory) return gb_alloc_align(a, new_size, alignment);
+
+	if (new_size == 0) {
+		gb_free(a, old_memory);
+		return NULL;
+	}
 
 	if (new_size < old_size)
 		new_size = old_size;
@@ -3290,7 +3542,7 @@ gb_thread_set_name(gbThread *t, char const *name)
 		}
 
 #elif defined(GB_SYSTEM_WINDOWS) && !defined(_MSC_VER)
-	/* TODO(bill): Set thread name for GCC/Clang on windows */
+	/* IMPORTANT TODO(bill): Set thread name for GCC/Clang on windows */
 	return;
 #elif defined(GB_SYSTEM_OSX)
 	/* TODO(bill): Test if this works */
@@ -3376,9 +3628,7 @@ gb_vm_alloc(void *addr, isize size)
 {
 	gbVirtualMemory vm;
 	GB_ASSERT(size > 0);
-	vm.data = VirtualAlloc(addr, size,
-	                       0x00001000 | 0x00002000, /* MEM_COMMIT | MEM_RESERVE */
-	                       0x04 /* PAGE_READWRITE */);
+	vm.data = VirtualAlloc(addr, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 	vm.size = size;
 	return vm;
 }
@@ -3386,7 +3636,7 @@ gb_vm_alloc(void *addr, isize size)
 gb_inline void
 gb_vm_free(gbVirtualMemory vm)
 {
-	VirtualFree(vm.data, vm.size > 0 ? vm.size : 0, 0x8000);
+	VirtualFree(vm.data, vm.size > 0 ? vm.size : 0, MEM_RELEASE);
 }
 
 gb_inline gbVirtualMemory
@@ -3410,9 +3660,7 @@ gb_vm_trim(gbVirtualMemory vm, isize lead_size, isize size)
 gb_inline b32
 gb_vm_purge(gbVirtualMemory vm)
 {
-	VirtualAlloc(vm.data, vm.size,
-	             0x00080000, /* MEM_RESET */
-	             0x04 /* PAGE_READWRITE */);
+	VirtualAlloc(vm.data, vm.size, MEM_RESET, PAGE_READWRITE);
 	/* NOTE(bill): Can this really fail? */
 	return true;
 }
@@ -5457,6 +5705,8 @@ gb_murmur64_seed(void const *data_, isize len, u64 seed)
 
 
 
+
+
 /***************************************************************
  *
  * Hash Table
@@ -5464,279 +5714,6 @@ gb_murmur64_seed(void const *data_, isize len, u64 seed)
  */
 
 
-gb_inline void
-gb_hash_table_init(gbHashTable *h, gbAllocator a)
-{
-	gb_array_init(h->hashes, a);
-	gb_array_init(h->entries, a);
-}
-
-gb_inline void
-gb_hash_table_free(gbHashTable *h)
-{
-	gb_array_free(&h->hashes);
-	gb_array_free(&h->entries);
-}
-
-typedef struct gbprivFindResult {
-	isize hash_index;
-	isize data_prev;
-	isize entry_index;
-} gbprivFindResult;
-
-gbprivFindResult const GB__INVALID_FIND_RESULT = {-1, -1, -1};
-
-gbprivFindResult
-gb__find_result_from_key(gbHashTable const *h, u64 key)
-{
-	gbprivFindResult fr = GB__INVALID_FIND_RESULT;
-
-	if (gb_array_count(h->hashes) == 0)
-		return fr;
-
-	fr.hash_index = key % gb_array_count(h->hashes);
-	fr.entry_index = h->hashes[fr.hash_index];
-	while (fr.entry_index >= 0) {
-		if (h->entries[fr.entry_index].key == key)
-			return fr;
-		fr.data_prev = fr.entry_index;
-		fr.entry_index = h->entries[fr.entry_index].next;
-	}
-
-	return fr;
-}
-
-gb_inline b32
-gb_hash_table_has(gbHashTable const *h, u64 key)
-{
-	return gb__find_result_from_key(h, key).entry_index >= 0;
-}
-
-gb_inline isize
-gb_hash_table_get(gbHashTable const *h, u64 key, isize default_value)
-{
-	isize index = gb__find_result_from_key(h, key).entry_index;
-
-	if (index < 0)
-		return default_value;
-	return h->entries[index].value;
-}
-
-gb_internal gb_inline isize
-gb__hash_table_add_entry(gbHashTable *h, u64 key)
-{
-	isize i = gb_array_count(h->entries);
-	gbHashTableEntry e = {0};
-	e.key = key;
-	e.next = -1;
-	gb_array_append(h->entries, e);
-	return i;
-}
-
-gb_internal gb_inline isize
-gb__hash_table_is_full(gbHashTable *h)
-{
-	f64 const MAXIMUM_LOAD_COEFFICIENT = 0.75;
-	return gb_array_count(h->entries) >= MAXIMUM_LOAD_COEFFICIENT * gb_array_count(h->hashes);
-}
-
-gb_internal gb_inline void gb__hash_table_grow(gbHashTable *h);
-
-gb_inline void
-gb_multi_hash_table_insert(gbHashTable *h, u64 key, isize value)
-{
-	gbprivFindResult fr;
-	isize next;
-	if (gb_array_count(h->hashes) == 0)
-		gb__hash_table_grow(h);
-
-	fr = gb__find_result_from_key(h, key);
-	next = gb__hash_table_add_entry(h, key);
-
-	if (fr.data_prev < 0)
-		h->hashes[fr.hash_index] = next;
-	else
-		h->entries[fr.data_prev].next = next;
-
-	h->entries[next].next = fr.entry_index;
-	h->entries[next].value = value;
-
-	if (gb__hash_table_is_full(h))
-		gb__hash_table_grow(h);
-}
-
-gb_inline void
-gb_multi_hash_table_get(gbHashTable const *h, u64 key, isize *values, isize count)
-{
-	isize i = 0;
-	gbHashTableEntry const *e = gb_multi_hash_table_find_first_entry(h, key);
-	while (e && count --> 0) {
-		values[i++] = e->value;
-		e = gb_multi_hash_table_find_next_entry(h, e);
-	}
-}
-
-gb_inline isize
-gb_multi_hash_table_count(gbHashTable const *h, u64 key)
-{
-	isize count = 0;
-	gbHashTableEntry const *e = gb_multi_hash_table_find_first_entry(h, key);
-	while (e) {
-		count++;
-		e = gb_multi_hash_table_find_next_entry(h, e);
-	}
-	return count;
-}
-
-gbHashTableEntry const *
-gb_multi_hash_table_find_first_entry(gbHashTable const *h, u64 key)
-{
-	isize index = gb__find_result_from_key(h, key).entry_index;
-	if (index < 0) return NULL;
-	return &h->entries[index];
-}
-
-gbHashTableEntry const *
-gb_multi_hash_table_find_next_entry(gbHashTable const *h, gbHashTableEntry const *e)
-{
-	if (e) {
-		isize index = e->next;
-		while (index >= 0) {
-			if (h->entries[index].key == e->key)
-				return &h->entries[index];
-			index = h->entries[index].next;
-		}
-	}
-	return NULL;
-}
-
-void
-gb__hash_table_erase_find_result(gbHashTable *h, gbprivFindResult fr)
-{
-	if (fr.data_prev < 0)
-		h->hashes[fr.hash_index] = h->entries[fr.entry_index].next;
-	else
-		h->entries[fr.data_prev].next = h->entries[fr.entry_index].next;
-
-	gb_array_pop(&h->entries);
-
-	if (fr.entry_index != gb_array_count(h->entries)) {
-		gbprivFindResult last;
-		h->entries[fr.entry_index] = h->entries[gb_array_count(h->entries)];
-		last = gb__find_result_from_key(h, h->entries[fr.entry_index].key);
-		if (last.data_prev < 0)
-			h->hashes[last.hash_index] = fr.entry_index;
-		else
-			h->entries[last.entry_index].next = fr.entry_index;
-	}
-}
-
-gb_inline void
-gb_multi_hash_table_remove_entry(gbHashTable *h, gbHashTableEntry const *e)
-{
-	gbprivFindResult fr = GB__INVALID_FIND_RESULT;
-
-	if (gb_array_count(h->hashes) && e) {
-		fr.hash_index  = e->key % gb_array_count(h->hashes);
-		fr.entry_index = h->hashes[fr.hash_index];
-		while (fr.entry_index >= 0) {
-			if (&h->entries[fr.entry_index] == e)
-				break;
-			fr.data_prev = fr.entry_index;
-			fr.entry_index = h->entries[fr.entry_index].next;
-		}
-	}
-
-	if (fr.entry_index >= 0)
-		gb__hash_table_erase_find_result(h, fr);
-}
-
-gb_inline void
-gb_multi_hash_table_remove_all(gbHashTable *h, u64 key)
-{
-	while (gb_hash_table_has(h, key))
-		gb_hash_table_remove(h, key);
-}
-
-void
-gb__rehash(gbHashTable *h, isize new_capacity)
-{
-	gbHashTable nh, empty;
-	isize i;
-
-	gb_hash_table_init(&nh, gb_array_allocator(h->hashes));
-	gb_array_resize(nh.hashes, new_capacity);
-	gb_array_reserve(nh.entries, gb_array_count(h->entries));
-
-	for (i = 0; i < new_capacity; i++)
-		nh.hashes[i] = -1;
-
-	for (i = 0; i < gb_array_count(h->entries); i++) {
-		gbHashTableEntry *e = &h->entries[i];
-		gb_multi_hash_table_insert(&nh, e->key, e->value);
-	}
-
-	gb_hash_table_init(&empty, gb_array_allocator(h->hashes));
-	gb_hash_table_free(h);
-
-	gb_memcopy(&nh, &h, gb_size_of(gbHashTable));
-	gb_memcopy(&empty, &nh, gb_size_of(gbHashTable));
-}
-
-gb_internal gb_inline void
-gb__hash_table_grow(gbHashTable *h)
-{
-	isize new_capacity = GB_ARRAY_GROW_FORMULA(gb_array_count(h->entries));
-	gb__rehash(h, new_capacity);
-}
-
-isize
-gb__find_or_make_entry(gbHashTable *h, u64 key)
-{
-	isize index;
-	gbprivFindResult fr = gb__find_result_from_key(h, key);
-	if (fr.entry_index >= 0)
-		return fr.entry_index;
-	index = gb__hash_table_add_entry(h, key);
-	if (fr.data_prev < 0)
-		h->hashes[fr.hash_index] = index;
-	else
-		h->entries[fr.data_prev].next = index;
-	return index;
-}
-
-gb_inline void
-gb_hash_table_set(gbHashTable *h, u64 key, isize value)
-{
-	isize i;
-	if (gb_array_count(h->hashes) == 0)
-		gb__hash_table_grow(h);
-	i = gb__find_or_make_entry(h, key);
-	h->entries[i].value = value;
-	if (gb__hash_table_is_full(h))
-		gb__hash_table_grow(h);
-}
-
-gb_inline void
-gb_hash_table_remove(gbHashTable *h, u64 key)
-{
-	gbprivFindResult fr = gb__find_result_from_key(h, key);
-	if (fr.entry_index >= 0)
-		gb__hash_table_erase_find_result(h, fr);
-}
-
-gb_inline void
-gb_hash_table_reserve(gbHashTable *h, isize capacity)
-{
-	gb__rehash(h, capacity);
-}
-
-gb_inline void
-gb_hash_table_clear(gbHashTable *h)
-{
-	gb_array_clear(&h->hashes);
-	gb_array_clear(&h->entries);
-}
 
 
 
@@ -5798,7 +5775,7 @@ GB_FILE_CLOSE_PROC(gb__win32_file_close)
 	CloseHandle(fd.p);
 }
 
-gbFileOperations const GB_FILE_OPERATIONS_DEFAULT = {
+gbFileOperations const GB_DEFAULT_FILE_OPERATIONS = {
 	gb__win32_file_read,
 	gb__win32_file_write,
 	gb__win32_file_seek,
@@ -5863,7 +5840,7 @@ GB_FILE_OPEN_PROC(gb__win32_file_open)
 	}
 
 	fd->p = handle;
-	*ops = &GB_FILE_OPERATIONS_DEFAULT;
+	*ops = &GB_DEFAULT_FILE_OPERATIONS;
 	return GB_FILE_ERR_NONE;
 }
 
@@ -5904,7 +5881,7 @@ GB_FILE_CLOSE_PROC(gb__posix_file_close)
 	close(fd.i);
 }
 
-gbFileOperations const GB_FILE_OPERATIONS_DEFAULT = {
+gbFileOperations const GB_DEFAULT_FILE_OPERATIONS = {
 	gb__posix_file_read,
 	gb__posix_file_write,
 	gb__posix_file_seek,
@@ -5917,7 +5894,7 @@ gbFileOperations const GB_FILE_OPERATIONS_DEFAULT = {
 
 GB_FILE_OPEN_PROC(gb__posix_file_open)
 {
-	int os_mode;
+	i32 os_mode;
 	switch (mode & (GB_FILE_READ | GB_FILE_WRITE | GB_FILE_APPEND | GB_FILE_RW)) {
 	case GB_FILE_READ:
 		os_mode = O_RDONLY;
@@ -5948,7 +5925,7 @@ GB_FILE_OPEN_PROC(gb__posix_file_open)
 		return GB_FILE_ERR_INVALID;
 	}
 
-	*ops = &GB_FILE_OPERATIONS_DEFAULT;
+	*ops = &GB_DEFAULT_FILE_OPERATIONS;
 	return GB_FILE_ERR_NONE;
 }
 
@@ -5998,7 +5975,7 @@ gb_file_close(gbFile *f)
 	if (f->fd.p == INVALID_HANDLE_VALUE)
 		return GB_FILE_ERR_INVALID;
 
-	if (!f->ops) f->ops = &GB_FILE_OPERATIONS_DEFAULT;
+	if (!f->ops) f->ops = &GB_DEFAULT_FILE_OPERATIONS;
 	f->ops->close(f->fd);
 
 	return GB_FILE_ERR_NONE;
@@ -6007,14 +5984,14 @@ gb_file_close(gbFile *f)
 gb_inline b32
 gb_file_read_at_check(gbFile *f, void *buffer, isize size, i64 offset, isize *bytes_read)
 {
-	if (!f->ops) f->ops = &GB_FILE_OPERATIONS_DEFAULT;
+	if (!f->ops) f->ops = &GB_DEFAULT_FILE_OPERATIONS;
 	return f->ops->read_at(f->fd, buffer, size, offset, bytes_read);
 }
 
 gb_inline b32
 gb_file_write_at_check(gbFile *f, void const *buffer, isize size, i64 offset, isize *bytes_written)
 {
-	if (!f->ops) f->ops = &GB_FILE_OPERATIONS_DEFAULT;
+	if (!f->ops) f->ops = &GB_DEFAULT_FILE_OPERATIONS;
 	return f->ops->write_at(f->fd, buffer, size, offset, bytes_written);
 }
 
@@ -6035,7 +6012,7 @@ gb_inline i64
 gb_file_seek(gbFile *f, i64 offset, gbSeekWhence whence)
 {
 	i64 new_offset = 0;
-	if (!f->ops) f->ops = &GB_FILE_OPERATIONS_DEFAULT;
+	if (!f->ops) f->ops = &GB_DEFAULT_FILE_OPERATIONS;
 	f->ops->seek(f->fd, offset, whence, &new_offset);
 	return new_offset;
 }
@@ -6044,8 +6021,6 @@ gb_inline i64 gb_file_tell (gbFile *f) { return gb_file_seek(f, 0, GB_SEEK_CURRE
 gb_inline b32 gb_file_read (gbFile *f, void *buffer, isize size)       { return gb_file_read_at(f, buffer, size, gb_file_tell(f)); }
 gb_inline b32 gb_file_write(gbFile *f, void const *buffer, isize size) { return gb_file_write_at(f, buffer, size, gb_file_tell(f)); }
 
-
-gb_inline b32 gb_file_is_not_exist(char const *name) { return !gb_file_is_exist(name); }
 
 gbFileError
 gb_file_create(gbFile *f, char const *filename, ...)
@@ -6105,7 +6080,7 @@ gb_inline gbFile
 gb_file_get_std(gbFileStandardType std)
 {
 	gbFile file = {0};
-	file.ops = &GB_FILE_OPERATIONS_DEFAULT;
+	file.ops = &GB_DEFAULT_FILE_OPERATIONS;
 	switch (std) {
 	case GB_FILE_STANDARD_INPUT:  file.fd.p = GetStdHandle(STD_INPUT_HANDLE);  break;
 	case GB_FILE_STANDARD_OUTPUT: file.fd.p = GetStdHandle(STD_OUTPUT_HANDLE); break;
@@ -6115,9 +6090,6 @@ gb_file_get_std(gbFileStandardType std)
 	return file;
 }
 
-
-
-
 gb_inline i64
 gb_file_size(gbFile *f)
 {
@@ -6126,7 +6098,7 @@ gb_file_size(gbFile *f)
 	return size.QuadPart;
 }
 
-gb_inline gbFileError
+gbFileError
 gb_file_truncate(gbFile *f, i64 size)
 {
 	gbFileError err = GB_FILE_ERR_NONE;
@@ -6140,7 +6112,7 @@ gb_file_truncate(gbFile *f, i64 size)
 
 
 b32
-gb_file_is_exist(char const *name)
+gb_file_exists(char const *name)
 {
 	WIN32_FIND_DATA data;
 	HANDLE handle = FindFirstFile(name, &data);
@@ -6186,7 +6158,7 @@ gb_file_truncate(gbFile *f, i64 size)
 }
 
 b32
-gb_file_is_exist(char const *name)
+gb_file_exists(char const *name)
 {
 	return access(name, F_OK) != -1;
 }
@@ -6205,7 +6177,7 @@ gb_file_last_write_time(char const *filepath, ...)
 	va_list va;
 	va_start(va, filepath);
 
-	if (GetFileAttributesExA(gb_sprintf_va(filepath, va), GetFileExInfoStandard, &data))
+	if (GetFileAttributesExA(gb_bprintf_va(filepath, va), GetFileExInfoStandard, &data))
 		last_write_time = data.ftLastWriteTime;
 
 	va_end(va);
@@ -6240,7 +6212,7 @@ gb_file_last_write_time(char const *filepath, ...)
 	struct stat file_stat;
 	va_list va;
 	va_start(va, filepath);
-	if (stat(gb_sprintf_va(filepath, va), &file_stat)) {
+	if (stat(gb_bprintf_va(filepath, va), &file_stat)) {
 		result = file_stat.st_mtime;
 	}
 
@@ -6292,10 +6264,12 @@ gb_file_read_contents(gbAllocator a, b32 zero_terminate, char const *filepath, .
 	char *path;
 	va_list va;
 	va_start(va, filepath);
-	path = gb_sprintf_va(filepath, va);
+	path = gb_bprintf_va(filepath, va);
 	va_end(va);
 
-	if (gb_file_open(&file, "%s", path)) {
+	result.allocator = a;
+
+	if (gb_file_open(&file, "%s", path) == GB_FILE_ERR_NONE) {
 		i64 file_size = gb_file_size(&file);
 		if (file_size > 0) {
 			result.data = gb_alloc(a, zero_terminate ? file_size+1 : file_size);
@@ -6310,6 +6284,15 @@ gb_file_read_contents(gbAllocator a, b32 zero_terminate, char const *filepath, .
 	}
 
 	return result;
+}
+
+void
+gb_file_free_contents(gbFileContents *fc)
+{
+	GB_ASSERT_NOT_NULL(fc->data);
+	gb_free(fc->allocator, fc->data);
+	fc->data = NULL;
+	fc->size = 0;
 }
 
 
@@ -6339,9 +6322,9 @@ gb_path_is_root(char const *path)
 	b32 result = false;
 	GB_ASSERT_NOT_NULL(path);
 #if defined(GB_SYSTEM_WINDOWS)
-	result = gb_path_is_absolute(path) && gb_strlen(path) == 3;
+	result = gb_path_is_absolute(path) && (gb_strlen(path) == 3);
 #else
-	result = gb_path_is_absolute(path) && gb_strlen(path) == 1;
+	result = gb_path_is_absolute(path) && (gb_strlen(path) == 1);
 #endif
 	return result;
 }
@@ -6407,12 +6390,12 @@ gb_fprintf(struct gbFile *f, char const *fmt, ...)
 }
 
 char *
-gb_sprintf(char const *fmt, ...)
+gb_bprintf(char const *fmt, ...)
 {
 	va_list va;
 	char *str;
 	va_start(va, fmt);
-	str = gb_sprintf_va(fmt, va);
+	str = gb_bprintf_va(fmt, va);
 	va_end(va);
 	return str;
 }
@@ -6455,7 +6438,7 @@ gb_fprintf_va(struct gbFile *f, char const *fmt, va_list va)
 
 
 gb_inline char *
-gb_sprintf_va(char const *fmt, va_list va)
+gb_bprintf_va(char const *fmt, va_list va)
 {
 	gb_local_persist char buffer[4096];
 	gb_snprintf_va(buffer, gb_size_of(buffer), fmt, va);
@@ -7773,7 +7756,7 @@ gb_window_init(gbPlatform *p, char const *title, gbVideoMode mode, u32 flags)
 
 	ex_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
 	style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_VISIBLE | WS_THICKFRAME | WS_SYSMENU | WS_MAXIMIZEBOX | WS_MINIMIZEBOX;
-	if (flags & (GB_WINDOW_BORDERLESS | GB_WINDOW_FULLSCREEN_DESKTOP))
+	if (flags & (GB_WINDOW_BORDERLESS))
 		style |= WS_POPUP;
 	else
 		style |= WS_OVERLAPPEDWINDOW | WS_CAPTION;
@@ -7784,9 +7767,9 @@ gb_window_init(gbPlatform *p, char const *title, gbVideoMode mode, u32 flags)
 	if (flags & GB_WINDOW_MINIMIZED)    style |=  WS_MINIMIZE;
 
 
+	/* NOTE(bill): Completely ignore the give mode and just change it */
 	if (flags & GB_WINDOW_FULLSCREEN_DESKTOP)
 		mode = gb_video_mode_get_desktop();
-
 
 	wr.left   = 0;
 	wr.top    = 0;
@@ -7857,7 +7840,6 @@ gb_window_destroy(gbWindow *w)
 	gb_zero_item(w);
 }
 
-
 void
 gb_window_set_position(gbWindow *w, i32 x, i32 y)
 {
@@ -7878,7 +7860,7 @@ gb_window_set_title(gbWindow *w, char const *title, ...)
 	LPCWSTR wstr;
 	va_list va;
 	va_start(va, title);
-	str = gb_sprintf_va(title, va);
+	str = gb_bprintf_va(title, va);
 	va_end(va);
 
 	wstr = cast(LPCWSTR)gb_utf8_to_ucs2(buffer, gb_size_of(buffer), str);
@@ -7887,7 +7869,7 @@ gb_window_set_title(gbWindow *w, char const *title, ...)
 }
 
 void
-gb_window_toggle_fullscreen(gbWindow *w)
+gb_window_toggle_fullscreen(gbWindow *w, b32 fullscreen_desktop)
 {
 	HWND handle = cast(HWND)w->handle;
 	DWORD style = GetWindowLong(handle, GWL_STYLE);
@@ -7895,17 +7877,29 @@ gb_window_toggle_fullscreen(gbWindow *w)
 		MONITORINFO monitor_info = {gb_size_of(monitor_info)};
 		if (GetWindowPlacement(handle, &w->win32_placement) &&
 		    GetMonitorInfo(MonitorFromWindow(handle, 1), &monitor_info)) {
-			SetWindowLong(handle, GWL_STYLE, style & ~WS_OVERLAPPEDWINDOW);
+			style &= ~WS_OVERLAPPEDWINDOW;
+			if (fullscreen_desktop) {
+				style &= ~WS_CAPTION;
+				style |= WS_POPUP;
+				SetWindowLong(handle, GWL_STYLE, style);
+			} else {
+				SetWindowLong(handle, GWL_STYLE, style);
+			}
 			SetWindowPos(handle, HWND_TOP,
 			             monitor_info.rcMonitor.left, monitor_info.rcMonitor.top,
 			             monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
 			             monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
 			             SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
 
-			w->flags |= GB_WINDOW_FULLSCREEN;
+			if (fullscreen_desktop)
+				w->flags |= GB_WINDOW_FULLSCREEN_DESKTOP;
+			else
+				w->flags |= GB_WINDOW_FULLSCREEN;
 		}
 	} else {
-		SetWindowLong(handle, GWL_STYLE, style | WS_OVERLAPPEDWINDOW);
+		style &= ~WS_POPUP;
+		style |= WS_OVERLAPPEDWINDOW | WS_CAPTION;
+		SetWindowLong(handle, GWL_STYLE, style);
 		SetWindowPlacement(handle, &w->win32_placement);
 		SetWindowPos(handle, 0, 0, 0, 0, 0,
 		             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
@@ -7915,7 +7909,7 @@ gb_window_toggle_fullscreen(gbWindow *w)
 	}
 }
 
-void
+gb_inline void
 gb_window_make_context_current(gbWindow *w)
 {
 	if (w->flags & GB_WINDOW_OPENGL) {
@@ -7923,14 +7917,14 @@ gb_window_make_context_current(gbWindow *w)
 	}
 }
 
-void
+gb_inline void
 gb_window_show(gbWindow *w)
 {
 	ShowWindow(cast(HWND)w->handle, SW_SHOW);
 	w->flags &= ~GB_WINDOW_HIDDEN;
 }
 
-void
+gb_inline void
 gb_window_hide(gbWindow *w)
 {
 	ShowWindow(cast(HWND)w->handle, SW_HIDE);
@@ -7938,13 +7932,14 @@ gb_window_hide(gbWindow *w)
 }
 
 
-gbVideoMode 
+gb_inline gbVideoMode
 gb_video_mode(i32 width, i32 height)
 {
+	/* NOTE(bill): Oh do I wish C has default arguments for procs :( */
 	return gb_video_mode_bits(width, height, 8);
 }
 
-gbVideoMode
+gb_inline gbVideoMode
 gb_video_mode_bits(i32 width, i32 height, i32 bits_per_pixel)
 {
 	gbVideoMode m;
@@ -7956,7 +7951,7 @@ gb_video_mode_bits(i32 width, i32 height, i32 bits_per_pixel)
 
 
 
-gbVideoMode 
+gb_inline gbVideoMode
 gb_video_mode_get_desktop(void)
 {
 	DEVMODE win32_mode = {gb_size_of(win32_mode)};
@@ -7964,23 +7959,24 @@ gb_video_mode_get_desktop(void)
 	return gb_video_mode_bits(win32_mode.dmPelsWidth, win32_mode.dmPelsHeight, win32_mode.dmBitsPerPel);
 }
 
-void
+isize
 gb_video_mode_get_fullscreen_modes(gbVideoMode *modes, isize max_mode_count)
 {
 	DEVMODE win32_mode = {gb_size_of(win32_mode)};
-	i32 i;
-	for (i = 0;
-	     i < EnumDisplaySettings(NULL, i, &win32_mode) && i < max_mode_count;
-	     i++) {
-		modes[i] = gb_video_mode_bits(win32_mode.dmPelsWidth, win32_mode.dmPelsHeight, win32_mode.dmBitsPerPel);
+	i32 count;
+	for (count = 0;
+	     count < max_mode_count && count < EnumDisplaySettings(NULL, count, &win32_mode);
+	     count++) {
+		modes[count] = gb_video_mode_bits(win32_mode.dmPelsWidth, win32_mode.dmPelsHeight, win32_mode.dmBitsPerPel);
 	}
 
-	gb_sort_array(modes, i, gb_video_mode_inv_cmp);
+	gb_sort_array(modes, count, gb_video_mode_dsc_cmp);
+	return count;
 }
 
 #endif
 
-b32
+gb_inline b32
 gb_video_mode_is_valid(gbVideoMode mode)
 {
 	gbVideoMode modes[256];
@@ -8002,7 +7998,7 @@ GB_COMPARE_PROC(gb_video_mode_cmp)
 	return x->bits_per_pixel < y->bits_per_pixel ? -1 : +1;
 }
 
-GB_COMPARE_PROC(gb_video_mode_inv_cmp)
+GB_COMPARE_PROC(gb_video_mode_dsc_cmp)
 {
 	return -gb_video_mode_cmp(a, b);
 }

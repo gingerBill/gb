@@ -1334,7 +1334,7 @@ gbgl_load_texture2d_from_file(gbglTexture *texture, b32 flip_vertically, char co
 
 	va_list va;
 	va_start(va, filename);
-	path = gb_sprintf_va(filename, va);
+	path = gb_bprintf_va(filename, va);
 	va_end(va);
 
 	stbi_set_flip_vertically_on_load(flip_vertically);
