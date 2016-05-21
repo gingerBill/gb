@@ -1,4 +1,4 @@
-/* gb.h - v0.17b - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.17c - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -37,6 +37,7 @@ Conventions used:
 
 
 Version History:
+	0.17c - Compile as 32 bit
 	0.17b - Change formating style because why not?
 	0.17a - Dropped C90 Support (For numerous reasons)
 	0.17  - Instantiated Hash Table
@@ -897,10 +898,10 @@ typedef struct gbVirtualMemory {
 } gbVirtualMemory;
 
 GB_DEF gbVirtualMemory gb_virtual_memory(void *data, isize size);
-GB_DEF gbVirtualMemory gb_vm_alloc(void *addr, isize size);
-GB_DEF void            gb_vm_free (gbVirtualMemory vm);
-GB_DEF gbVirtualMemory gb_vm_trim (gbVirtualMemory vm, isize lead_size, isize size);
-GB_DEF b32             gb_vm_purge(gbVirtualMemory vm);
+GB_DEF gbVirtualMemory gb_vm_alloc      (void *addr, isize size);
+GB_DEF void            gb_vm_free       (gbVirtualMemory vm);
+GB_DEF gbVirtualMemory gb_vm_trim       (gbVirtualMemory vm, isize lead_size, isize size);
+GB_DEF b32             gb_vm_purge      (gbVirtualMemory vm);
 
 
 
@@ -944,8 +945,7 @@ GB_DEF void *gb_resize_align(gbAllocator a, void *ptr, isize old_size, isize new
 
 GB_DEF void *gb_alloc_copy      (gbAllocator a, void const *src, isize size);
 GB_DEF void *gb_alloc_copy_align(gbAllocator a, void const *src, isize size, isize alignment);
-
-GB_DEF char *gb_alloc_str(gbAllocator a, char const *str);
+GB_DEF char *gb_alloc_str       (gbAllocator a, char const *str);
 
 
 // NOTE(bill): These are very useful and the type cast has saved me from numerous bugs
@@ -1882,8 +1882,8 @@ typedef union gbFileDescriptor {
 typedef struct gbFileOperations gbFileOperations;
 
 #define GB_FILE_OPEN_PROC(name)     gbFileError name(gbFileDescriptor *fd, gbFileOperations const **ops, gbFileMode mode, char const *filename)
-#define GB_FILE_READ_AT_PROC(name)  b32         name(gbFileDescriptor fd, void *buffer, isize size, isize offset, isize *bytes_read)
-#define GB_FILE_WRITE_AT_PROC(name) b32         name(gbFileDescriptor fd, void const *buffer, isize size, isize offset, isize *bytes_written)
+#define GB_FILE_READ_AT_PROC(name)  b32         name(gbFileDescriptor fd, void *buffer, isize size, i64 offset, isize *bytes_read)
+#define GB_FILE_WRITE_AT_PROC(name) b32         name(gbFileDescriptor fd, void const *buffer, isize size, i64 offset, isize *bytes_written)
 #define GB_FILE_SEEK_PROC(name)     b32         name(gbFileDescriptor fd, i64 offset, gbSeekWhence whence, i64 *new_offset)
 #define GB_FILE_CLOSE_PROC(name)    void        name(gbFileDescriptor fd)
 typedef GB_FILE_OPEN_PROC(gbFileOpenProc);
@@ -2742,6 +2742,7 @@ gb_inline void *gb_default_resize_align(gbAllocator a, void *old_memory, isize o
 #if defined(_MSC_VER) && !defined(__clang__)
 gb_inline i32  gb_atomic32_load (gbAtomic32 const volatile *a)      { return a->value;  }
 gb_inline void gb_atomic32_store(gbAtomic32 volatile *a, i32 value) { a->value = value; }
+
 gb_inline i32 gb_atomic32_compare_exchange(gbAtomic32 volatile *a, i32 expected, i32 desired) {
 	return _InterlockedCompareExchange(cast(long volatile *)a, desired, expected);
 }
@@ -2757,7 +2758,6 @@ gb_inline i32 gb_atomic32_fetch_and(gbAtomic32 volatile *a, i32 operand) {
 gb_inline i32 gb_atomic32_fetch_or(gbAtomic32 volatile *a, i32 operand) {
 	return _InterlockedOr(cast(long volatile *)a, operand);
 }
-
 
 gb_inline i64 gb_atomic64_load(gbAtomic64 const volatile *a) {
 #if defined(GB_ARCH_64_BIT)
@@ -3087,19 +3087,19 @@ gb_inline void gb_atomic_ptr_store(gbAtomicPtr volatile *a, void *value) {
 	gb_atomic32_store(cast(gbAtomic32 volatile *)a, cast(i32)cast(intptr)value);
 }
 gb_inline void *gb_atomic_ptr_compare_exchange(gbAtomicPtr volatile *a, void *expected, void *desired) {
-	cast(void *)cast(intptr)gb_atomic32_compare_exchange(cast(gbAtomic32 volatile *)a, cast(i32)cast(intptr)expected, cast(i32)cast(intptr)desired);
+	return cast(void *)cast(intptr)gb_atomic32_compare_exchange(cast(gbAtomic32 volatile *)a, cast(i32)cast(intptr)expected, cast(i32)cast(intptr)desired);
 }
 gb_inline void *gb_atomic_ptr_exchanged(gbAtomicPtr volatile *a, void *desired) {
-	cast(void *)cast(intptr)gb_atomic32_exchanged(cast(gbAtomic32 volatile *)a, cast(i32)cast(intptr)desired);
+	return cast(void *)cast(intptr)gb_atomic32_exchanged(cast(gbAtomic32 volatile *)a, cast(i32)cast(intptr)desired);
 }
 gb_inline void *gb_atomic_ptr_fetch_add(gbAtomicPtr volatile *a, void *operand) {
-	cast(void *)cast(intptr)gb_atomic32_fetch_add(cast(gbAtomic32 volatile *)a, cast(i32)cast(intptr)operand);
+	return cast(void *)cast(intptr)gb_atomic32_fetch_add(cast(gbAtomic32 volatile *)a, cast(i32)cast(intptr)operand);
 }
 gb_inline void *gb_atomic_ptr_fetch_and(gbAtomicPtr volatile *a, void *operand) {
-	cast(void *)cast(intptr)gb_atomic32_fetch_and(cast(gbAtomic32 volatile *)a, cast(i32)cast(intptr)operand);
+	return cast(void *)cast(intptr)gb_atomic32_fetch_and(cast(gbAtomic32 volatile *)a, cast(i32)cast(intptr)operand);
 }
 gb_inline void *gb_atomic_ptr_fetch_or(gbAtomicPtr volatile *a, void *operand) {
-	cast(void *)cast(intptr)gb_atomic32_fetch_or(cast(gbAtomic32 volatile *)a, cast(i32)cast(intptr)operand);
+	return cast(void *)cast(intptr)gb_atomic32_fetch_or(cast(gbAtomic32 volatile *)a, cast(i32)cast(intptr)operand);
 }
 gb_inline void gb_atomic_ptr_spin_lock(gbAtomicPtr volatile *a) {
 	gb_atomic32_spin_lock(cast(gbAtomic32 volatile *)a);
@@ -4111,7 +4111,7 @@ void gb_sort(void *base_, isize count, isize size, gbCompareProc cmp) {
 	isize byte_index, i, byte_max = 8*gb_size_of(Type); \
 	for (byte_index = 0; byte_index < byte_max; byte_index += 8) { \
 		isize offsets[256] = {0}; \
-		i64 total = 0; \
+		isize total = 0; \
 		/* NOTE(bill): First pass - count how many of each key */ \
 		for (i = 0; i < count; i++) { \
 			Type radix_value = source[i]; \
@@ -5808,7 +5808,7 @@ gbFileContents gb_file_read_contents(gbAllocator a, b32 zero_terminate, char con
 	result.allocator = a;
 
 	if (gb_file_open(&file, "%s", path) == GB_FILE_ERR_NONE) {
-		i64 file_size = gb_file_size(&file);
+		isize file_size = cast(isize)gb_file_size(&file);
 		if (file_size > 0) {
 			result.data = gb_alloc(a, zero_terminate ? file_size+1 : file_size);
 			result.size = file_size;
@@ -6942,7 +6942,7 @@ void gb_platform_update(gbPlatform *p) {
 	}
 
 	{ // NOTE(bill): Set Controller states
-		DWORD max_controller_count = XUSER_MAX_COUNT;
+		isize max_controller_count = XUSER_MAX_COUNT;
 		if (max_controller_count > gb_count_of(p->game_controllers))
 			max_controller_count = gb_count_of(p->game_controllers);
 
