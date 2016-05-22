@@ -363,11 +363,11 @@ typedef struct gbglShader {
 	u32 shaders[GBGL_SHADER_TYPE_COUNT];
 	u32 program;
 
-	i32 uniform_locs[GBGL_MAX_UNIFORM_COUNT];
+	i32   uniform_locs[GBGL_MAX_UNIFORM_COUNT];
 	char *uniform_names[GBGL_MAX_UNIFORM_COUNT];
-	i32 uniform_count;
+	i32   uniform_count;
 
-	u32 type_flags;
+	u32   type_flags;
 
 	gbFile files[GBGL_SHADER_TYPE_COUNT];
 

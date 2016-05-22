@@ -1,4 +1,4 @@
-/* gb.h - v0.17c - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.17d - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -37,6 +37,7 @@ Conventions used:
 
 
 Version History:
+	0.17d - Fixed printf bug for strings
 	0.17c - Compile as 32 bit
 	0.17b - Change formating style because why not?
 	0.17a - Dropped C90 Support (For numerous reasons)
@@ -824,9 +825,9 @@ GB_DEF void gb_semaphore_wait   (gbSemaphore *s);
 // Mutex
 typedef struct gbMutex {
 	gbSemaphore semaphore;
-	gbAtomic32 counter;
-	gbAtomic32 owner;
-	i32 recursion;
+	gbAtomic32  counter;
+	gbAtomic32  owner;
+	i32         recursion;
 } gbMutex;
 
 GB_DEF void gb_mutex_init    (gbMutex *m);
@@ -859,17 +860,17 @@ typedef GB_THREAD_PROC(gbThreadProc);
 
 typedef struct gbThread {
 #if defined(GB_SYSTEM_WINDOWS)
-	void *win32_handle;
+	void *        win32_handle;
 #else
-	pthread_t posix_handle;
+	pthread_t     posix_handle;
 #endif
 
 	gbThreadProc *proc;
-	void *data;
+	void *        data;
 
-	gbSemaphore semaphore;
-	isize       stack_size;
-	b32         is_running;
+	gbSemaphore   semaphore;
+	isize         stack_size;
+	b32           is_running;
 } gbThread;
 
 GB_DEF void gb_thread_init            (gbThread *t);
@@ -928,7 +929,7 @@ typedef GB_ALLOCATOR_PROC(gbAllocatorProc);
 
 typedef struct gbAllocator {
 	gbAllocatorProc *proc;
-	void *data;
+	void *           data;
 } gbAllocator;
 
 #ifndef GB_DEFAULT_MEMORY_ALIGNMENT
@@ -976,10 +977,10 @@ GB_DEF GB_ALLOCATOR_PROC(gb_heap_allocator_proc);
 //
 typedef struct gbArena {
 	gbAllocator backing;
-	void *physical_start;
-	isize total_size;
-	isize total_allocated;
-	u32 temp_count;
+	void *      physical_start;
+	isize       total_size;
+	isize       total_allocated;
+	isize       temp_count;
 } gbArena;
 
 GB_DEF void gb_arena_init_from_memory   (gbArena *arena, void *start, isize size);
@@ -1000,7 +1001,7 @@ GB_DEF GB_ALLOCATOR_PROC(gb_arena_allocator_proc);
 
 typedef struct gbTempArenaMemory {
 	gbArena *arena;
-	isize original_count;
+	isize    original_count;
 } gbTempArenaMemory;
 
 GB_DEF gbTempArenaMemory gb_temp_arena_memory_begin(gbArena *arena);
@@ -1019,13 +1020,11 @@ GB_DEF void              gb_temp_arena_memory_end  (gbTempArenaMemory tmp_mem);
 
 typedef struct gbPool {
 	gbAllocator backing;
-
-	void *physical_start;
-	void *free_list;
-
-	isize block_size;
-	isize block_align;
-	isize total_size;
+	void *      physical_start;
+	void *      free_list;
+	isize       block_size;
+	isize       block_align;
+	isize       total_size;
 } gbPool;
 
 GB_DEF void gb_pool_init      (gbPool *pool, gbAllocator backing, isize num_blocks, isize block_size);
@@ -1065,11 +1064,11 @@ GB_DEF void                gb_allocation_header_fill(gbAllocationHeader *header,
 //
 // NOTE(bill): I may also complete remove this if I completely implement a fixed heap allocator
 
-
-typedef struct gbFreeListBlock {
-	struct gbFreeListBlock *next;
-	isize size;
-} gbFreeListBlock;
+typedef struct gbFreeListBlock gbFreeListBlock;
+struct gbFreeListBlock {
+	gbFreeListBlock *next;
+	isize            size;
+};
 
 typedef struct gbFreeList {
 	void *           physical_start;
@@ -1097,7 +1096,8 @@ GB_DEF GB_ALLOCATOR_PROC(gb_free_list_allocator_proc);
 typedef struct gbScratchMemory {
 	void *physical_start;
 	isize total_size;
-	void *alloc_point, *free_point;
+	void *alloc_point;
+	void *free_point;
 } gbScratchMemory;
 
 GB_DEF void gb_scratch_memory_init     (gbScratchMemory *s, void *start, isize size);
@@ -1329,8 +1329,8 @@ typedef char *gbString;
 // NOTE(bill): If you only need a small string, just use a standard c string or change the size from isize to u16, etc.
 typedef struct gbStringHeader {
 	gbAllocator allocator;
-	isize length;
-	isize capacity;
+	isize       length;
+	isize       capacity;
 } gbStringHeader;
 
 #define GB_STRING_HEADER(str) (cast(gbStringHeader *)(str) - 1)
@@ -1466,8 +1466,8 @@ void foo(void) {
 
 typedef struct gbArrayHeader {
 	gbAllocator allocator;
-	isize count;
-	isize capacity;
+	isize       count;
+	isize       capacity;
 } gbArrayHeader;
 
 // NOTE(bill): This thing is magic!
@@ -1625,13 +1625,13 @@ typedef struct gbHashTableFindResult {
 
 #define GB_TABLE_DECLARE(PREFIX, NAME, N, VALUE) \
 typedef struct GB_JOIN2(NAME, Entry) { \
-	u64 key; \
+	u64   key; \
 	isize next; \
 	VALUE value; \
 } GB_JOIN2(NAME, Entry); \
 \
 typedef struct NAME { \
-	gbArray(isize) hashes; \
+	gbArray(isize)                 hashes; \
 	gbArray(GB_JOIN2(NAME, Entry)) entries; \
 } NAME; \
 \
@@ -1912,10 +1912,10 @@ typedef u64 gbFileTime;
 
 typedef struct gbFile {
 	gbFileOperations const *ops;
-	gbFileDescriptor fd;
-	char const *filename;
-	gbFileTime last_write_time;
-	// gbDirInfo *dir_info; // TODO(bill): Get directory info
+	gbFileDescriptor        fd;
+	char const *            filename;
+	gbFileTime              last_write_time;
+	// gbDirInfo *          dir_info; // TODO(bill): Get directory info
 } gbFile;
 
 typedef enum gbFileStandardType {
@@ -1952,8 +1952,8 @@ GB_DEF b32         gb_file_has_changed   (gbFile *file); // NOTE(bill): Changed 
 
 typedef struct gbFileContents {
 	gbAllocator allocator;
-	void *data;
-	isize size;
+	void *      data;
+	isize       size;
 } gbFileContents;
 
 
@@ -2073,9 +2073,9 @@ GB_DEF u64 gb_endian_swap64(u64 i);
 #endif
 
 typedef union gbColour {
-	u32 rgba; // NOTE(bill): 0xaabbggrr in little endian
+	u32    rgba; // NOTE(bill): 0xaabbggrr in little endian
 	struct { u8 r, g, b, a; };
-	u8 e[4];
+	u8     e[4];
 } gbColour;
 GB_STATIC_ASSERT(gb_size_of(gbColour) == gb_size_of(u32));
 
@@ -2149,10 +2149,9 @@ typedef struct gbVideoMode {
 
 typedef struct gbWindow {
 	void *handle;
-
-	i32 x, y;
-	i32 width, height;
-	u32 flags;
+	i32   x, y;
+	i32   width, height;
+	u32   flags;
 
 #if defined(GB_SYSTEM_WINDOWS)
 	WINDOWPLACEMENT win32_placement;
@@ -2170,10 +2169,10 @@ typedef struct gbWindow {
 #if defined(GB_SYSTEM_WINDOWS)
 			BITMAPINFO win32_bmi;
 #endif
-			void *memory;
-			isize memory_size;
-			i32   pitch;
-			i32   bits_per_pixel;
+			void *     memory;
+			isize      memory_size;
+			i32        pitch;
+			i32        bits_per_pixel;
 		} software;
 	};
 } gbWindow;
@@ -2299,11 +2298,11 @@ typedef enum gbKeyType {
 	GB_KEY_COUNT
 } gbKeyType;
 
-typedef u32 gbKeyState;
+typedef u32 gbKeyState; /* TODO(bill): Store anything else? e.g. press time? */
 typedef enum gbKeyStateType {
 	GB_KEY_STATE_DOWN     = GB_BIT(0),
 	GB_KEY_STATE_PRESSED  = GB_BIT(1),
-	GB_KEY_STATE_RELEASED = GB_BIT(2),
+	GB_KEY_STATE_RELEASED = GB_BIT(2)
 } gbKeyStateType;
 
 typedef enum gbMouseButton {
@@ -2351,17 +2350,11 @@ typedef enum gbControllerButtonType {
 	GB_CONTROLLER_BUTTON_COUNT
 } gbControllerButtonType;
 
-typedef struct gbControllerButton {
-	i32 half_transition_count;
-	b32 ended_down;
-} gbControllerButton;
-
 typedef struct gbGameController {
-	b16 is_connected;
-	b16 is_analog;
+	b16 is_connected, is_analog;
 
-	f32 axes[GB_CONTROLLER_AXIS_COUNT];
-	gbControllerButton buttons[GB_CONTROLLER_BUTTON_COUNT];
+	f32        axes[GB_CONTROLLER_AXIS_COUNT];
+	gbKeyState buttons[GB_CONTROLLER_BUTTON_COUNT];
 } gbGameController;
 
 #if defined(GB_SYSTEM_WINDOWS)
@@ -2373,8 +2366,7 @@ typedef GB_XINPUT_SET_STATE(gbXInputSetStateProc);
 #endif
 
 typedef struct gbPlatform {
-	gbWindow window;
-
+	gbWindow   window;
 	gbKeyState keys[GB_KEY_COUNT]; // NOTE(bill): test with flags
 	struct {
 		gbKeyState control;
@@ -2382,15 +2374,12 @@ typedef struct gbPlatform {
 		gbKeyState shift;
 	} key_modifiers;
 
-	gbMouse mouse;
-
+	gbMouse          mouse;
 	gbGameController game_controllers[GB_MAX_GAME_CONTROLLER_COUNT];
 
-	f64 curr_time;
-	f64 dt_for_frame;
-
-	b32 quit_requested;
-
+	f64              curr_time;
+	f64              dt_for_frame;
+	b32              quit_requested;
 
 #if defined(GB_SYSTEM_WINDOWS)
 	struct {
@@ -5528,16 +5517,16 @@ gbFileError gb_file_new(gbFile *f, gbFileDescriptor fd, gbFileOperations const *
 
 
 gbFileError gb_file_open_mode_va(gbFile *f, gbFileMode mode, char const *filename, va_list va) {
+	gb_local_persist char path[4096] = {0};
 	gbFileError err;
-	gb_local_persist char buffer[4096] = {0};
-	gb_snprintf_va(buffer, gb_size_of(buffer), filename, va);
+	gb_snprintf_va(path, gb_size_of(path), filename, va);
 #if defined(GB_SYSTEM_WINDOWS)
-	err = gb__win32_file_open(&f->fd, &f->ops, mode, buffer);
+	err = gb__win32_file_open(&f->fd, &f->ops, mode, path);
 #else
-	err = gb__posix_file_open(&f->fd, &f->ops, mode, buffer);
+	err = gb__posix_file_open(&f->fd, &f->ops, mode, path);
 #endif
-	if (!err)
-		return gb_file_new(f, f->fd, f->ops, buffer);
+	if (err == GB_FILE_ERR_NONE)
+		return gb_file_new(f, f->fd, f->ops, path);
 	return err;
 }
 
@@ -5606,11 +5595,11 @@ gbFileError gb_file_open(gbFile *f, char const *filename, ...) {
 	return err;
 }
 
-gbFileError gb_file_open_mode(gbFile *f, gbFileMode perm, char const *filename, ...) {
+gbFileError gb_file_open_mode(gbFile *f, gbFileMode mode, char const *filename, ...) {
 	gbFileError err;
 	va_list va;
 	va_start(va, filename);
-	err = gb_file_open_mode_va(f, perm, filename, va);
+	err = gb_file_open_mode_va(f, mode, filename, va);
 	va_end(va);
 	return err;
 }
@@ -5988,8 +5977,9 @@ typedef struct {
 gb_internal isize gb__print_string(char *text, isize max_len, gbprivFmtInfo *info, char const *str) {
 	// TODO(bill): Get precision and width to work correctly. How does it actually work?!
 	// TODO(bill): This looks very buggy indeed.
+	// TODO(bill): Actually use `max_len` !!!!
 	isize res = 0, len;
-	isize remaining = max_len;
+	gb_unused(max_len);
 
 	if (info && info->precision >= 0)
 		len = gb_strnlen(str, info->precision);
@@ -6001,24 +5991,22 @@ gb_internal isize gb__print_string(char *text, isize max_len, gbprivFmtInfo *inf
 			len = info->precision < len ? info->precision : len;
 
 		res += gb_strlcpy(text, str, len);
-		res -= remaining;
 
 		if (info->width > res) {
 			isize padding = info->width - len;
 			char pad = (info->flags & GB__FMT_ZERO) ? '0' : ' ';
-			while (padding --> 0 && remaining --> 0)
+			while (padding --> 0)
 				*text++ = pad, res++;
 		}
 	} else {
 		if (info && (info->width > res)) {
 			isize padding = info->width - len;
 			char pad = (info->flags & GB__FMT_ZERO) ? '0' : ' ';
-			while (padding --> 0 && remaining --> 0)
+			while (padding --> 0)
 				*text++ = pad, res++;
 		}
 
 		res += gb_strlcpy(text, str, len);
-		remaining -= res;
 	}
 
 
@@ -6667,10 +6655,16 @@ GB_XINPUT_SET_STATE(gbXInputSetState_Stub) {
 
 
 gb_internal gb_inline void gb__process_xinput_digital_button(DWORD xinput_button_state, DWORD button_bit,
-                                                             gbControllerButton *button) {
-	b32 ended_down = ((xinput_button_state & button_bit) == button_bit);
-	button->half_transition_count = (button->ended_down != ended_down) ? 1 : 0;
-	button->ended_down = ended_down;
+                                                             gbKeyState *button) {
+	b32 was_down = (*button & GB_KEY_STATE_DOWN) != 0;
+	b32 is_down  = ((xinput_button_state & button_bit) == button_bit);
+#define GB__BUTTON_SET(test, state) \
+	if (test) *button |=  state; \
+	else      *button &= ~state
+	GB__BUTTON_SET(is_down,               GB_KEY_STATE_DOWN);
+	GB__BUTTON_SET(!was_down &&  is_down, GB_KEY_STATE_PRESSED);
+	GB__BUTTON_SET( was_down && !is_down, GB_KEY_STATE_RELEASED);
+#undef GB__BUTTON_SET
 }
 
 gb_internal gb_inline f32 gb__process_xinput_stick_value(SHORT value, SHORT dead_zone_threshold) {
@@ -6818,7 +6812,7 @@ void gb_platform_update(gbPlatform *p) {
 			b32 was_down = (p->keys[platform] & GB_KEY_STATE_DOWN) != 0; \
 			b32 is_down = GetKeyState(vk) < 0; /* TODO(bill): Should this GetAsyncKeyState or is that overkill? */ \
 			GB_KEY_STATE_SET(platform, is_down,               GB_KEY_STATE_DOWN); \
-			GB_KEY_STATE_SET(platform, !was_down && is_down,  GB_KEY_STATE_PRESSED); \
+			GB_KEY_STATE_SET(platform, !was_down &&  is_down, GB_KEY_STATE_PRESSED); \
 			GB_KEY_STATE_SET(platform,  was_down && !is_down, GB_KEY_STATE_RELEASED); \
 		} while (0)
 		GB__KEY_SET(GB_KEY_A, 'A');
@@ -7002,14 +6996,14 @@ void gb_platform_update(gbPlatform *p) {
 
 			#define GB__PROCESS_DIGITAL_BUTTON(button_type, xinput_button) \
 				gb__process_xinput_digital_button(pad->wButtons, xinput_button, &controller->buttons[button_type])
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_A, XINPUT_GAMEPAD_A);
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_B, XINPUT_GAMEPAD_B);
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_X, XINPUT_GAMEPAD_X);
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_Y, XINPUT_GAMEPAD_Y);
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_LEFT_SHOULDER, XINPUT_GAMEPAD_LEFT_SHOULDER);
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_A,              XINPUT_GAMEPAD_A);
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_B,              XINPUT_GAMEPAD_B);
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_X,              XINPUT_GAMEPAD_X);
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_Y,              XINPUT_GAMEPAD_Y);
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_LEFT_SHOULDER,  XINPUT_GAMEPAD_LEFT_SHOULDER);
 				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_RIGHT_SHOULDER, XINPUT_GAMEPAD_RIGHT_SHOULDER);
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_START, XINPUT_GAMEPAD_START);
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_BACK, XINPUT_GAMEPAD_BACK);
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_START,          XINPUT_GAMEPAD_START);
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_BACK,           XINPUT_GAMEPAD_BACK);
 			#undef GB__PROCESS_DIGITAL_BUTTON
 			}
 		}
@@ -7094,7 +7088,6 @@ LRESULT CALLBACK gb__win32_main_window_callback(HWND wnd, UINT msg, WPARAM wpara
 	gbWindow *window = cast(gbWindow *)GetWindowLongPtr(wnd, GWLP_USERDATA);
 
 	// TODO(bill): Do more in here?
-
 	switch (msg) {
 	case WM_CLOSE:
 	case WM_DESTROY:
@@ -7168,7 +7161,6 @@ gbWindow *gb_window_init(gbPlatform *p, char const *title, gbVideoMode mode, u32
 	if (!(flags & GB_WINDOW_RESIZABLE)) style &= ~WS_THICKFRAME;
 	if (flags & GB_WINDOW_MAXIMIZED)    style |=  WS_MAXIMIZE;
 	if (flags & GB_WINDOW_MINIMIZED)    style |=  WS_MINIMIZE;
-
 
 	// NOTE(bill): Completely ignore the give mode and just change it
 	if (flags & GB_WINDOW_FULLSCREEN_DESKTOP)
@@ -7356,8 +7348,12 @@ gb_inline b32 gb_window_is_open(gbWindow const *w) {
 }
 
 gb_inline b32 gb_video_mode_is_valid(gbVideoMode mode) {
-	gbVideoMode modes[256];
-	gb_video_mode_get_fullscreen_modes(modes, gb_count_of(modes));
+	gb_local_persist gbVideoMode modes[256];
+	gb_local_persist b32 is_set = false;
+	if (!is_set) {
+		gb_video_mode_get_fullscreen_modes(modes, gb_count_of(modes));
+		is_set = true;
+	}
 	return gb_binary_search_array(modes, gb_count_of(modes), &mode, gb_video_mode_cmp) == -1;
 }
 
