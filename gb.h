@@ -1,4 +1,4 @@
-/* gb.h - v0.17d - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.18  - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -37,6 +37,7 @@ Conventions used:
 
 
 Version History:
+	0.18  - Raw keyboard and mouse input for WIN32
 	0.17d - Fixed printf bug for strings
 	0.17c - Compile as 32 bit
 	0.17b - Change formating style because why not?
@@ -631,6 +632,14 @@ extern "C++" {
 
 #ifndef gb_is_between
 #define gb_is_between(x, lower, upper) (((x) >= (lower)) && ((x) <= (upper)))
+#endif
+
+/* NOTE(bill): Very useful bit setting */
+#ifndef GB_MASK_TOGGLE
+#define GB_MASK_TOGGLE(var, set, mask) do { \
+	if (set) (var) |=  mask; \
+	else     (var) &= ~mask; \
+} while (0)
 #endif
 
 
@@ -1857,7 +1866,7 @@ typedef enum gbFileFlag {
 	GB_FILE_RW         = GB_BIT(3)
 } gbFileFlag;
 
-// TODO(bill): Is seek a silly idea?
+// NOTE(bill): Only used internally and for the file operations
 typedef enum gbSeekWhence {
 	GB_SEEK_BEGIN   = 0,
 	GB_SEEK_CURRENT = 1,
@@ -1937,11 +1946,13 @@ GB_DEF b32         gb_file_read_at_check (gbFile *file, void *buffer, isize size
 GB_DEF b32         gb_file_write_at_check(gbFile *file, void const *buffer, isize size, i64 offset, isize *bytes_written);
 GB_DEF b32         gb_file_read_at       (gbFile *file, void *buffer, isize size, i64 offset);
 GB_DEF b32         gb_file_write_at      (gbFile *file, void const *buffer, isize size, i64 offset);
-GB_DEF i64         gb_file_seek          (gbFile *file, i64 offset, gbSeekWhence whence);
+GB_DEF i64         gb_file_seek          (gbFile *file, i64 offset);
+GB_DEF i64         gb_file_seek_to_end   (gbFile *file);
+GB_DEF i64         gb_file_skip          (gbFile *file, i64 bytes); // NOTE(bill): Skips a certain amount of bytes
+GB_DEF i64         gb_file_tell          (gbFile *file);
 GB_DEF gbFileError gb_file_close         (gbFile *file);
 GB_DEF b32         gb_file_read          (gbFile *file, void *buffer, isize size);
 GB_DEF b32         gb_file_write         (gbFile *file, void const *buffer, isize size);
-GB_DEF i64         gb_file_tell          (gbFile *file);
 GB_DEF i64         gb_file_size          (gbFile *file);
 GB_DEF char const *gb_file_name          (gbFile *file);
 GB_DEF gbFileError gb_file_truncate      (gbFile *file, i64 size);
@@ -2111,6 +2122,12 @@ gb_global gbColour const GB_COLOUR_MAGENTA = {0xffff00ff};
 
 #if defined(GB_PLATFORM)
 
+// NOTE(bill):
+// Coordiate system - +ve x - left to right
+//                  - +ve y - top to bottom
+//                  - Relative to window 
+
+
 #if defined(GB_SYSTEM_WINDOWS)
 #include <xinput.h>
 #ifndef XUSER_MAX_COUNT
@@ -2160,9 +2177,7 @@ typedef struct gbWindow {
 
 	union {
 		struct {
-#if defined(GB_SYSTEM_WINDOWS)
-			HGLRC win32_context;
-#endif
+			void *context;
 		} opengl;
 
 		struct {
@@ -2278,6 +2293,8 @@ typedef enum gbKeyType {
 	GB_KEY_NUMPAD7,      // Numpad 7
 	GB_KEY_NUMPAD8,      // Numpad 8
 	GB_KEY_NUMPAD9,      // Numpad 9
+	GB_KEY_NUMPAD_DOT,   // Numpad .
+	GB_KEY_NUMPAD_ENTER, // Numpad Enter
 	GB_KEY_F1,           // F1
 	GB_KEY_F2,           // F2
 	GB_KEY_F3,           // F3
@@ -2298,12 +2315,16 @@ typedef enum gbKeyType {
 	GB_KEY_COUNT
 } gbKeyType;
 
-typedef u32 gbKeyState; /* TODO(bill): Store anything else? e.g. press time? */
+/* TODO(bill): Change name? */
+typedef u8 gbKeyState;
 typedef enum gbKeyStateType {
 	GB_KEY_STATE_DOWN     = GB_BIT(0),
 	GB_KEY_STATE_PRESSED  = GB_BIT(1),
 	GB_KEY_STATE_RELEASED = GB_BIT(2)
 } gbKeyStateType;
+
+GB_DEF void gb_key_state_update(gbKeyState *s, b32 is_down);
+
 
 typedef enum gbMouseButton {
 	GB_MOUSE_BUTTON_LEFT,
@@ -2317,8 +2338,9 @@ typedef enum gbMouseButton {
 
 typedef struct gbMouse {
 	i32 x, y;
-	i32 dx, dy;
-	b8 buttons[GB_MOUSE_BUTTON_COUNT];
+	i32 raw_dx, raw_dy; // NOTE(bill): Raw mouse movement
+	i32 wheel_delta;
+	gbKeyState buttons[GB_MOUSE_BUTTON_COUNT];
 } gbMouse;
 
 
@@ -2373,6 +2395,9 @@ typedef struct gbPlatform {
 		gbKeyState alt;
 		gbKeyState shift;
 	} key_modifiers;
+
+	char32 char_buffer[256];
+	isize  char_buffer_count;
 
 	gbMouse          mouse;
 	gbGameController game_controllers[GB_MAX_GAME_CONTROLLER_COUNT];
@@ -5564,14 +5589,34 @@ gb_inline b32 gb_file_write_at(gbFile *f, void const *buffer, isize size, i64 of
 	return gb_file_write_at_check(f, buffer, size, offset, NULL);
 }
 
-gb_inline i64 gb_file_seek(gbFile *f, i64 offset, gbSeekWhence whence) {
+gb_inline i64 gb_file_seek(gbFile *f, i64 offset) {
 	i64 new_offset = 0;
 	if (!f->ops) f->ops = &GB_DEFAULT_FILE_OPERATIONS;
-	f->ops->seek(f->fd, offset, whence, &new_offset);
+	f->ops->seek(f->fd, offset, GB_SEEK_BEGIN, &new_offset);
 	return new_offset;
 }
 
-gb_inline i64 gb_file_tell (gbFile *f) { return gb_file_seek(f, 0, GB_SEEK_CURRENT); }
+gb_inline i64 gb_file_seek_to_end(gbFile *f) {
+	i64 new_offset = 0;
+	if (!f->ops) f->ops = &GB_DEFAULT_FILE_OPERATIONS;
+	f->ops->seek(f->fd, 0, GB_SEEK_END, &new_offset);
+	return new_offset;
+}
+
+// NOTE(bill): Skips a certain amount of bytes
+gb_inline i64 gb_file_skip(gbFile *f, i64 bytes) {
+	i64 new_offset = 0;
+	if (!f->ops) f->ops = &GB_DEFAULT_FILE_OPERATIONS;
+	f->ops->seek(f->fd, bytes, GB_SEEK_CURRENT, &new_offset);
+	return new_offset;	
+} 
+
+gb_inline i64 gb_file_tell(gbFile *f) {
+	i64 new_offset = 0;
+	if (!f->ops) f->ops = &GB_DEFAULT_FILE_OPERATIONS;
+	f->ops->seek(f->fd, 0, GB_SEEK_CURRENT, &new_offset);		
+	return new_offset;
+}
 gb_inline b32 gb_file_read (gbFile *f, void *buffer, isize size)       { return gb_file_read_at(f, buffer, size, gb_file_tell(f)); }
 gb_inline b32 gb_file_write(gbFile *f, void const *buffer, isize size) { return gb_file_write_at(f, buffer, size, gb_file_tell(f)); }
 
@@ -5617,8 +5662,8 @@ gb_inline b32 gb_file_has_changed(gbFile *f) {
 	return result;
 }
 
-
-gb_global b32 gb__std_file_set = false;
+// TODO(bill): Is this a bad idea?
+gb_global b32    gb__std_file_set = false;
 gb_global gbFile gb__std_files[GB_FILE_STANDARD_COUNT] = {0};
 
 
@@ -5645,10 +5690,10 @@ gb_inline i64 gb_file_size(gbFile *f) {
 gbFileError gb_file_truncate(gbFile *f, i64 size) {
 	gbFileError err = GB_FILE_ERR_NONE;
 	i64 prev_offset = gb_file_tell(f);
-	gb_file_seek(f, size, GB_SEEK_BEGIN);
+	gb_file_seek(f, size);
 	if (!SetEndOfFile(f))
 		err = GB_FILE_ERR_TRUNCATION_FAILURE;
-	gb_file_seek(f, prev_offset, GB_SEEK_BEGIN);
+	gb_file_seek(f, prev_offset);
 	return err;
 }
 
@@ -5678,9 +5723,9 @@ gb_inline gbFile *const gb_file_get_standard(gbFileStandardType std) {
 gb_inline i64 gb_file_size(gbFile *f) {
 	i64 size = 0;
 	i64 prev_offset = gb_file_tell(f);
-	gb_file_seek(f, 0, GB_SEEK_END);
+	gb_file_seek_to_end(f);
 	size = gb_file_tell(f);
-	gb_file_seek(f, prev_offset, GB_SEEK_BEGIN);
+	gb_file_seek(f, prev_offset);
 	return size;
 }
 
@@ -5963,7 +6008,9 @@ enum {
 	GB__FMT_UPPER     = GB_BIT(14),
 
 
-	GB__FMT_DONE      = GB_BIT(30)
+	GB__FMT_DONE      = GB_BIT(30),
+
+	GB__FMT_INTS = GB__FMT_CHAR|GB__FMT_SHORT|GB__FMT_INT|GB__FMT_LONG|GB__FMT_LLONG|GB__FMT_SIZE|GB__FMT_INTPTR
 };
 
 typedef struct {
@@ -5977,9 +6024,8 @@ typedef struct {
 gb_internal isize gb__print_string(char *text, isize max_len, gbprivFmtInfo *info, char const *str) {
 	// TODO(bill): Get precision and width to work correctly. How does it actually work?!
 	// TODO(bill): This looks very buggy indeed.
-	// TODO(bill): Actually use `max_len` !!!!
 	isize res = 0, len;
-	gb_unused(max_len);
+	isize remaining = max_len;
 
 	if (info && info->precision >= 0)
 		len = gb_strnlen(str, info->precision);
@@ -5995,14 +6041,14 @@ gb_internal isize gb__print_string(char *text, isize max_len, gbprivFmtInfo *inf
 		if (info->width > res) {
 			isize padding = info->width - len;
 			char pad = (info->flags & GB__FMT_ZERO) ? '0' : ' ';
-			while (padding --> 0)
+			while (padding --> 0 && remaining --> 0)
 				*text++ = pad, res++;
 		}
 	} else {
 		if (info && (info->width > res)) {
 			isize padding = info->width - len;
 			char pad = (info->flags & GB__FMT_ZERO) ? '0' : ' ';
-			while (padding --> 0)
+			while (padding --> 0 && remaining --> 0)
 				*text++ = pad, res++;
 		}
 
@@ -6130,7 +6176,7 @@ gb_internal isize gb__print_f64(char *text, isize max_len, gbprivFmtInfo *info, 
 
 gb_no_inline isize gb_snprintf_va(char *text, isize max_len, char const *fmt, va_list va) {
 	char const *text_begin = text;
-	isize remaining = max_len;
+	isize remaining = max_len, res;
 
 	while (*fmt) {
 		gbprivFmtInfo info = {0};
@@ -6267,39 +6313,29 @@ gb_no_inline isize gb_snprintf_va(char *text, isize max_len, char const *fmt, va
 		if (info.base != 0) {
 			if (info.flags & GB__FMT_UNSIGNED) {
 				u64 value = 0;
-				if (info.flags & GB__FMT_CHAR)
-					value = cast(u64)cast(u8)va_arg(va, int);
-				else if (info.flags & GB__FMT_SHORT)
-					value = cast(u64)cast(u16)va_arg(va, int);
-				else if (info.flags & GB__FMT_LONG)
-					value = cast(u64)va_arg(va, unsigned long);
-				else if (info.flags & GB__FMT_LLONG)
-					value = cast(u64)va_arg(va, unsigned long long);
-				else if (info.flags & GB__FMT_SIZE)
-					value = cast(u64)va_arg(va, usize);
-				else if (info.flags & GB__FMT_INTPTR)
-					value = cast(u64)va_arg(va, uintptr);
-				else
-					value = cast(u64)va_arg(va, int);
+				switch (info.flags & GB__FMT_INTS) {
+				case GB__FMT_CHAR:   value = cast(u64)cast(u8) va_arg(va, int);       break;
+				case GB__FMT_SHORT:  value = cast(u64)cast(u16)va_arg(va, int);       break;
+				case GB__FMT_LONG:   value = cast(u64)va_arg(va, unsigned long);      break;
+				case GB__FMT_LLONG:  value = cast(u64)va_arg(va, unsigned long long); break;
+				case GB__FMT_SIZE:   value = cast(u64)va_arg(va, usize);              break;
+				case GB__FMT_INTPTR: value = cast(u64)va_arg(va, uintptr);            break;
+				default:             value = cast(u64)va_arg(va, unsigned int);       break;
+				}
 
 				len = gb__print_u64(text, remaining, &info, value);
 
 			} else {
 				i64 value = 0;
-				if (info.flags & GB__FMT_CHAR)
-					value = cast(i64)cast(i8)va_arg(va, int);
-				else if (info.flags & GB__FMT_SHORT)
-					value = cast(i64)cast(i16)va_arg(va, int);
-				else if (info.flags & GB__FMT_LONG)
-					value = cast(i64)va_arg(va, long);
-				else if (info.flags & GB__FMT_LLONG)
-					value = cast(i64)va_arg(va, long long);
-				else if (info.flags & GB__FMT_SIZE)
-					value = cast(i64)va_arg(va, isize);
-				else if (info.flags & GB__FMT_INTPTR)
-					value = cast(i64)va_arg(va, intptr);
-				else
-					value = cast(i64)va_arg(va, int);
+				switch (info.flags & GB__FMT_INTS) {
+				case GB__FMT_CHAR:   value = cast(i64)cast(i8) va_arg(va, int); break;
+				case GB__FMT_SHORT:  value = cast(i64)cast(i16)va_arg(va, int); break;
+				case GB__FMT_LONG:   value = cast(i64)va_arg(va, long);         break;
+				case GB__FMT_LLONG:  value = cast(i64)va_arg(va, long long);    break;
+				case GB__FMT_SIZE:   value = cast(i64)va_arg(va, usize);        break;
+				case GB__FMT_INTPTR: value = cast(i64)va_arg(va, uintptr);      break;
+				default:             value = cast(i64)va_arg(va, int);          break;
+				}
 
 				len = gb__print_i64(text, remaining, &info, value);
 			}
@@ -6314,11 +6350,8 @@ gb_no_inline isize gb_snprintf_va(char *text, isize max_len, char const *fmt, va
 	}
 
 	*text++ = '\0';
-
-	{
-		isize res = (text - text_begin);
-		return (res >= max_len || res < 0) ? -1 : res;
-	}
+	res = (text - text_begin);
+	return (res >= max_len || res < 0) ? -1 : res;
 }
 
 
@@ -6642,6 +6675,14 @@ gb_inline gbColour gb_colour(f32 r, f32 g, f32 b, f32 a) {
 
 #if defined(GB_PLATFORM)
 
+
+gb_inline void gb_key_state_update(gbKeyState *s, b32 is_down) {
+	b32 was_down = (*s & GB_KEY_STATE_DOWN) != 0;
+	GB_MASK_TOGGLE(*s, is_down,               GB_KEY_STATE_DOWN);
+	GB_MASK_TOGGLE(*s, !was_down &&  is_down, GB_KEY_STATE_PRESSED);
+	GB_MASK_TOGGLE(*s,  was_down && !is_down, GB_KEY_STATE_RELEASED);
+}
+
 #if defined(GB_SYSTEM_WINDOWS)
 
 GB_XINPUT_GET_STATE(gbXInputGetState_Stub) {
@@ -6656,15 +6697,8 @@ GB_XINPUT_SET_STATE(gbXInputSetState_Stub) {
 
 gb_internal gb_inline void gb__process_xinput_digital_button(DWORD xinput_button_state, DWORD button_bit,
                                                              gbKeyState *button) {
-	b32 was_down = (*button & GB_KEY_STATE_DOWN) != 0;
 	b32 is_down  = ((xinput_button_state & button_bit) == button_bit);
-#define GB__BUTTON_SET(test, state) \
-	if (test) *button |=  state; \
-	else      *button &= ~state
-	GB__BUTTON_SET(is_down,               GB_KEY_STATE_DOWN);
-	GB__BUTTON_SET(!was_down &&  is_down, GB_KEY_STATE_PRESSED);
-	GB__BUTTON_SET( was_down && !is_down, GB_KEY_STATE_RELEASED);
-#undef GB__BUTTON_SET
+	gb_key_state_update(button, is_down);
 }
 
 gb_internal gb_inline f32 gb__process_xinput_stick_value(SHORT value, SHORT dead_zone_threshold) {
@@ -6742,11 +6776,254 @@ void gb_platform_init(gbPlatform *p) {
 	gb_zero_array(p->keys, gb_count_of(p->keys));
 }
 
+gb_internal gbKeyType gb__win32_from_vk(UINT key) {
+	// NOTE(bill): Letters and numbers are defined the same for VK_* and GB_*
+	if (key >= 'A' && key < 'Z') return cast(gbKeyType)key;
+	if (key >= '0' && key < '9') return cast(gbKeyType)key;
+	switch (key) {
+	case VK_ESCAPE: return GB_KEY_ESCAPE;
+
+	case VK_LCONTROL: return GB_KEY_LCONTROL;
+	case VK_LSHIFT:   return GB_KEY_LSHIFT;
+	case VK_LMENU:    return GB_KEY_LALT;
+	case VK_LWIN:     return GB_KEY_LSYSTEM;
+	case VK_RCONTROL: return GB_KEY_RCONTROL;
+	case VK_RSHIFT:   return GB_KEY_RSHIFT;
+	case VK_RMENU:    return GB_KEY_RALT;
+	case VK_RWIN:     return GB_KEY_RSYSTEM;
+	case VK_MENU:     return GB_KEY_MENU;
+
+	case VK_OEM_4:      return GB_KEY_LBRACKET;
+	case VK_OEM_6:      return GB_KEY_RBRACKET;
+	case VK_OEM_1:      return GB_KEY_SEMICOLON;
+	case VK_OEM_COMMA:  return GB_KEY_COMMA;
+	case VK_OEM_PERIOD: return GB_KEY_PERIOD;
+	case VK_OEM_7:      return GB_KEY_QUOTE;
+	case VK_OEM_2:      return GB_KEY_SLASH;
+	case VK_OEM_5:      return GB_KEY_BACKSLASH;
+	case VK_OEM_3:      return GB_KEY_GRAVE;
+	case VK_OEM_PLUS:   return GB_KEY_EQUALS;
+	case VK_OEM_MINUS:  return GB_KEY_MINUS;
+
+	case VK_SPACE:  return GB_KEY_SPACE;
+	case VK_RETURN: return GB_KEY_RETURN;
+	case VK_BACK:   return GB_KEY_BACKSPACE;
+	case VK_TAB:    return GB_KEY_TAB;
+
+	case VK_PRIOR:  return GB_KEY_PAGEUP;
+	case VK_NEXT:   return GB_KEY_PAGEDOWN;
+	case VK_END:    return GB_KEY_END;
+	case VK_HOME:   return GB_KEY_HOME;
+	case VK_INSERT: return GB_KEY_INSERT;
+	case VK_DELETE: return GB_KEY_DELETE;
+
+	case VK_ADD:      return GB_KEY_PLUS;
+	case VK_SUBTRACT: return GB_KEY_SUBTRACT;
+	case VK_MULTIPLY: return GB_KEY_MULTIPLY;
+	case VK_DIVIDE:   return GB_KEY_DIVIDE;
+
+	case VK_LEFT:  return GB_KEY_LEFT;
+	case VK_RIGHT: return GB_KEY_RIGHT;
+	case VK_UP:    return GB_KEY_UP;
+	case VK_DOWN:  return GB_KEY_DOWN;
+
+	case VK_NUMPAD0:   return GB_KEY_NUMPAD0;
+	case VK_NUMPAD1:   return GB_KEY_NUMPAD1;
+	case VK_NUMPAD2:   return GB_KEY_NUMPAD2;
+	case VK_NUMPAD3:   return GB_KEY_NUMPAD3;
+	case VK_NUMPAD4:   return GB_KEY_NUMPAD4;
+	case VK_NUMPAD5:   return GB_KEY_NUMPAD5;
+	case VK_NUMPAD6:   return GB_KEY_NUMPAD6;
+	case VK_NUMPAD7:   return GB_KEY_NUMPAD7;
+	case VK_NUMPAD8:   return GB_KEY_NUMPAD8;
+	case VK_NUMPAD9:   return GB_KEY_NUMPAD9;
+	case VK_SEPARATOR: return GB_KEY_NUMPAD_ENTER;
+	case VK_DECIMAL:   return GB_KEY_NUMPAD_DOT;
+
+	case VK_F1:  return GB_KEY_F1;
+	case VK_F2:  return GB_KEY_F2;
+	case VK_F3:  return GB_KEY_F3;
+	case VK_F4:  return GB_KEY_F4;
+	case VK_F5:  return GB_KEY_F5;
+	case VK_F6:  return GB_KEY_F6;
+	case VK_F7:  return GB_KEY_F7;
+	case VK_F8:  return GB_KEY_F8;
+	case VK_F9:  return GB_KEY_F9;
+	case VK_F10: return GB_KEY_F10;
+	case VK_F11: return GB_KEY_F11;
+	case VK_F12: return GB_KEY_F12;
+	case VK_F13: return GB_KEY_F13;
+	case VK_F14: return GB_KEY_F14;
+	case VK_F15: return GB_KEY_F15;
+
+	case VK_PAUSE: return GB_KEY_PAUSE;
+	}
+	return GB_KEY_UNKNOWN;
+}
+
+
+LRESULT CALLBACK gb__win32_window_callback(HWND wnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+	// NOTE(bill): Silly callbacks
+	gbPlatform *platform = cast(gbPlatform *)GetWindowLongPtr(wnd, GWLP_USERDATA);
+	gbWindow *window = platform ? &platform->window : NULL;
+	b32 window_has_focus = (platform != NULL) && (window->flags & GB_WINDOW_HAS_FOCUS) != 0;
+
+	// TODO(bill): Do more in here?
+	switch (msg) {
+	case WM_CLOSE:
+	case WM_DESTROY:
+		if (platform)
+			window->flags |= GB_WINDOW_IS_CLOSED;
+		return 0;
+
+	case WM_UNICHAR:
+		if (window_has_focus) {
+			if (wParam == '\r')
+				wParam = '\n';
+			// TODO(bill): Does this need to be thread-safe?
+			platform->char_buffer[platform->char_buffer_count++] = cast(char32)wParam;
+		}
+		break;
+
+	case WM_MOUSEWHEEL: {
+		i32 delta = GET_WHEEL_DELTA_WPARAM(wParam);
+		platform->mouse.wheel_delta = delta;
+	} break;
+
+	case WM_CREATE: {
+		// NOTE(bill): https://msdn.microsoft.com/en-us/library/windows/desktop/ms645536(v=vs.85).aspx
+		RAWINPUTDEVICE rid[2] = {0};
+		
+		// NOTE(bill): Keyboard
+		rid[0].usUsagePage = 0x01;
+		rid[0].usUsage     = 0x06;
+		rid[0].dwFlags     = RIDEV_NOLEGACY; // NOTE(bill): Do not generate legacy messages such as WM_KEYDOWN
+		rid[0].hwndTarget  = wnd;
+
+		// NOTE(bill): Mouse
+		rid[1].usUsagePage = 0x01; 
+		rid[1].usUsage     = 0x02; 
+		rid[1].dwFlags     = 0; // NOTE(bill): adds HID mouse and also allows legacy mouse messages to allow for window movement etc.
+		rid[1].hwndTarget  = wnd;
+
+		if (!RegisterRawInputDevices(rid, gb_count_of(rid), gb_size_of(rid[0]))) {
+			GB_PANIC("Failed to initialize raw input device for win32.");
+		}
+	} break;
+
+	case WM_INPUT: {
+		RAWINPUT raw = {0};
+		UINT size = gb_size_of(RAWINPUT);
+
+		GetRawInputData(cast(HRAWINPUT)lParam, RID_INPUT, &raw, &size, gb_size_of(RAWINPUTHEADER));
+		switch (raw.header.dwType) {
+		case RIM_TYPEKEYBOARD: {
+			// NOTE(bill): Many thanks to https://blog.molecular-matters.com/2011/09/05/properly-handling-keyboard-input/
+			// for the 
+			RAWKEYBOARD *raw_kb = &raw.data.keyboard;
+			UINT vk = raw_kb->VKey;
+			UINT scan_code = raw_kb->MakeCode;
+			UINT flags = raw_kb->Flags;
+			// NOTE(bill): e0 and e1 are escape sequences used for certain special keys, such as PRINT and PAUSE/BREAK.
+			// NOTE(bill): http://www.win.tue.nl/~aeb/linux/kbd/scancodes-1.html
+			b32 is_e0   = (flags & RI_KEY_E0) != 0;
+			b32 is_e1   = (flags & RI_KEY_E1) != 0;
+			b32 is_up   = (flags & RI_KEY_BREAK) != 0; 
+			b32 is_down = !is_up;
+
+			// TODO(bill): Should I handle scan codes?
+
+			if (vk == 255) { 
+				// NOTE(bill): Discard "fake keys"
+				return 0;
+			} else if (vk == VK_SHIFT) {
+				// NOTE(bill): Correct left/right shift
+				vk = MapVirtualKey(scan_code, MAPVK_VSC_TO_VK_EX);
+			} else if (vk == VK_NUMLOCK) {
+				// NOTE(bill): Correct PAUSE/BREAK and NUM LOCK and set the extended bit
+				scan_code = MapVirtualKey(vk, MAPVK_VK_TO_VSC) | 0x100;
+			}
+
+			if (is_e1) {
+				// NOTE(bill): Escaped sequences, turn vk into the correct scan code
+				// except for VK_PAUSE (it's a bug)
+				if (vk == VK_PAUSE)
+					scan_code = 0x45;
+				else
+					scan_code = MapVirtualKey(vk, MAPVK_VK_TO_VSC);
+			}
+
+			switch (vk) {
+			case VK_CONTROL: vk = (is_e0) ? VK_RCONTROL : VK_LCONTROL; break;
+			case VK_MENU:    vk = (is_e0) ? VK_RMENU    : VK_LMENU;   break;
+
+			case VK_RETURN: if (is_e0)  vk = VK_SEPARATOR; break; // NOTE(bill): Numpad return
+			case VK_DELETE: if (!is_e0) vk = VK_DECIMAL;   break; // NOTE(bill): Numpad dot
+			case VK_INSERT: if (!is_e0) vk = VK_NUMPAD0;   break;
+			case VK_HOME:   if (!is_e0) vk = VK_NUMPAD7;   break;
+			case VK_END:    if (!is_e0) vk = VK_NUMPAD1;   break;
+			case VK_PRIOR:  if (!is_e0) vk = VK_NUMPAD9;   break;
+			case VK_NEXT:   if (!is_e0) vk = VK_NUMPAD3;   break;
+
+			// NOTE(bill): The standard arrow keys will always have their e0 bit set, but the
+			// corresponding keys on the NUMPAD will not.
+			case VK_LEFT:  if (!is_e0) vk = VK_NUMPAD4; break;
+			case VK_RIGHT: if (!is_e0) vk = VK_NUMPAD6; break;
+			case VK_UP:    if (!is_e0) vk = VK_NUMPAD8; break;
+			case VK_DOWN:  if (!is_e0) vk = VK_NUMPAD2; break;
+
+			// NUMPAD 5 doesn't have its e0 bit set
+			case VK_CLEAR: if (!is_e0) vk = VK_NUMPAD5; break;
+			}
+
+			// NOTE(bill): Set appropriate key state flags
+			gb_key_state_update(&platform->keys[gb__win32_from_vk(vk)], is_down);
+
+		} break;
+		case RIM_TYPEMOUSE: {
+			RAWMOUSE *raw_mouse = &raw.data.mouse;
+			USHORT flags = raw_mouse->usFlags;
+			LONG dx = raw_mouse->lLastX;
+			LONG dy = raw_mouse->lLastY;
+			USHORT button_flags = raw_mouse->usButtonFlags;
+
+			platform->mouse.raw_dx = dx;
+			platform->mouse.raw_dy = dy;
+		} break;
+		} 
+	} break;
+
+	default: break;
+	}
+
+	return DefWindowProcW(wnd, msg, wParam, lParam);
+}
+
 
 void gb_platform_update(gbPlatform *p) {
 	isize i;
 
-	{ // NOTE(bill): Set window state
+	{ // NOTE(bill): Process pending messages
+		MSG message;
+		for (;;) {
+			BOOL is_okay = PeekMessage(&message, 0, 0, 0, PM_REMOVE);
+			if (!is_okay) break;
+
+			switch (message.message) {
+			case WM_QUIT:
+				p->quit_requested = true;
+				break;
+
+			default:
+				TranslateMessage(&message);
+				DispatchMessageW(&message);
+				break;
+		}
+		}
+	}
+
+	{ // NOTE(bill): Set window state]
+		// TODO(bill): Should this be moved to gb__win32_window_callback ? 
 		RECT window_rect;
 		i32 x, y, w, h;
 
@@ -6767,26 +7044,14 @@ void gb_platform_update(gbPlatform *p) {
 		p->window.width = w;
 		p->window.height = h;
 
-		if (GetFocus() == cast(HWND)p->window.handle)
-			p->window.flags |= GB_WINDOW_HAS_FOCUS;
-		else
-			p->window.flags &= ~GB_WINDOW_HAS_FOCUS;
-		{
-			b32 is_minimized = IsIconic(cast(HWND)p->window.handle) != 0;
-			if (is_minimized)
-				p->window.flags |= GB_WINDOW_MINIMIZED;
-			else
-				p->window.flags &= ~GB_WINDOW_MINIMIZED;
-		}
+		GB_MASK_TOGGLE(p->window.flags, GetFocus() == cast(HWND)p->window.handle,  GB_WINDOW_HAS_FOCUS);
+		GB_MASK_TOGGLE(p->window.flags, IsIconic(cast(HWND)p->window.handle) != 0, GB_WINDOW_MINIMIZED);
 	}
 
-	{ // NOTE(bill): Set mouse pos
+	{ // NOTE(bill): Set mouse position
 		POINT mouse_pos;
 		GetCursorPos(&mouse_pos);
 		ScreenToClient(cast(HWND)p->window.handle, &mouse_pos);
-
-		p->mouse.dx = mouse_pos.x - p->mouse.x;
-		p->mouse.dy = mouse_pos.y - p->mouse.y;
 		p->mouse.x = mouse_pos.x;
 		p->mouse.y = mouse_pos.y;
 	}
@@ -6799,136 +7064,16 @@ void gb_platform_update(gbPlatform *p) {
 			VK_XBUTTON1,
 			VK_XBUTTON2,
 		};
-		for (i = 0; i < GB_MOUSE_BUTTON_COUNT; i++)
-			p->mouse.buttons[i] = GetKeyState(win_button_id[i]) < 0;
+		for (i = 0; i < GB_MOUSE_BUTTON_COUNT; i++) {
+			// NOTE(bill): Needs to be Async in this case
+			b32 is_down = GetAsyncKeyState(win_button_id[i]) < 0;
+			gb_key_state_update(&p->mouse.buttons[i], is_down);
+		}
 	}
 
 	// NOTE(bill): Set Key states
 	if (p->window.flags & GB_WINDOW_HAS_FOCUS) {
-		#define GB_KEY_STATE_SET(platform, test, state) \
-			if (test) p->keys[platform] |=  state; \
-			else      p->keys[platform] &= ~state
-		#define GB__KEY_SET(platform, vk) do { \
-			b32 was_down = (p->keys[platform] & GB_KEY_STATE_DOWN) != 0; \
-			b32 is_down = GetKeyState(vk) < 0; /* TODO(bill): Should this GetAsyncKeyState or is that overkill? */ \
-			GB_KEY_STATE_SET(platform, is_down,               GB_KEY_STATE_DOWN); \
-			GB_KEY_STATE_SET(platform, !was_down &&  is_down, GB_KEY_STATE_PRESSED); \
-			GB_KEY_STATE_SET(platform,  was_down && !is_down, GB_KEY_STATE_RELEASED); \
-		} while (0)
-		GB__KEY_SET(GB_KEY_A, 'A');
-		GB__KEY_SET(GB_KEY_B, 'B');
-		GB__KEY_SET(GB_KEY_C, 'C');
-		GB__KEY_SET(GB_KEY_D, 'D');
-		GB__KEY_SET(GB_KEY_E, 'E');
-		GB__KEY_SET(GB_KEY_F, 'F');
-		GB__KEY_SET(GB_KEY_G, 'G');
-		GB__KEY_SET(GB_KEY_H, 'H');
-		GB__KEY_SET(GB_KEY_I, 'I');
-		GB__KEY_SET(GB_KEY_J, 'J');
-		GB__KEY_SET(GB_KEY_K, 'K');
-		GB__KEY_SET(GB_KEY_L, 'L');
-		GB__KEY_SET(GB_KEY_M, 'M');
-		GB__KEY_SET(GB_KEY_N, 'N');
-		GB__KEY_SET(GB_KEY_O, 'O');
-		GB__KEY_SET(GB_KEY_P, 'P');
-		GB__KEY_SET(GB_KEY_Q, 'Q');
-		GB__KEY_SET(GB_KEY_R, 'R');
-		GB__KEY_SET(GB_KEY_S, 'S');
-		GB__KEY_SET(GB_KEY_T, 'T');
-		GB__KEY_SET(GB_KEY_U, 'U');
-		GB__KEY_SET(GB_KEY_V, 'V');
-		GB__KEY_SET(GB_KEY_W, 'W');
-		GB__KEY_SET(GB_KEY_X, 'X');
-		GB__KEY_SET(GB_KEY_Y, 'Y');
-		GB__KEY_SET(GB_KEY_Z, 'Z');
-
-		GB__KEY_SET(GB_KEY_0, '0');
-		GB__KEY_SET(GB_KEY_1, '1');
-		GB__KEY_SET(GB_KEY_2, '2');
-		GB__KEY_SET(GB_KEY_3, '3');
-		GB__KEY_SET(GB_KEY_4, '4');
-		GB__KEY_SET(GB_KEY_5, '5');
-		GB__KEY_SET(GB_KEY_6, '6');
-		GB__KEY_SET(GB_KEY_7, '7');
-		GB__KEY_SET(GB_KEY_8, '8');
-		GB__KEY_SET(GB_KEY_9, '9');
-
-		GB__KEY_SET(GB_KEY_ESCAPE, VK_ESCAPE);
-
-		GB__KEY_SET(GB_KEY_LCONTROL, VK_LCONTROL);
-		GB__KEY_SET(GB_KEY_LSHIFT,   VK_LSHIFT);
-		GB__KEY_SET(GB_KEY_LALT,     VK_LMENU);
-		GB__KEY_SET(GB_KEY_LSYSTEM,  VK_LWIN);
-		GB__KEY_SET(GB_KEY_RCONTROL, VK_RCONTROL);
-		GB__KEY_SET(GB_KEY_RSHIFT,   VK_RSHIFT);
-		GB__KEY_SET(GB_KEY_RALT,     VK_RMENU);
-		GB__KEY_SET(GB_KEY_RSYSTEM,  VK_RWIN);
-		GB__KEY_SET(GB_KEY_MENU,     VK_MENU);
-
-		GB__KEY_SET(GB_KEY_LBRACKET,  VK_OEM_4);
-		GB__KEY_SET(GB_KEY_RBRACKET,  VK_OEM_6);
-		GB__KEY_SET(GB_KEY_SEMICOLON, VK_OEM_1);
-		GB__KEY_SET(GB_KEY_COMMA,     VK_OEM_COMMA);
-		GB__KEY_SET(GB_KEY_PERIOD,    VK_OEM_PERIOD);
-		GB__KEY_SET(GB_KEY_QUOTE,     VK_OEM_7);
-		GB__KEY_SET(GB_KEY_SLASH,     VK_OEM_2);
-		GB__KEY_SET(GB_KEY_BACKSLASH, VK_OEM_5);
-		GB__KEY_SET(GB_KEY_GRAVE,     VK_OEM_3);
-		GB__KEY_SET(GB_KEY_EQUALS,    VK_OEM_PLUS);
-		GB__KEY_SET(GB_KEY_MINUS,     VK_OEM_MINUS);
-
-		GB__KEY_SET(GB_KEY_SPACE,     VK_SPACE);
-		GB__KEY_SET(GB_KEY_RETURN,    VK_RETURN);
-		GB__KEY_SET(GB_KEY_BACKSPACE, VK_BACK);
-		GB__KEY_SET(GB_KEY_TAB,       VK_TAB);
-
-		GB__KEY_SET(GB_KEY_PAGEUP,   VK_PRIOR);
-		GB__KEY_SET(GB_KEY_PAGEDOWN, VK_NEXT);
-		GB__KEY_SET(GB_KEY_END,      VK_END);
-		GB__KEY_SET(GB_KEY_HOME,     VK_HOME);
-		GB__KEY_SET(GB_KEY_INSERT,   VK_INSERT);
-		GB__KEY_SET(GB_KEY_DELETE,   VK_DELETE);
-
-		GB__KEY_SET(GB_KEY_PLUS,     VK_ADD);
-		GB__KEY_SET(GB_KEY_SUBTRACT, VK_SUBTRACT);
-		GB__KEY_SET(GB_KEY_MULTIPLY, VK_MULTIPLY);
-		GB__KEY_SET(GB_KEY_DIVIDE,   VK_DIVIDE);
-
-		GB__KEY_SET(GB_KEY_LEFT,  VK_LEFT);
-		GB__KEY_SET(GB_KEY_RIGHT, VK_RIGHT);
-		GB__KEY_SET(GB_KEY_UP,    VK_UP);
-		GB__KEY_SET(GB_KEY_DOWN,  VK_DOWN);
-
-		GB__KEY_SET(GB_KEY_NUMPAD0, VK_NUMPAD0);
-		GB__KEY_SET(GB_KEY_NUMPAD1, VK_NUMPAD1);
-		GB__KEY_SET(GB_KEY_NUMPAD2, VK_NUMPAD2);
-		GB__KEY_SET(GB_KEY_NUMPAD3, VK_NUMPAD3);
-		GB__KEY_SET(GB_KEY_NUMPAD4, VK_NUMPAD4);
-		GB__KEY_SET(GB_KEY_NUMPAD5, VK_NUMPAD5);
-		GB__KEY_SET(GB_KEY_NUMPAD6, VK_NUMPAD6);
-		GB__KEY_SET(GB_KEY_NUMPAD7, VK_NUMPAD7);
-		GB__KEY_SET(GB_KEY_NUMPAD8, VK_NUMPAD8);
-		GB__KEY_SET(GB_KEY_NUMPAD9, VK_NUMPAD9);
-
-		GB__KEY_SET(GB_KEY_F1,  VK_F1);
-		GB__KEY_SET(GB_KEY_F2,  VK_F2);
-		GB__KEY_SET(GB_KEY_F3,  VK_F3);
-		GB__KEY_SET(GB_KEY_F4,  VK_F4);
-		GB__KEY_SET(GB_KEY_F5,  VK_F5);
-		GB__KEY_SET(GB_KEY_F6,  VK_F6);
-		GB__KEY_SET(GB_KEY_F7,  VK_F7);
-		GB__KEY_SET(GB_KEY_F8,  VK_F8);
-		GB__KEY_SET(GB_KEY_F9,  VK_F9);
-		GB__KEY_SET(GB_KEY_F10, VK_F10);
-		GB__KEY_SET(GB_KEY_F11, VK_F11);
-		GB__KEY_SET(GB_KEY_F12, VK_F12);
-		GB__KEY_SET(GB_KEY_F13, VK_F13);
-		GB__KEY_SET(GB_KEY_F14, VK_F14);
-		GB__KEY_SET(GB_KEY_F15, VK_F15);
-
-		GB__KEY_SET(GB_KEY_PAUSE, VK_PAUSE);
-		#undef GB__KEY_SET
-		#undef GB_KEY_STATE_SET
+		p->char_buffer_count = 0; // TODO(bill): Reset buffer count here or else where?
 
 		p->key_modifiers.control = p->keys[GB_KEY_LCONTROL] | p->keys[GB_KEY_RCONTROL];
 		p->key_modifiers.alt     = p->keys[GB_KEY_LALT]     | p->keys[GB_KEY_RALT];
@@ -6940,11 +7085,8 @@ void gb_platform_update(gbPlatform *p) {
 		if (max_controller_count > gb_count_of(p->game_controllers))
 			max_controller_count = gb_count_of(p->game_controllers);
 
-		for (i = 0;
-		     i < max_controller_count;
-		     i++) {
+		for (i = 0; i < max_controller_count; i++) {
 			gbGameController *controller = &p->game_controllers[i];
-
 			XINPUT_STATE controller_state = {0};
 			if (p->xinput.get_state(cast(DWORD)i, &controller_state) != ERROR_SUCCESS) {
 				// NOTE(bill): The controller is not available
@@ -7008,32 +7150,10 @@ void gb_platform_update(gbPlatform *p) {
 			}
 		}
 	}
-
-	{ // NOTE(bill): Process pending messages
-		MSG message;
-		for (;;) {
-			BOOL is_okay = PeekMessage(&message, 0, 0, 0, PM_REMOVE);
-			if (!is_okay) break;
-
-			switch (message.message) {
-			case WM_QUIT:
-				p->quit_requested = true;
-				break;
-
-			default:
-				TranslateMessage(&message);
-				DispatchMessageW(&message);
-				break;
-		}
-		}
-	}
 }
 
 void gb_platform_display(gbPlatform *p) {
-	gbWindow *window;
-	GB_ASSERT_NOT_NULL(p);
-
-	window = &p->window;
+	gbWindow *window = &p->window;
 
 	if (window->flags & GB_WINDOW_OPENGL) {
 		SwapBuffers(window->win32_dc);
@@ -7056,8 +7176,6 @@ void gb_platform_display(gbPlatform *p) {
 	}
 }
 
-
-
 void gb_platform_show_cursor(gbPlatform *p, i32 show) {
 	gb_unused(p);
 	ShowCursor(show);
@@ -7070,12 +7188,9 @@ void gb_platform_set_mouse_position(gbPlatform *p, gbWindow *rel_win, i32 x, i32
 	ClientToScreen(cast(HWND)rel_win->handle, &point);
 	SetCursorPos(point.x, point.y);
 
-	p->mouse.dx = point.x - p->mouse.x;
-	p->mouse.dy = point.y - p->mouse.y;
-	p->mouse.x  = point.x;
-	p->mouse.y  = point.y;
+	p->mouse.x = point.x;
+	p->mouse.y = point.y;
 }
-
 
 gb_inline gbGameController *gb_platform_get_controller(gbPlatform *p, isize index) {
 	if (index >= 0 && index < gb_count_of(p->game_controllers))
@@ -7083,29 +7198,9 @@ gb_inline gbGameController *gb_platform_get_controller(gbPlatform *p, isize inde
 	return NULL;
 }
 
-LRESULT CALLBACK gb__win32_main_window_callback(HWND wnd, UINT msg, WPARAM wparam, LPARAM lparam) {
-	LRESULT result = 0;
-	gbWindow *window = cast(gbWindow *)GetWindowLongPtr(wnd, GWLP_USERDATA);
-
-	// TODO(bill): Do more in here?
-	switch (msg) {
-	case WM_CLOSE:
-	case WM_DESTROY:
-		window->flags |= GB_WINDOW_IS_CLOSED;
-		break;
-
-	default:
-		result = DefWindowProcW(wnd, msg, wparam, lparam);
-		break;
-	}
-
-	return result;
-}
-
-
 // TODO(bill): Make this return errors rathern than silly message boxes
-gbWindow *gb_window_init(gbPlatform *p, char const *title, gbVideoMode mode, u32 flags) {
-	gbWindow *window = &p->window;
+gbWindow *gb_window_init(gbPlatform *platform, char const *title, gbVideoMode mode, u32 flags) {
+	gbWindow *window = &platform->window;
 	WNDCLASSEXW wc = {gb_size_of(WNDCLASSEXW)};
 	DWORD ex_style, style;
 	RECT wr;
@@ -7114,7 +7209,7 @@ gbWindow *gb_window_init(gbPlatform *p, char const *title, gbVideoMode mode, u32
 	gb_zero_item(window);
 
 	wc.style = CS_HREDRAW | CS_VREDRAW; // | CS_OWNDC
-	wc.lpfnWndProc   = gb__win32_main_window_callback;
+	wc.lpfnWndProc   = gb__win32_window_callback;
 	wc.hIcon         = LoadIcon(NULL, IDI_WINLOGO);
 	wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
 	wc.hbrBackground = cast(HBRUSH)GetStockObject(WHITE_BRUSH);
@@ -7204,8 +7299,8 @@ gbWindow *gb_window_init(gbPlatform *p, char const *title, gbVideoMode mode, u32
 
 		SetPixelFormat(window->win32_dc, ChoosePixelFormat(window->win32_dc, &pfd), NULL);
 
-		window->opengl.win32_context = wglCreateContext(window->win32_dc);
-		wglMakeCurrent(window->win32_dc, window->opengl.win32_context);
+		window->opengl.context = cast(void *)wglCreateContext(window->win32_dc);
+		wglMakeCurrent(window->win32_dc, cast(HGLRC)window->opengl.context);
 	} else if (window->flags & GB_WINDOW_SOFTWARE) {
 		gb__window_resize_dib_section(window, mode.width, mode.height);
 	} else {
@@ -7214,7 +7309,7 @@ gbWindow *gb_window_init(gbPlatform *p, char const *title, gbVideoMode mode, u32
 
 	SetForegroundWindow(cast(HWND)window->handle);
 	SetFocus(cast(HWND)window->handle);
-	SetWindowLongPtr(cast(HWND)window->handle, GWLP_USERDATA, cast(LONG_PTR)window);
+	SetWindowLongPtr(cast(HWND)window->handle, GWLP_USERDATA, cast(LONG_PTR)platform);
 
 	window->width  = mode.width;
 	window->height = mode.height;
@@ -7224,7 +7319,7 @@ gbWindow *gb_window_init(gbPlatform *p, char const *title, gbVideoMode mode, u32
 
 void gb_window_destroy(gbWindow *w) {
 	if (w->flags & GB_WINDOW_OPENGL)
-		wglDeleteContext(w->opengl.win32_context);
+		wglDeleteContext(cast(HGLRC)w->opengl.context);
 	else if (w->flags & GB_WINDOW_SOFTWARE)
 		gb_vm_free(gb_virtual_memory(w->software.memory, w->software.memory_size));
 
@@ -7298,7 +7393,7 @@ void gb_window_toggle_fullscreen(gbWindow *w, b32 fullscreen_desktop) {
 
 gb_inline void gb_window_make_context_current(gbWindow *w) {
 	if (w->flags & GB_WINDOW_OPENGL) {
-		wglMakeCurrent(w->win32_dc, w->opengl.win32_context);
+		wglMakeCurrent(w->win32_dc, cast(HGLRC)w->opengl.context);
 	}
 }
 
@@ -7340,6 +7435,7 @@ isize gb_video_mode_get_fullscreen_modes(gbVideoMode *modes, isize max_mode_coun
 	return count;
 }
 
+
 #endif
 
 
@@ -7372,6 +7468,10 @@ GB_COMPARE_PROC(gb_video_mode_cmp) {
 GB_COMPARE_PROC(gb_video_mode_dsc_cmp) {
 	return -gb_video_mode_cmp(a, b);
 }
+
+
+// TODO(bill): OSX Platform Layer
+// NOTE(bill): Use this as a guide so there is no need for Obj-C https://github.com/jimon/osx_app_in_plain_c
 
 #endif // GB_PLATFORM
 
