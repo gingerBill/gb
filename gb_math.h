@@ -1,8 +1,9 @@
-/* gb_math.h - v0.06e - public domain C math library - no warranty implied; use at your own risk
+/* gb_math.h - v0.06f - public domain C math library - no warranty implied; use at your own risk
    A C math library geared towards game development
    use '#define GB_MATH_IMPLEMENTATION' before including to create the implementation in _ONE_ file
 
 Version History:
+	0.06f - Remove warning on MSVC
 	0.06e - Change brace style and fix some warnings
 	0.06d - Bug fix
 	0.06c - Remove extra needed define for C++ and inline all operators
@@ -62,6 +63,11 @@ CONTENTS
 	#endif
 #endif
 
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable:4201)
+#endif
+
 typedef union gbVec2 {
 	struct { float x, y; };
 	float e[2];
@@ -113,6 +119,9 @@ typedef union gbQuat {
 } gbQuat;
 
 
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 typedef float gbFloat2[2];
 typedef float gbFloat3[3];

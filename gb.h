@@ -1,4 +1,4 @@
-/* gb.h - v0.18  - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.18a - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -17,16 +17,6 @@
 
 	All other files should just #include "gb.h" without #define
 
-
-	For the Platform Layer
-
-		#define GB_PLATFORM
-
-	BEFORE the include like this:
-
-		#define GB_PLATFORM
-		#include "gb.h"
-
 ===========================================================================
 
 Conventions used:
@@ -37,6 +27,7 @@ Conventions used:
 
 
 Version History:
+	0.18a - Controller vibration
 	0.18  - Raw keyboard and mouse input for WIN32
 	0.17d - Fixed printf bug for strings
 	0.17c - Compile as 32 bit
@@ -534,7 +525,13 @@ extern "C++" {
 
 
 #ifndef gb_unused
-#define gb_unused(x) ((void)(gb_size_of(x)))
+	#if defined(_MSC_VER)
+		#define gb_unused(x) (__pragma(warning(suppress:4100))(x))
+	#elif defined (__GCC__)
+		#define gb_unused(x) __attribute__((__unused__))(x)
+	#else
+		#define gb_unused(x) ((void)(gb_size_of(x)))
+	#endif
 #endif
 
 
@@ -1863,7 +1860,9 @@ typedef enum gbFileFlag {
 	GB_FILE_READ       = GB_BIT(0),
 	GB_FILE_WRITE      = GB_BIT(1),
 	GB_FILE_APPEND     = GB_BIT(2),
-	GB_FILE_RW         = GB_BIT(3)
+	GB_FILE_RW         = GB_BIT(3),
+
+	GB_FILE_MODES = GB_FILE_READ | GB_FILE_WRITE | GB_FILE_APPEND | GB_FILE_RW
 } gbFileFlag;
 
 // NOTE(bill): Only used internally and for the file operations
@@ -2120,12 +2119,10 @@ gb_global gbColour const GB_COLOUR_MAGENTA = {0xffff00ff};
 //
 //
 
-#if defined(GB_PLATFORM)
-
 // NOTE(bill):
 // Coordiate system - +ve x - left to right
 //                  - +ve y - top to bottom
-//                  - Relative to window 
+//                  - Relative to window
 
 
 #if defined(GB_SYSTEM_WINDOWS)
@@ -2368,6 +2365,8 @@ typedef enum gbControllerButtonType {
 	GB_CONTROLLER_BUTTON_RIGHT_SHOULDER,
 	GB_CONTROLLER_BUTTON_BACK,
 	GB_CONTROLLER_BUTTON_START,
+	GB_CONTROLLER_BUTTON_LEFT_THUMB,
+	GB_CONTROLLER_BUTTON_RIGHT_THUMB,
 
 	GB_CONTROLLER_BUTTON_COUNT
 } gbControllerButtonType;
@@ -2418,10 +2417,9 @@ GB_DEF void gb_platform_init   (gbPlatform *p);
 GB_DEF void gb_platform_update (gbPlatform *p);
 GB_DEF void gb_platform_display(gbPlatform *p);
 
-GB_DEF void gb_platform_show_cursor       (gbPlatform *p, i32 show);
-GB_DEF void gb_platform_set_mouse_position(gbPlatform *p, gbWindow *rel_win, i32 x, i32 y);
-
-GB_DEF gbGameController *gb_platform_get_controller(gbPlatform *p, isize index);
+GB_DEF void gb_platform_show_cursor             (gbPlatform *p, i32 show);
+GB_DEF void gb_platform_set_mouse_position      (gbPlatform *p, i32 x, i32 y);
+GB_DEF void gb_platform_set_controller_vibration(gbPlatform *p, isize index, f32 left_motor, f32 right_motor);
 
 // NOTE(bill): Title is UTF-8
 GB_DEF gbWindow *gb_window_init                (gbPlatform *p, char const *title, gbVideoMode mode, u32 flags);
@@ -2442,7 +2440,6 @@ GB_DEF isize       gb_video_mode_get_fullscreen_modes(gbVideoMode *modes, isize 
 GB_DEF GB_COMPARE_PROC(gb_video_mode_cmp);     // NOTE(bill): Sort smallest to largest (Ascending)
 GB_DEF GB_COMPARE_PROC(gb_video_mode_dsc_cmp); // NOTE(bill): Sort largest to smallest (Descending)
 
-#endif // GB_PLATFORM
 
 #if defined(__cplusplus)
 }
@@ -3373,7 +3370,8 @@ gb_inline gbAllocator gb_heap_allocator(void) {
 	a.data = NULL;
 	return a;
 }
- GB_ALLOCATOR_PROC(gb_heap_allocator_proc) {
+
+GB_ALLOCATOR_PROC(gb_heap_allocator_proc) {
 	gb_unused(allocator_data);
 	gb_unused(options);
 	gb_unused(old_size);
@@ -3726,7 +3724,7 @@ GB_ALLOCATOR_PROC(gb_pool_allocator_proc) {
 
 	case GB_ALLOCATION_RESIZE:
 		// NOTE(bill): Cannot resize
-		GB_ASSERT(false);
+		GB_PANIC("You cannot resize something allocated by with a pool.");
 		break;
 	}
 
@@ -5397,7 +5395,7 @@ GB_FILE_OPEN_PROC(gb__win32_file_open) {
 	DWORD creation_disposition;
 	HANDLE handle;
 
-	switch (mode & (GB_FILE_READ | GB_FILE_WRITE | GB_FILE_APPEND | GB_FILE_RW)) {
+	switch (mode & GB_FILE_MODES) {
 	case GB_FILE_READ:
 		desired_access = GENERIC_READ;
 		creation_disposition = OPEN_EXISTING;
@@ -5490,7 +5488,7 @@ gbFileOperations const GB_DEFAULT_FILE_OPERATIONS = {
 
 GB_FILE_OPEN_PROC(gb__posix_file_open) {
 	i32 os_mode;
-	switch (mode & (GB_FILE_READ | GB_FILE_WRITE | GB_FILE_APPEND | GB_FILE_RW)) {
+	switch (mode & GB_FILE_MODES) {
 	case GB_FILE_READ:
 		os_mode = O_RDONLY;
 		break;
@@ -5608,13 +5606,13 @@ gb_inline i64 gb_file_skip(gbFile *f, i64 bytes) {
 	i64 new_offset = 0;
 	if (!f->ops) f->ops = &GB_DEFAULT_FILE_OPERATIONS;
 	f->ops->seek(f->fd, bytes, GB_SEEK_CURRENT, &new_offset);
-	return new_offset;	
-} 
+	return new_offset;
+}
 
 gb_inline i64 gb_file_tell(gbFile *f) {
 	i64 new_offset = 0;
 	if (!f->ops) f->ops = &GB_DEFAULT_FILE_OPERATIONS;
-	f->ops->seek(f->fd, 0, GB_SEEK_CURRENT, &new_offset);		
+	f->ops->seek(f->fd, 0, GB_SEEK_CURRENT, &new_offset);
 	return new_offset;
 }
 gb_inline b32 gb_file_read (gbFile *f, void *buffer, isize size)       { return gb_file_read_at(f, buffer, size, gb_file_tell(f)); }
@@ -5976,7 +5974,7 @@ gb_inline isize gb_printf_err_va(char const *fmt, va_list va) {
 gb_inline isize gb_fprintf_va(struct gbFile *f, char const *fmt, va_list va) {
 	gb_local_persist char buf[4096];
 	isize len = gb_snprintf_va(buf, gb_size_of(buf), fmt, va);
-	gb_file_write(f, buf, len);
+	gb_file_write(f, buf, len-1); // NOTE(bill): prevent extra whitespace
 	return len;
 }
 
@@ -6673,8 +6671,11 @@ gb_inline gbColour gb_colour(f32 r, f32 g, f32 b, f32 a) {
 #endif
 
 
-#if defined(GB_PLATFORM)
-
+////////////////////////////////////////////////////////////////
+//
+// Platform
+//
+//
 
 gb_inline void gb_key_state_update(gbKeyState *s, b32 is_down) {
 	b32 was_down = (*s & GB_KEY_STATE_DOWN) != 0;
@@ -6695,12 +6696,6 @@ GB_XINPUT_SET_STATE(gbXInputSetState_Stub) {
 }
 
 
-gb_internal gb_inline void gb__process_xinput_digital_button(DWORD xinput_button_state, DWORD button_bit,
-                                                             gbKeyState *button) {
-	b32 is_down  = ((xinput_button_state & button_bit) == button_bit);
-	gb_key_state_update(button, is_down);
-}
-
 gb_internal gb_inline f32 gb__process_xinput_stick_value(SHORT value, SHORT dead_zone_threshold) {
 	f32 result = 0;
 
@@ -6709,12 +6704,6 @@ gb_internal gb_inline f32 gb__process_xinput_stick_value(SHORT value, SHORT dead
 	else if (value > dead_zone_threshold)
 		result = cast(f32) (value - dead_zone_threshold) / (32767.0f - dead_zone_threshold);
 
-	return result;
-}
-
-gb_internal gb_inline f32 gb__process_xinput_trigger_value(BYTE value) {
-	f32 result;
-	result = cast(f32) (value / 255.0f);
 	return result;
 }
 
@@ -6893,7 +6882,7 @@ LRESULT CALLBACK gb__win32_window_callback(HWND wnd, UINT msg, WPARAM wParam, LP
 	case WM_CREATE: {
 		// NOTE(bill): https://msdn.microsoft.com/en-us/library/windows/desktop/ms645536(v=vs.85).aspx
 		RAWINPUTDEVICE rid[2] = {0};
-		
+
 		// NOTE(bill): Keyboard
 		rid[0].usUsagePage = 0x01;
 		rid[0].usUsage     = 0x06;
@@ -6901,8 +6890,8 @@ LRESULT CALLBACK gb__win32_window_callback(HWND wnd, UINT msg, WPARAM wParam, LP
 		rid[0].hwndTarget  = wnd;
 
 		// NOTE(bill): Mouse
-		rid[1].usUsagePage = 0x01; 
-		rid[1].usUsage     = 0x02; 
+		rid[1].usUsagePage = 0x01;
+		rid[1].usUsage     = 0x02;
 		rid[1].dwFlags     = 0; // NOTE(bill): adds HID mouse and also allows legacy mouse messages to allow for window movement etc.
 		rid[1].hwndTarget  = wnd;
 
@@ -6915,11 +6904,12 @@ LRESULT CALLBACK gb__win32_window_callback(HWND wnd, UINT msg, WPARAM wParam, LP
 		RAWINPUT raw = {0};
 		UINT size = gb_size_of(RAWINPUT);
 
-		GetRawInputData(cast(HRAWINPUT)lParam, RID_INPUT, &raw, &size, gb_size_of(RAWINPUTHEADER));
+		if (GetRawInputData(cast(HRAWINPUT)lParam, RID_INPUT, &raw, &size, gb_size_of(RAWINPUTHEADER)) == FALSE)
+			return 0;
 		switch (raw.header.dwType) {
 		case RIM_TYPEKEYBOARD: {
 			// NOTE(bill): Many thanks to https://blog.molecular-matters.com/2011/09/05/properly-handling-keyboard-input/
-			// for the 
+			// for the
 			RAWKEYBOARD *raw_kb = &raw.data.keyboard;
 			UINT vk = raw_kb->VKey;
 			UINT scan_code = raw_kb->MakeCode;
@@ -6928,12 +6918,12 @@ LRESULT CALLBACK gb__win32_window_callback(HWND wnd, UINT msg, WPARAM wParam, LP
 			// NOTE(bill): http://www.win.tue.nl/~aeb/linux/kbd/scancodes-1.html
 			b32 is_e0   = (flags & RI_KEY_E0) != 0;
 			b32 is_e1   = (flags & RI_KEY_E1) != 0;
-			b32 is_up   = (flags & RI_KEY_BREAK) != 0; 
+			b32 is_up   = (flags & RI_KEY_BREAK) != 0;
 			b32 is_down = !is_up;
 
 			// TODO(bill): Should I handle scan codes?
 
-			if (vk == 255) { 
+			if (vk == 255) {
 				// NOTE(bill): Discard "fake keys"
 				return 0;
 			} else if (vk == VK_SHIFT) {
@@ -6982,15 +6972,13 @@ LRESULT CALLBACK gb__win32_window_callback(HWND wnd, UINT msg, WPARAM wParam, LP
 		} break;
 		case RIM_TYPEMOUSE: {
 			RAWMOUSE *raw_mouse = &raw.data.mouse;
-			USHORT flags = raw_mouse->usFlags;
 			LONG dx = raw_mouse->lLastX;
 			LONG dy = raw_mouse->lLastY;
-			USHORT button_flags = raw_mouse->usButtonFlags;
 
 			platform->mouse.raw_dx = dx;
 			platform->mouse.raw_dy = dy;
 		} break;
-		} 
+		}
 	} break;
 
 	default: break;
@@ -7003,27 +6991,8 @@ LRESULT CALLBACK gb__win32_window_callback(HWND wnd, UINT msg, WPARAM wParam, LP
 void gb_platform_update(gbPlatform *p) {
 	isize i;
 
-	{ // NOTE(bill): Process pending messages
-		MSG message;
-		for (;;) {
-			BOOL is_okay = PeekMessage(&message, 0, 0, 0, PM_REMOVE);
-			if (!is_okay) break;
-
-			switch (message.message) {
-			case WM_QUIT:
-				p->quit_requested = true;
-				break;
-
-			default:
-				TranslateMessage(&message);
-				DispatchMessageW(&message);
-				break;
-		}
-		}
-	}
-
 	{ // NOTE(bill): Set window state]
-		// TODO(bill): Should this be moved to gb__win32_window_callback ? 
+		// TODO(bill): Should this be moved to gb__win32_window_callback ?
 		RECT window_rect;
 		i32 x, y, w, h;
 
@@ -7075,6 +7044,12 @@ void gb_platform_update(gbPlatform *p) {
 	if (p->window.flags & GB_WINDOW_HAS_FOCUS) {
 		p->char_buffer_count = 0; // TODO(bill): Reset buffer count here or else where?
 
+		// NOTE(bill): Need to update as the keys only get updates on events
+		for (i = 0; i < GB_KEY_COUNT; i++) {
+			b32 is_down = (p->keys[i] & GB_KEY_STATE_DOWN) != 0;
+			gb_key_state_update(&p->keys[i], is_down);
+		}
+
 		p->key_modifiers.control = p->keys[GB_KEY_LCONTROL] | p->keys[GB_KEY_RCONTROL];
 		p->key_modifiers.alt     = p->keys[GB_KEY_LALT]     | p->keys[GB_KEY_RALT];
 		p->key_modifiers.shift   = p->keys[GB_KEY_LSHIFT]   | p->keys[GB_KEY_RSHIFT];
@@ -7098,15 +7073,14 @@ void gb_platform_update(gbPlatform *p) {
 
 				controller->is_connected = true;
 
-				// TODO(bill): This is a square deadzone, check XInput to
-				// verify that the deadzone is "round" and do round deadzone processing.
+				// TODO(bill): This is a square deadzone, check XInput to verify that the deadzone is "round" and do round deadzone processing.
 				controller->axes[GB_CONTROLLER_AXIS_LEFT_X]  = gb__process_xinput_stick_value(pad->sThumbLX, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
 				controller->axes[GB_CONTROLLER_AXIS_LEFT_Y]  = gb__process_xinput_stick_value(pad->sThumbLY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
-				controller->axes[GB_CONTROLLER_AXIS_RIGHT_Y] = gb__process_xinput_stick_value(pad->sThumbRX, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
+				controller->axes[GB_CONTROLLER_AXIS_RIGHT_X] = gb__process_xinput_stick_value(pad->sThumbRX, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
 				controller->axes[GB_CONTROLLER_AXIS_RIGHT_Y] = gb__process_xinput_stick_value(pad->sThumbRY, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
 
-				controller->axes[GB_CONTROLLER_AXIS_LEFT_TRIGGER]  = gb__process_xinput_trigger_value(pad->bLeftTrigger);
-				controller->axes[GB_CONTROLLER_AXIS_RIGHT_TRIGGER] = gb__process_xinput_trigger_value(pad->bRightTrigger);
+				controller->axes[GB_CONTROLLER_AXIS_LEFT_TRIGGER]  = cast(f32)pad->bLeftTrigger / 255.0f;
+				controller->axes[GB_CONTROLLER_AXIS_RIGHT_TRIGGER] = cast(f32)pad->bRightTrigger / 255.0f;
 
 
 				if ((controller->axes[GB_CONTROLLER_AXIS_LEFT_X] != 0.0f) ||
@@ -7114,30 +7088,9 @@ void gb_platform_update(gbPlatform *p) {
 					controller->is_analog = true;
 				}
 
-				// NOTE(bill): I know, I just wanted macros
-			#define GB__PROCESS_PAD_BUTTON(stick_axis, sign, xinput_button) do { \
-					if (pad->wButtons & xinput_button) { \
-						controller->axes[stick_axis] = sign 1.0f; \
-						controller->is_analog  = false; \
-					} \
-				} while (0)
-
-				GB__PROCESS_PAD_BUTTON(GB_CONTROLLER_AXIS_LEFT_X, -, XINPUT_GAMEPAD_DPAD_LEFT);
-				GB__PROCESS_PAD_BUTTON(GB_CONTROLLER_AXIS_LEFT_X, +, XINPUT_GAMEPAD_DPAD_RIGHT);
-				GB__PROCESS_PAD_BUTTON(GB_CONTROLLER_AXIS_LEFT_Y, -, XINPUT_GAMEPAD_DPAD_DOWN);
-				GB__PROCESS_PAD_BUTTON(GB_CONTROLLER_AXIS_LEFT_Y, +, XINPUT_GAMEPAD_DPAD_UP);
-			#undef GB__PROCESS_PAD_BUTTON
-
-			#define GB__PROCESS_DIGITAL_AXIS(stick_axis, sign, button_type) \
-				gb__process_xinput_digital_button((controller->axes[stick_axis] < sign 0.5f) ? 1 : 0, 1, &controller->buttons[button_type])
-				GB__PROCESS_DIGITAL_AXIS(GB_CONTROLLER_AXIS_LEFT_X, -, GB_CONTROLLER_BUTTON_LEFT);
-				GB__PROCESS_DIGITAL_AXIS(GB_CONTROLLER_AXIS_LEFT_X, +, GB_CONTROLLER_BUTTON_RIGHT);
-				GB__PROCESS_DIGITAL_AXIS(GB_CONTROLLER_AXIS_LEFT_Y, -, GB_CONTROLLER_BUTTON_DOWN);
-				GB__PROCESS_DIGITAL_AXIS(GB_CONTROLLER_AXIS_LEFT_Y, +, GB_CONTROLLER_BUTTON_UP);
-			#undef GB__PROCESS_DIGITAL_AXIS
-
 			#define GB__PROCESS_DIGITAL_BUTTON(button_type, xinput_button) \
-				gb__process_xinput_digital_button(pad->wButtons, xinput_button, &controller->buttons[button_type])
+				gb_key_state_update(&controller->buttons[button_type], (pad->wButtons & xinput_button) == xinput_button)
+
 				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_A,              XINPUT_GAMEPAD_A);
 				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_B,              XINPUT_GAMEPAD_B);
 				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_X,              XINPUT_GAMEPAD_X);
@@ -7146,7 +7099,32 @@ void gb_platform_update(gbPlatform *p) {
 				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_RIGHT_SHOULDER, XINPUT_GAMEPAD_RIGHT_SHOULDER);
 				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_START,          XINPUT_GAMEPAD_START);
 				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_BACK,           XINPUT_GAMEPAD_BACK);
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_LEFT,           XINPUT_GAMEPAD_DPAD_LEFT);
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_RIGHT,          XINPUT_GAMEPAD_DPAD_RIGHT);
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_DOWN,           XINPUT_GAMEPAD_DPAD_DOWN);
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_UP,             XINPUT_GAMEPAD_DPAD_UP);
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_LEFT_THUMB,     XINPUT_GAMEPAD_LEFT_THUMB);
+				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_RIGHT_THUMB,    XINPUT_GAMEPAD_RIGHT_THUMB);
 			#undef GB__PROCESS_DIGITAL_BUTTON
+			}
+		}
+	}
+
+	{ // NOTE(bill): Process pending messages
+		MSG message;
+		for (;;) {
+			BOOL is_okay = PeekMessage(&message, 0, 0, 0, PM_REMOVE);
+			if (!is_okay) break;
+
+			switch (message.message) {
+			case WM_QUIT:
+				p->quit_requested = true;
+				break;
+
+			default:
+				TranslateMessage(&message);
+				DispatchMessageW(&message);
+				break;
 			}
 		}
 	}
@@ -7181,22 +7159,31 @@ void gb_platform_show_cursor(gbPlatform *p, i32 show) {
 	ShowCursor(show);
 }
 
-void gb_platform_set_mouse_position(gbPlatform *p, gbWindow *rel_win, i32 x, i32 y) {
+void gb_platform_set_mouse_position(gbPlatform *p, i32 x, i32 y) {
 	POINT point;
 	point.x = cast(LONG)x;
 	point.y = cast(LONG)y;
-	ClientToScreen(cast(HWND)rel_win->handle, &point);
+	ClientToScreen(cast(HWND)p->window.handle, &point);
 	SetCursorPos(point.x, point.y);
 
 	p->mouse.x = point.x;
 	p->mouse.y = point.y;
 }
 
-gb_inline gbGameController *gb_platform_get_controller(gbPlatform *p, isize index) {
-	if (index >= 0 && index < gb_count_of(p->game_controllers))
-		return p->game_controllers + index;
-	return NULL;
+
+
+void gb_platform_set_controller_vibration(gbPlatform *p, isize index, f32 left_motor, f32 right_motor) {
+	if (gb_is_between(index, 0, GB_MAX_GAME_CONTROLLER_COUNT-1)) {
+		XINPUT_VIBRATION vibration = {0};
+		left_motor  = gb_clamp01(left_motor);
+		right_motor = gb_clamp01(right_motor);
+		vibration.wLeftMotorSpeed  = cast(WORD)(65535 * left_motor);
+		vibration.wRightMotorSpeed = cast(WORD)(65535 * right_motor);
+
+		p->xinput.set_state(cast(DWORD)index, &vibration);
+	}
 }
+
 
 // TODO(bill): Make this return errors rathern than silly message boxes
 gbWindow *gb_window_init(gbPlatform *platform, char const *title, gbVideoMode mode, u32 flags) {
@@ -7407,15 +7394,6 @@ gb_inline void gb_window_hide(gbWindow *w) {
 	w->flags |= GB_WINDOW_HIDDEN;
 }
 
-
-gb_inline gbVideoMode gb_video_mode(i32 width, i32 height, i32 bits_per_pixel) {
-	gbVideoMode m;
-	m.width = width;
-	m.height = height;
-	m.bits_per_pixel = bits_per_pixel;
-	return m;
-}
-
 gb_inline gbVideoMode gb_video_mode_get_desktop(void) {
 	DEVMODE win32_mode = {gb_size_of(win32_mode)};
 	EnumDisplaySettings(NULL, ENUM_CURRENT_SETTINGS, &win32_mode);
@@ -7438,6 +7416,17 @@ isize gb_video_mode_get_fullscreen_modes(gbVideoMode *modes, isize max_mode_coun
 
 #endif
 
+
+// TODO(bill): OSX Platform Layer
+// NOTE(bill): Use this as a guide so there is no need for Obj-C https://github.com/jimon/osx_app_in_plain_c
+
+gb_inline gbVideoMode gb_video_mode(i32 width, i32 height, i32 bits_per_pixel) {
+	gbVideoMode m;
+	m.width = width;
+	m.height = height;
+	m.bits_per_pixel = bits_per_pixel;
+	return m;
+}
 
 gb_inline b32 gb_window_is_open(gbWindow const *w) {
 	return (w->flags & GB_WINDOW_IS_CLOSED) == 0;
@@ -7469,11 +7458,6 @@ GB_COMPARE_PROC(gb_video_mode_dsc_cmp) {
 	return -gb_video_mode_cmp(a, b);
 }
 
-
-// TODO(bill): OSX Platform Layer
-// NOTE(bill): Use this as a guide so there is no need for Obj-C https://github.com/jimon/osx_app_in_plain_c
-
-#endif // GB_PLATFORM
 
 
 
