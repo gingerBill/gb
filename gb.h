@@ -1,4 +1,4 @@
-/* gb.h - v0.18a - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.19  - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -18,58 +18,6 @@
 	All other files should just #include "gb.h" without #define
 
 ===========================================================================
-
-Conventions used:
-	gbTypesAreLikeThis (None core types)
-	gb_functions_and_variables_like_this
-	Prefer C99 // Comments
-	Never use _t suffix for types (I think they are stupid...)
-
-
-Version History:
-	0.18a - Controller vibration
-	0.18  - Raw keyboard and mouse input for WIN32
-	0.17d - Fixed printf bug for strings
-	0.17c - Compile as 32 bit
-	0.17b - Change formating style because why not?
-	0.17a - Dropped C90 Support (For numerous reasons)
-	0.17  - Instantiated Hash Table
-	0.16a - Minor code layout changes
-	0.16  - New file API and improved platform layer
-	0.15d - Linux Experimental Support (DON'T USE IT PLEASE)
-	0.15c - Linux Experimental Support (DON'T USE IT)
-	0.15b - C90 Support
-	0.15a - gb_atomic(32|64)_spin_(lock|unlock)
-	0.15  - Recursive "Mutex"; Key States; gbRandom
-	0.14  - Better File Handling and better printf (WIN32 Only)
-	0.13  - Highly experimental platform layer (WIN32 Only)
-	0.12b - Fix minor file bugs
-	0.12a - Compile as C++
-	0.12  - New File Handing System! No stdio or stdlib! (WIN32 Only)
-	0.11a - Add string precision and width (experimental)
-	0.11  - Started making stdio & stdlib optional (Not tested much)
-	0.10c - Fix gb_endian_swap32()
-	0.10b - Probable timing bug for gb_time_now()
-	0.10a - Work on multiple compilers
-	0.10  - Scratch Memory Allocator
-	0.09a - Faster Mutex and the Free List is slightly improved
-	0.09  - Basic Virtual Memory System and Dreadful Free List allocator
-	0.08a - Fix *_appendv bug
-	0.08  - Huge Overhaul!
-	0.07a - Fix alignment in gb_heap_allocator_proc
-	0.07  - Hash Table and Hashing Functions
-	0.06c - Better Documentation
-	0.06b - OS X Support
-	0.06a - Linux Support
-	0.06  - Windows GCC Support and MSVC x86 Support
-	0.05b - Formatting
-	0.05a - Minor function name changes
-	0.05  - Radix Sort for unsigned integers (TODO: Other primitives)
-	0.04  - Better UTF support and search/sort procs
-	0.03  - Completely change procedure naming convention
-	0.02a - Bug fixes
-	0.02  - Change naming convention and gbArray(Type)
-	0.01  - Initial Version
 
 LICENSE
 	This software is dual-licensed to the public domain and under the following
@@ -2420,6 +2368,10 @@ GB_DEF void gb_platform_display(gbPlatform *p);
 GB_DEF void gb_platform_show_cursor             (gbPlatform *p, i32 show);
 GB_DEF void gb_platform_set_mouse_position      (gbPlatform *p, i32 x, i32 y);
 GB_DEF void gb_platform_set_controller_vibration(gbPlatform *p, isize index, f32 left_motor, f32 right_motor);
+
+GB_DEF b32   gb_platform_has_clipboard_text(gbPlatform *p);
+GB_DEF void  gb_platform_set_clipboard_text(gbPlatform *p, char const *str);
+GB_DEF char *gb_platform_get_clipboard_text(gbPlatform *p, gbAllocator a);
 
 // NOTE(bill): Title is UTF-8
 GB_DEF gbWindow *gb_window_init                (gbPlatform *p, char const *title, gbVideoMode mode, u32 flags);
@@ -7414,6 +7366,78 @@ isize gb_video_mode_get_fullscreen_modes(gbVideoMode *modes, isize max_mode_coun
 }
 
 
+
+b32 gb_platform_has_clipboard_text(gbPlatform *p) {
+	b32 result = false;
+
+	if (IsClipboardFormatAvailable(CF_TEXT) &&
+	    OpenClipboard(cast(HWND)p->window.handle)) {
+		HANDLE mem = GetClipboardData(CF_TEXT);
+		if (mem) {
+			char *str = cast(char *)GlobalLock(mem);
+			if (str && str[0] != '\0')
+				result = true;
+			GlobalUnlock(mem);
+		} else {
+			return false;
+		}
+
+		CloseClipboard();
+	}
+
+	return result;
+}
+
+// TODO(bill): Handle UTF-8
+void gb_platform_set_clipboard_text(gbPlatform *p, char const *str) {
+	if (OpenClipboard(cast(HWND)p->window.handle)) {
+		isize i, len = gb_strlen(str)+1;
+
+		HANDLE mem = GlobalAlloc(GMEM_MOVEABLE, len);
+		if (mem) {
+			char *dst = cast(char *)GlobalLock(mem);
+			if (dst) {
+				for (i = 0; str[i]; i++) {
+					// TODO(bill): Does this cause a buffer overflow?
+					// NOTE(bill): Change \n to \r\n 'cause windows
+					if (str[i] == '\n' && (i == 0 || str[i-1] != '\r')) {
+						*dst++ = '\r';
+					}
+					*dst++ = str[i];
+				}
+				*dst = 0;
+			}
+			GlobalUnlock(mem);
+		}
+
+		EmptyClipboard();
+		if (!SetClipboardData(CF_TEXT, mem))
+			return;
+		CloseClipboard();
+	}
+}
+
+// TODO(bill): Handle UTF-8
+char *gb_platform_get_clipboard_text(gbPlatform *p, gbAllocator a) {
+	char *text = NULL;
+
+	if (IsClipboardFormatAvailable(CF_TEXT) &&
+	    OpenClipboard(cast(HWND)p->window.handle)) {
+		HANDLE mem = GetClipboardData(CF_TEXT);
+		if (mem) {
+			char *str = cast(char *)GlobalLock(mem);
+			text = gb_alloc_str(a, str);
+			GlobalUnlock(mem);
+		} else {
+			return NULL;
+		}
+
+		CloseClipboard();
+	}
+
+	return text;
+}
+
 #endif
 
 
@@ -7475,3 +7499,54 @@ GB_COMPARE_PROC(gb_video_mode_dsc_cmp) {
 #endif
 
 #endif // GB_IMPLEMENTATION
+
+/*
+
+Version History:
+	0.19  - Clipboard Text
+	0.18a - Controller vibration
+	0.18  - Raw keyboard and mouse input for WIN32
+	0.17d - Fixed printf bug for strings
+	0.17c - Compile as 32 bit
+	0.17b - Change formating style because why not?
+	0.17a - Dropped C90 Support (For numerous reasons)
+	0.17  - Instantiated Hash Table
+	0.16a - Minor code layout changes
+	0.16  - New file API and improved platform layer
+	0.15d - Linux Experimental Support (DON'T USE IT PLEASE)
+	0.15c - Linux Experimental Support (DON'T USE IT)
+	0.15b - C90 Support
+	0.15a - gb_atomic(32|64)_spin_(lock|unlock)
+	0.15  - Recursive "Mutex"; Key States; gbRandom
+	0.14  - Better File Handling and better printf (WIN32 Only)
+	0.13  - Highly experimental platform layer (WIN32 Only)
+	0.12b - Fix minor file bugs
+	0.12a - Compile as C++
+	0.12  - New File Handing System! No stdio or stdlib! (WIN32 Only)
+	0.11a - Add string precision and width (experimental)
+	0.11  - Started making stdio & stdlib optional (Not tested much)
+	0.10c - Fix gb_endian_swap32()
+	0.10b - Probable timing bug for gb_time_now()
+	0.10a - Work on multiple compilers
+	0.10  - Scratch Memory Allocator
+	0.09a - Faster Mutex and the Free List is slightly improved
+	0.09  - Basic Virtual Memory System and Dreadful Free List allocator
+	0.08a - Fix *_appendv bug
+	0.08  - Huge Overhaul!
+	0.07a - Fix alignment in gb_heap_allocator_proc
+	0.07  - Hash Table and Hashing Functions
+	0.06c - Better Documentation
+	0.06b - OS X Support
+	0.06a - Linux Support
+	0.06  - Windows GCC Support and MSVC x86 Support
+	0.05b - Formatting
+	0.05a - Minor function name changes
+	0.05  - Radix Sort for unsigned integers (TODO: Other primitives)
+	0.04  - Better UTF support and search/sort procs
+	0.03  - Completely change procedure naming convention
+	0.02a - Bug fixes
+	0.02  - Change naming convention and gbArray(Type)
+	0.01  - Initial Version
+
+ */
+
