@@ -1,4 +1,4 @@
-/* gb.h - v0.04e - OpenGL Helper Library - public domain
+/* gb.h - v0.05  - OpenGL Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -55,6 +55,7 @@ Conventions used:
 
 
 Version History:
+	0.05  - gbglColour
 	0.04e - Change brace style because why not?
 	0.04d - Use new gb.h file handling system
 	0.04c - Use new gb.h file handling system
@@ -131,6 +132,9 @@ CREDITS
 	#endif
 #endif
 
+#define gbgl_clamp(x, lower, upper) gbgl_min(gbgl_max((x), (lower)), (upper))
+#define gbgl_clamp01(x) gbgl_clamp(x, 0, 1)
+
 
 #if defined(__cplusplus)
 extern "C" {
@@ -155,6 +159,45 @@ extern "C" {
 
 
 
+////////////////////////////////////////////////////////////////
+//
+// Colour Type
+// It's quite useful
+// TODO(bill): Does this need to be in this library?
+//             Can I remove the anonymous struct extension?
+//
+
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable:4201)
+#endif
+
+typedef union gbglColour {
+	u32    rgba; // NOTE(bill): 0xaabbggrr in little endian
+	struct { u8 r, g, b, a; };
+	u8     e[4];
+} gbglColour;
+GB_STATIC_ASSERT(gb_size_of(gbglColour) == gb_size_of(u32));
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+
+
+GB_DEF gbglColour gbgl_colour(f32 r, f32 g, f32 b, f32 a);
+
+gb_global gbglColour const GBGL_COLOUR_WHITE   = {0xffffffff};
+gb_global gbglColour const GBGL_COLOUR_GREY    = {0xff808080};
+gb_global gbglColour const GBGL_COLOUR_BLACK   = {0xff000000};
+
+gb_global gbglColour const GBGL_COLOUR_RED     = {0xff0000ff};
+gb_global gbglColour const GBGL_COLOUR_ORANGE  = {0xff0099ff};
+gb_global gbglColour const GBGL_COLOUR_YELLOW  = {0xff00ffff};
+gb_global gbglColour const GBGL_COLOUR_GREEN   = {0xff00ff00};
+gb_global gbglColour const GBGL_COLOUR_CYAN    = {0xffffff00};
+gb_global gbglColour const GBGL_COLOUR_BLUE    = {0xffff0000};
+gb_global gbglColour const GBGL_COLOUR_VIOLET  = {0xffff007f};
+gb_global gbglColour const GBGL_COLOUR_MAGENTA = {0xffff00ff};
 
 
 ////////////////////////////////////////////////////////////////
@@ -401,7 +444,7 @@ GBGL_DEF void gbgl_set_uniform_vec3      (gbglShader *s, char const *name, f32 c
 GBGL_DEF void gbgl_set_uniform_vec4      (gbglShader *s, char const *name, f32 const *v);
 GBGL_DEF void gbgl_set_uniform_mat4      (gbglShader *s, char const *name, f32 const *m);
 GBGL_DEF void gbgl_set_uniform_mat4_count(gbglShader *s, char const *name, f32 const *m, isize count);
-GBGL_DEF void gbgl_set_uniform_colour    (gbglShader *s, char const *name, gbColour col);
+GBGL_DEF void gbgl_set_uniform_colour    (gbglShader *s, char const *name, gbglColour col);
 
 
 ////////////////////////////////////////////////////////////////
@@ -432,7 +475,7 @@ typedef struct gbglTexture {
 
 GBGL_DEF b32  gbgl_load_texture2d_from_file  (gbglTexture *texture, b32 flip_vertically, char const *filename, ...);
 GBGL_DEF b32  gbgl_load_texture2d_from_memory(gbglTexture *texture, void const *data, i32 width, i32 height, i32 channel_count);
-GBGL_DEF b32  gbgl_init_texture2d_coloured   (gbglTexture *texture, gbColour colour);
+GBGL_DEF b32  gbgl_init_texture2d_coloured   (gbglTexture *texture, gbglColour colour);
 GBGL_DEF void gbgl_destroy_texture           (gbglTexture *texture);
 
 GBGL_DEF void gbgl_bind_texture2d(gbglTexture const *texture, u32 position, u32 sampler);
@@ -679,29 +722,29 @@ GBGL_DEF void gbgl_bs_begin(gbglBasicState *bs, i32 window_width, i32 window_hei
 GBGL_DEF void gbgl_bs_end(gbglBasicState *bs);
 
 GBGL_DEF void gbgl_bs_draw_textured_rect(gbglBasicState *bs, gbglTexture *tex, f32 x, f32 y, f32 w, f32 h, b32 v_up);
-GBGL_DEF void gbgl_bs_draw_rect(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, gbColour col);
-GBGL_DEF void gbgl_bs_draw_rect_outline(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, gbColour col, f32 thickness);
+GBGL_DEF void gbgl_bs_draw_rect(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, gbglColour col);
+GBGL_DEF void gbgl_bs_draw_rect_outline(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, gbglColour col, f32 thickness);
 GBGL_DEF void gbgl_bs_draw_quad(gbglBasicState *bs,
                                 f32 x0, f32 y0,
                                 f32 x1, f32 y1,
                                 f32 x2, f32 y2,
                                 f32 x3, f32 y3,
-                                gbColour col);
+                                gbglColour col);
 GBGL_DEF void gbgl_bs_draw_quad_outline(gbglBasicState *bs,
                                         f32 x0, f32 y0,
                                         f32 x1, f32 y1,
                                         f32 x2, f32 y2,
                                         f32 x3, f32 y3,
-                                        gbColour col, f32 thickness);
+                                        gbglColour col, f32 thickness);
 
-GBGL_DEF void gbgl_bs_draw_line(gbglBasicState *bs, f32 x0, f32 y0, f32 x1, f32 y1, gbColour col, f32 thickness);
+GBGL_DEF void gbgl_bs_draw_line(gbglBasicState *bs, f32 x0, f32 y0, f32 x1, f32 y1, gbglColour col, f32 thickness);
 
-GBGL_DEF void gbgl_bs_draw_elliptical_arc(gbglBasicState *bs, f32 x, f32 y, f32 radius_a, f32 radius_b, f32 min_angle, f32 max_angle, gbColour col);
+GBGL_DEF void gbgl_bs_draw_elliptical_arc(gbglBasicState *bs, f32 x, f32 y, f32 radius_a, f32 radius_b, f32 min_angle, f32 max_angle, gbglColour col);
 GBGL_DEF void gbgl_bs_draw_elliptical_arc_outline(gbglBasicState *bs, f32 x, f32 y, f32 radius_a, f32 radius_b,
-                                                  f32 min_angle, f32 max_angle, gbColour col, f32 thickness);
+                                                  f32 min_angle, f32 max_angle, gbglColour col, f32 thickness);
 
-GBGL_DEF void gbgl_bs_draw_circle(gbglBasicState *bs, f32 x, f32 y, f32 radius, gbColour col);
-GBGL_DEF void gbgl_bs_draw_circle_outline(gbglBasicState *bs, f32 x, f32 y, f32 radius, gbColour col, f32 thickness);
+GBGL_DEF void gbgl_bs_draw_circle(gbglBasicState *bs, f32 x, f32 y, f32 radius, gbglColour col);
+GBGL_DEF void gbgl_bs_draw_circle_outline(gbglBasicState *bs, f32 x, f32 y, f32 radius, gbglColour col, f32 thickness);
 
 
 // Corners Flags:
@@ -710,17 +753,17 @@ GBGL_DEF void gbgl_bs_draw_circle_outline(gbglBasicState *bs, f32 x, f32 y, f32 
 // 4 - Top    Right
 // 8 - Top    Left
 // NOTE(bill): Apple, please don't sue me!
-GBGL_DEF void gbgl_bs_draw_rounded_rect_corners(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbColour col, u32 corners);
-GBGL_DEF void gbgl_bs_draw_rounded_rect(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbColour col);
+GBGL_DEF void gbgl_bs_draw_rounded_rect_corners(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbglColour col, u32 corners);
+GBGL_DEF void gbgl_bs_draw_rounded_rect(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbglColour col);
 
-GBGL_DEF void gbgl_bs_draw_rounded_rect_corners_outline(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbColour col, f32 thickness, u32 corners);
-GBGL_DEF void gbgl_bs_draw_rounded_rect_outline(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbColour col, f32 thickness);
+GBGL_DEF void gbgl_bs_draw_rounded_rect_corners_outline(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbglColour col, f32 thickness, u32 corners);
+GBGL_DEF void gbgl_bs_draw_rounded_rect_outline(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbglColour col, f32 thickness);
 
 
 #if !defined(GBGL_NO_FONTS)
-GBGL_DEF isize gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, f32 x, f32 y, gbColour col, char const *str, isize len);
-GBGL_DEF isize gbgl_bs_draw_string   (gbglBasicState *bs, gbglFont *font, f32 x, f32 y, gbColour col, char const *fmt, ...);
-GBGL_DEF isize gbgl_bs_draw_string_va(gbglBasicState *bs, gbglFont *font, f32 x, f32 y, gbColour col, char const *fmt, va_list va);
+GBGL_DEF isize gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, f32 x, f32 y, gbglColour col, char const *str, isize len);
+GBGL_DEF isize gbgl_bs_draw_string   (gbglBasicState *bs, gbglFont *font, f32 x, f32 y, gbglColour col, char const *fmt, ...);
+GBGL_DEF isize gbgl_bs_draw_string_va(gbglBasicState *bs, gbglFont *font, f32 x, f32 y, gbglColour col, char const *fmt, va_list va);
 #endif
 
 
@@ -782,6 +825,15 @@ GBGL_DEF isize gbgl_bs_draw_string_va(gbglBasicState *bs, gbglFont *font, f32 x,
 
 
 #if defined(GBGL_IMPLEMENTATION)
+
+gb_inline gbglColour gbgl_colour(f32 r, f32 g, f32 b, f32 a) {
+	gbglColour result;
+	result.r = cast(u8)(gbgl_clamp01(r) * 255.0f);
+	result.g = cast(u8)(gbgl_clamp01(g) * 255.0f);
+	result.b = cast(u8)(gbgl_clamp01(b) * 255.0f);
+	result.a = cast(u8)(gbgl_clamp01(a) * 255.0f);
+	return result;
+}
 
 
 u32 gbgl_make_sampler(u32 min_filter, u32 max_filter, u32 s_wrap, u32 t_wrap) {
@@ -882,7 +934,10 @@ gb_inline void gbgl_unmap_ebo(void) { glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER); }
 
 gbglShaderError gbgl__load_single_shader_from_file(gbglShader *shader, gbglShaderType type, char const *name) {
 	gbglShaderError err = GBGL_SHADER_ERROR_NONE;
-	gbFileError ferr = gb_file_open(&shader->files[type], "%s%s", name, GBGL_SHADER_FILE_EXTENSIONS[type]);
+	gbFileError ferr;
+	gb_local_persist char filepath[1024];
+	gb_snprintf(filepath, gb_count_of(filepath), "%s%s", name, GBGL_SHADER_FILE_EXTENSIONS[type]);
+	ferr = gb_file_open(&shader->files[type], filepath);
 
 	if (ferr != GB_FILE_ERR_NONE) {
 		err = GBGL_SHADER_ERROR_UNABLE_TO_READ_FILE;
@@ -1142,7 +1197,7 @@ gb_inline void gbgl_set_uniform_mat4_count(gbglShader *s, char const *name, f32 
 }
 
 
-gb_inline void gbgl_set_uniform_colour(gbglShader *s, char const *name, gbColour col) {
+gb_inline void gbgl_set_uniform_colour(gbglShader *s, char const *name, gbglColour col) {
 	f32 v[4];
 	v[0] = col.r / 255.0f;
 	v[1] = col.g / 255.0f;
@@ -1274,7 +1329,7 @@ b32 gbgl_load_texture2d_from_file(gbglTexture *texture, b32 flip_vertically, cha
 	return result;
 }
 
-gb_inline b32 gbgl_make_texture2d_coloured(gbglTexture *t, gbColour colour) {
+gb_inline b32 gbgl_make_texture2d_coloured(gbglTexture *t, gbglColour colour) {
 	return gbgl_load_texture2d_from_memory(t, &colour.rgba, 1, 1, 4);
 }
 
@@ -2022,7 +2077,7 @@ void gbgl_bs_draw_textured_rect(gbglBasicState *bs, gbglTexture *tex, f32 x, f32
 	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, NULL);
 }
 
-gb_inline void gbgl_bs_draw_rect(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, gbColour col) {
+gb_inline void gbgl_bs_draw_rect(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, gbglColour col) {
 	gbgl_bs_draw_quad(bs,
 	                  x,   y,
 	                  x+w, y,
@@ -2031,7 +2086,7 @@ gb_inline void gbgl_bs_draw_rect(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h,
 	                  col);
 }
 
-gb_inline void gbgl_bs_draw_rect_outline(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, gbColour col, f32 thickness) {
+gb_inline void gbgl_bs_draw_rect_outline(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, gbglColour col, f32 thickness) {
 	gbgl_bs_draw_quad_outline(bs,
 	                          x,   y,
 	                          x+w, y,
@@ -2042,7 +2097,7 @@ gb_inline void gbgl_bs_draw_rect_outline(gbglBasicState *bs, f32 x, f32 y, f32 w
 }
 
 
-gb_internal void gbgl__bs_setup_ortho_colour_state(gbglBasicState *bs, isize vertex_count, gbColour col) {
+gb_internal void gbgl__bs_setup_ortho_colour_state(gbglBasicState *bs, isize vertex_count, gbglColour col) {
 
 	gbgl_use_shader(&bs->ortho_col_shader);
 	gbgl_set_uniform_mat4(&bs->ortho_col_shader, "u_ortho_mat", bs->ortho_mat);
@@ -2062,7 +2117,7 @@ gb_inline void gbgl_bs_draw_quad(gbglBasicState *bs,
                                  f32 x1, f32 y1,
                                  f32 x2, f32 y2,
                                  f32 x3, f32 y3,
-                                 gbColour col) {
+                                 gbglColour col) {
 	bs->vertices[0].x = x0;
 	bs->vertices[0].y = y0;
 
@@ -2084,7 +2139,7 @@ gb_inline void gbgl_bs_draw_quad_outline(gbglBasicState *bs,
                                          f32 x1, f32 y1,
                                          f32 x2, f32 y2,
                                          f32 x3, f32 y3,
-                                         gbColour col, f32 thickness) {
+                                         gbglColour col, f32 thickness) {
 	bs->vertices[0].x = x0;
 	bs->vertices[0].y = y0;
 
@@ -2102,7 +2157,7 @@ gb_inline void gbgl_bs_draw_quad_outline(gbglBasicState *bs,
 	glDrawArrays(GL_LINE_LOOP, 0, 4);
 }
 
-gb_inline void gbgl_bs_draw_line(gbglBasicState *bs, f32 x0, f32 y0, f32 x1, f32 y1, gbColour col, f32 thickness) {
+gb_inline void gbgl_bs_draw_line(gbglBasicState *bs, f32 x0, f32 y0, f32 x1, f32 y1, gbglColour col, f32 thickness) {
 	bs->vertices[0].x = x0;
 	bs->vertices[0].y = y0;
 
@@ -2115,7 +2170,7 @@ gb_inline void gbgl_bs_draw_line(gbglBasicState *bs, f32 x0, f32 y0, f32 x1, f32
 }
 
 gb_inline void gbgl_bs_draw_elliptical_arc(gbglBasicState *bs, f32 x, f32 y, f32 radius_a, f32 radius_b,
-                                           f32 min_angle, f32 max_angle, gbColour col) {
+                                           f32 min_angle, f32 max_angle, gbglColour col) {
 	isize i;
 
 	bs->vertices[0].x = x;
@@ -2135,7 +2190,7 @@ gb_inline void gbgl_bs_draw_elliptical_arc(gbglBasicState *bs, f32 x, f32 y, f32
 }
 
 gb_inline void gbgl_bs_draw_elliptical_arc_outline(gbglBasicState *bs, f32 x, f32 y, f32 radius_a, f32 radius_b,
-                                                   f32 min_angle, f32 max_angle, gbColour col, f32 thickness) {
+                                                   f32 min_angle, f32 max_angle, gbglColour col, f32 thickness) {
 	isize i;
 
 	for (i = 0; i < 32; i++) {
@@ -2154,15 +2209,15 @@ gb_inline void gbgl_bs_draw_elliptical_arc_outline(gbglBasicState *bs, f32 x, f3
 
 
 
-gb_inline void gbgl_bs_draw_circle(gbglBasicState *bs, f32 x, f32 y, f32 radius, gbColour col) {
+gb_inline void gbgl_bs_draw_circle(gbglBasicState *bs, f32 x, f32 y, f32 radius, gbglColour col) {
 	gbgl_bs_draw_elliptical_arc(bs, x, y, radius, radius, 0, GBGL_TAU, col);
 }
 
-gb_inline void gbgl_bs_draw_circle_outline(gbglBasicState *bs, f32 x, f32 y, f32 radius, gbColour col, f32 thickness) {
+gb_inline void gbgl_bs_draw_circle_outline(gbglBasicState *bs, f32 x, f32 y, f32 radius, gbglColour col, f32 thickness) {
 	gbgl_bs_draw_elliptical_arc_outline(bs, x, y, radius, radius, 0, GBGL_TAU, col, thickness);
 }
 
-void gbgl_bs_draw_rounded_rect_corners(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbColour col, u32 corners) {
+void gbgl_bs_draw_rounded_rect_corners(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbglColour col, u32 corners) {
 	if ((2.0f*roundness > gbgl_abs(w)) ||
 	    (2.0f*roundness > gbgl_abs(h))) {
 		roundness = 0.5f*gbgl_min(gbgl_abs(w), gbgl_abs(h));
@@ -2256,12 +2311,12 @@ void gbgl_bs_draw_rounded_rect_corners(gbglBasicState *bs, f32 x, f32 y, f32 w, 
 	}
 }
 
-gb_inline void gbgl_bs_draw_rounded_rect(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbColour col) {
+gb_inline void gbgl_bs_draw_rounded_rect(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbglColour col) {
 	gbgl_bs_draw_rounded_rect_corners(bs, x, y, w, h, roundness, col, 1|2|4|8);
 }
 
 
-void gbgl_bs_draw_rounded_rect_corners_outline(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbColour col, f32 thickness, u32 corners) {
+void gbgl_bs_draw_rounded_rect_corners_outline(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbglColour col, f32 thickness, u32 corners) {
 	if ((2.0f*roundness > gbgl_abs(w)) ||
 	    (2.0f*roundness > gbgl_abs(h))) {
 		roundness = 0.5f*gbgl_min(gbgl_abs(w), gbgl_abs(h));
@@ -2343,7 +2398,7 @@ void gbgl_bs_draw_rounded_rect_corners_outline(gbglBasicState *bs, f32 x, f32 y,
 	}
 }
 
-gb_inline void gbgl_bs_draw_rounded_rect_outline(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbColour col, f32 thickness) {
+gb_inline void gbgl_bs_draw_rounded_rect_outline(gbglBasicState *bs, f32 x, f32 y, f32 w, f32 h, f32 roundness, gbglColour col, f32 thickness) {
 	gbgl_bs_draw_rounded_rect_corners_outline(bs, x, y, w, h, roundness, col, thickness, 1|2|4|8);
 }
 
@@ -2353,7 +2408,7 @@ gb_inline void gbgl_bs_draw_rounded_rect_outline(gbglBasicState *bs, f32 x, f32 
 #if !defined(GBGL_NO_FONTS)
 
 
-isize gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, f32 x, f32 y, gbColour col, char const *str, isize len) {
+isize gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, f32 x, f32 y, gbglColour col, char const *str, isize len) {
 	isize char_count = gb_utf8_strnlen(str, len);
 	isize line_count = 0;
 	if (char_count > 0) {
@@ -2507,7 +2562,7 @@ isize gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, f32 x, f32 y, g
 	return line_count;
 }
 
-isize gbgl_bs_draw_string(gbglBasicState *bs, gbglFont *font, f32 x, f32 y, gbColour col, char const *fmt, ...) {
+isize gbgl_bs_draw_string(gbglBasicState *bs, gbglFont *font, f32 x, f32 y, gbglColour col, char const *fmt, ...) {
 	isize len;
 	va_list va;
 	va_start(va, fmt);
@@ -2516,7 +2571,7 @@ isize gbgl_bs_draw_string(gbglBasicState *bs, gbglFont *font, f32 x, f32 y, gbCo
 	return len;
 }
 
-gb_inline isize gbgl_bs_draw_string_va(gbglBasicState *bs, gbglFont *font, f32 x, f32 y, gbColour col, char const *fmt, va_list va) {
+gb_inline isize gbgl_bs_draw_string_va(gbglBasicState *bs, gbglFont *font, f32 x, f32 y, gbglColour col, char const *fmt, va_list va) {
 	isize len = gb_snprintf_va(bs->font_text_buffer, gb_size_of(bs->font_text_buffer),
 	                           fmt, va);
 	isize char_count = gb_utf8_strnlen(bs->font_text_buffer, len);
