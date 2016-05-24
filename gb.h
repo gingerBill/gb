@@ -1,4 +1,4 @@
-/* gb.h - v0.20  - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.21  - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -47,6 +47,53 @@ TODOS
 	- Free List, best fit rather than first fit
 	- More date & time functions
 
+VERSION HISTORY
+	0.21  - Platform Layer Restructuring
+	0.20  - Improve file io
+	0.19  - Clipboard Text
+	0.18a - Controller vibration
+	0.18  - Raw keyboard and mouse input for WIN32
+	0.17d - Fixed printf bug for strings
+	0.17c - Compile as 32 bit
+	0.17b - Change formating style because why not?
+	0.17a - Dropped C90 Support (For numerous reasons)
+	0.17  - Instantiated Hash Table
+	0.16a - Minor code layout changes
+	0.16  - New file API and improved platform layer
+	0.15d - Linux Experimental Support (DON'T USE IT PLEASE)
+	0.15c - Linux Experimental Support (DON'T USE IT)
+	0.15b - C90 Support
+	0.15a - gb_atomic(32|64)_spin_(lock|unlock)
+	0.15  - Recursive "Mutex"; Key States; gbRandom
+	0.14  - Better File Handling and better printf (WIN32 Only)
+	0.13  - Highly experimental platform layer (WIN32 Only)
+	0.12b - Fix minor file bugs
+	0.12a - Compile as C++
+	0.12  - New File Handing System! No stdio or stdlib! (WIN32 Only)
+	0.11a - Add string precision and width (experimental)
+	0.11  - Started making stdio & stdlib optional (Not tested much)
+	0.10c - Fix gb_endian_swap32()
+	0.10b - Probable timing bug for gb_time_now()
+	0.10a - Work on multiple compilers
+	0.10  - Scratch Memory Allocator
+	0.09a - Faster Mutex and the Free List is slightly improved
+	0.09  - Basic Virtual Memory System and Dreadful Free List allocator
+	0.08a - Fix *_appendv bug
+	0.08  - Huge Overhaul!
+	0.07a - Fix alignment in gb_heap_allocator_proc
+	0.07  - Hash Table and Hashing Functions
+	0.06c - Better Documentation
+	0.06b - OS X Support
+	0.06a - Linux Support
+	0.06  - Windows GCC Support and MSVC x86 Support
+	0.05b - Formatting
+	0.05a - Minor function name changes
+	0.05  - Radix Sort for unsigned integers (TODO: Other primitives)
+	0.04  - Better UTF support and search/sort procs
+	0.03  - Completely change procedure naming convention
+	0.02a - Bug fixes
+	0.02  - Change naming convention and gbArray(Type)
+	0.01  - Initial Version
 */
 
 
@@ -576,8 +623,8 @@ extern "C++" {
 #endif
 
 /* NOTE(bill): Very useful bit setting */
-#ifndef GB_MASK_TOGGLE
-#define GB_MASK_TOGGLE(var, set, mask) do { \
+#ifndef GB_MASK_SET
+#define GB_MASK_SET(var, set, mask) do { \
 	if (set) (var) |=  mask; \
 	else     (var) &= ~mask; \
 } while (0)
@@ -1867,6 +1914,8 @@ typedef struct gbFile {
 	// gbDirInfo *          dir_info; // TODO(bill): Get directory info
 } gbFile;
 
+// TODO(bill): gbAsyncFile
+
 typedef enum gbFileStandardType {
 	GB_FILE_STANDARD_INPUT,
 	GB_FILE_STANDARD_OUTPUT,
@@ -1939,9 +1988,6 @@ GB_DEF char const *gb_path_extension  (char const *path);
 // Printing
 //
 //
-
-
-// TODO(bill): Allow printf-ing to a gbFile!!!
 
 GB_DEF isize gb_printf        (char const *fmt, ...) GB_PRINTF_ARGS(1);
 GB_DEF isize gb_printf_va     (char const *fmt, va_list va);
@@ -2016,9 +2062,10 @@ GB_DEF u64 gb_endian_swap64(u64 i);
 
 // NOTE(bill):
 // Coordiate system - +ve x - left to right
-//                  - +ve y - top to bottom
+//                  - +ve y - bottom to top
 //                  - Relative to window
 
+// TODO(bill): Proper documentation for this with code examples
 
 #if defined(GB_SYSTEM_WINDOWS)
 #include <xinput.h>
@@ -2030,66 +2077,6 @@ GB_DEF u64 gb_endian_swap64(u64 i);
 #ifndef GB_MAX_GAME_CONTROLLER_COUNT
 #define GB_MAX_GAME_CONTROLLER_COUNT 4
 #endif
-
-typedef enum gbWindowFlag {
-	GB_WINDOW_SOFTWARE           = GB_BIT(0),
-	GB_WINDOW_OPENGL             = GB_BIT(1),
-	GB_WINDOW_FULLSCREEN         = GB_BIT(2),
-	GB_WINDOW_HIDDEN             = GB_BIT(4),
-	GB_WINDOW_BORDERLESS         = GB_BIT(5),
-	GB_WINDOW_RESIZABLE          = GB_BIT(6),
-	GB_WINDOW_MINIMIZED          = GB_BIT(7),
-	GB_WINDOW_MAXIMIZED          = GB_BIT(8),
-	GB_WINDOW_FULLSCREEN_DESKTOP = GB_WINDOW_FULLSCREEN | GB_WINDOW_BORDERLESS,
-
-	GB_WINDOW_IS_CLOSED          = GB_BIT(9),
-	GB_WINDOW_HAS_FOCUS          = GB_BIT(10)
-} gbWindowFlag;
-
-#if defined(_MSC_VER)
-#pragma warning(push)
-#pragma warning(disable:4201)
-#endif
-
-typedef struct gbVideoMode {
-	i32 width, height;
-	i32 bits_per_pixel;
-} gbVideoMode;
-
-typedef struct gbWindow {
-	void *handle;
-	i32   x, y;
-	i32   width, height;
-	u32   flags;
-
-#if defined(GB_SYSTEM_WINDOWS)
-	WINDOWPLACEMENT win32_placement;
-	HDC             win32_dc;
-#endif
-
-	union {
-		struct {
-			void *context;
-		} opengl;
-
-		struct {
-#if defined(GB_SYSTEM_WINDOWS)
-			BITMAPINFO win32_bmi;
-#endif
-			void *     memory;
-			isize      memory_size;
-			i32        pitch;
-			i32        bits_per_pixel;
-		} software;
-	};
-} gbWindow;
-
-#if defined(_MSC_VER)
-#pragma warning(pop)
-#endif
-
-
-
 
 typedef enum gbKeyType {
 	GB_KEY_UNKNOWN = 0,  // Unhandled key
@@ -2217,7 +2204,6 @@ typedef enum gbKeyStateType {
 
 GB_DEF void gb_key_state_update(gbKeyState *s, b32 is_down);
 
-
 typedef enum gbMouseButton {
 	GB_MOUSE_BUTTON_LEFT,
 	GB_MOUSE_BUTTON_MIDDLE,
@@ -2227,14 +2213,6 @@ typedef enum gbMouseButton {
 
 	GB_MOUSE_BUTTON_COUNT
 } gbMouseButton;
-
-typedef struct gbMouse {
-	i32 x, y;
-	i32 raw_dx, raw_dy; // NOTE(bill): Raw mouse movement
-	i32 wheel_delta;
-	gbKeyState buttons[GB_MOUSE_BUTTON_COUNT];
-} gbMouse;
-
 
 typedef enum gbControllerAxisType {
 	GB_CONTROLLER_AXIS_LEFT_X,
@@ -2281,9 +2259,67 @@ typedef GB_XINPUT_GET_STATE(gbXInputGetStateProc);
 typedef GB_XINPUT_SET_STATE(gbXInputSetStateProc);
 #endif
 
+
+typedef enum gbWindowFlag {
+	GB_WINDOW_FULLSCREEN         = GB_BIT(0),
+	GB_WINDOW_HIDDEN             = GB_BIT(1),
+	GB_WINDOW_BORDERLESS         = GB_BIT(2),
+	GB_WINDOW_RESIZABLE          = GB_BIT(3),
+	GB_WINDOW_MINIMIZED          = GB_BIT(4),
+	GB_WINDOW_MAXIMIZED          = GB_BIT(5),
+	GB_WINDOW_FULLSCREEN_DESKTOP = GB_WINDOW_FULLSCREEN | GB_WINDOW_BORDERLESS,
+} gbWindowFlag;
+
+typedef enum gbRendererType {
+	GB_RENDERER_OPENGL,
+	GB_RENDERER_SOFTWARE,
+
+	GB_RENDERER_COUNT,
+} gbRendererType;
+
+
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable:4201)
+#endif
+
 typedef struct gbPlatform {
-	gbWindow   window;
-	gbKeyState keys[GB_KEY_COUNT]; // NOTE(bill): test with flags
+	b32 is_initialized;
+
+	void *window_handle;
+	i32   window_x, window_y;
+	i32   window_width, window_height;
+	u32   window_flags;
+	b16   window_is_closed, window_has_focus;
+
+#if defined(GB_SYSTEM_WINDOWS)
+	WINDOWPLACEMENT win32_placement;
+	HDC             win32_dc;
+#endif
+
+	gbRendererType renderer_type;
+	union {
+		struct {
+			void *      context;
+			i32         major;
+			i32         minor;
+			b16         core, compatible;
+			gbDllHandle dll_handle;
+		} opengl;
+
+		// NOTE(bill): Software rendering
+		struct {
+#if defined(GB_SYSTEM_WINDOWS)
+			BITMAPINFO win32_bmi;
+#endif
+			void *     memory;
+			isize      memory_size;
+			i32        pitch;
+			i32        bits_per_pixel;
+		} sw_framebuffer;
+	};
+
+	gbKeyState keys[GB_KEY_COUNT];
 	struct {
 		gbKeyState control;
 		gbKeyState alt;
@@ -2293,7 +2329,13 @@ typedef struct gbPlatform {
 	char32 char_buffer[256];
 	isize  char_buffer_count;
 
-	gbMouse          mouse;
+	b32 mouse_clip;
+	i32 mouse_x, mouse_y;
+	i32 mouse_dx, mouse_dy; // NOTE(bill): Not raw mouse movement
+	i32 mouse_raw_dx, mouse_raw_dy; // NOTE(bill): Raw mouse movement
+	i32 mouse_wheel_delta;
+	gbKeyState mouse_buttons[GB_MOUSE_BUTTON_COUNT];
+
 	gbGameController game_controllers[GB_MAX_GAME_CONTROLLER_COUNT];
 
 	f64              curr_time;
@@ -2308,29 +2350,14 @@ typedef struct gbPlatform {
 #endif
 } gbPlatform;
 
-GB_DEF void gb_platform_init   (gbPlatform *p);
-GB_DEF void gb_platform_update (gbPlatform *p);
-GB_DEF void gb_platform_display(gbPlatform *p);
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
-GB_DEF void gb_platform_show_cursor             (gbPlatform *p, i32 show);
-GB_DEF void gb_platform_set_mouse_position      (gbPlatform *p, i32 x, i32 y);
-GB_DEF void gb_platform_set_controller_vibration(gbPlatform *p, isize index, f32 left_motor, f32 right_motor);
-
-GB_DEF b32   gb_platform_has_clipboard_text(gbPlatform *p);
-GB_DEF void  gb_platform_set_clipboard_text(gbPlatform *p, char const *str);
-GB_DEF char *gb_platform_get_clipboard_text(gbPlatform *p, gbAllocator a);
-
-// NOTE(bill): Title is UTF-8
-GB_DEF gbWindow *gb_window_init                (gbPlatform *p, char const *title, gbVideoMode mode, u32 flags);
-GB_DEF void      gb_window_destroy             (gbWindow *w);
-GB_DEF void      gb_window_set_position        (gbWindow *w, i32 x, i32 y);
-GB_DEF void      gb_window_set_title           (gbWindow *w, char const *title, ...) GB_PRINTF_ARGS(2);
-GB_DEF void      gb_window_toggle_fullscreen   (gbWindow *w, b32 fullscreen_desktop);
-GB_DEF void      gb_window_make_context_current(gbWindow *w);
-GB_DEF void      gb_window_show                (gbWindow *w);
-GB_DEF void      gb_window_hide                (gbWindow *w);
-GB_DEF b32       gb_window_is_open             (gbWindow const *w);
-
+typedef struct gbVideoMode {
+	i32 width, height;
+	i32 bits_per_pixel;
+} gbVideoMode;
 
 GB_DEF gbVideoMode gb_video_mode                     (i32 width, i32 height, i32 bits_per_pixel);
 GB_DEF b32         gb_video_mode_is_valid            (gbVideoMode mode);
@@ -2338,6 +2365,26 @@ GB_DEF gbVideoMode gb_video_mode_get_desktop         (void);
 GB_DEF isize       gb_video_mode_get_fullscreen_modes(gbVideoMode *modes, isize max_mode_count); // NOTE(bill): returns mode count
 GB_DEF GB_COMPARE_PROC(gb_video_mode_cmp);     // NOTE(bill): Sort smallest to largest (Ascending)
 GB_DEF GB_COMPARE_PROC(gb_video_mode_dsc_cmp); // NOTE(bill): Sort largest to smallest (Descending)
+
+
+// NOTE(bill): `config` can be NULL (i.e. optional)
+GB_DEF b32   gb_platform_init                       (gbPlatform *p, char const *window_title, gbVideoMode mode, gbRendererType type, u32 window_flags);
+GB_DEF void  gb_platform_update                     (gbPlatform *p);
+GB_DEF void  gb_platform_display                    (gbPlatform *p);
+GB_DEF void  gb_platform_destroy                    (gbPlatform *p);
+GB_DEF void  gb_platform_show_cursor                (gbPlatform *p, i32 show);
+GB_DEF void  gb_platform_set_mouse_position         (gbPlatform *p, i32 x, i32 y);
+GB_DEF void  gb_platform_set_controller_vibration   (gbPlatform *p, isize index, f32 left_motor, f32 right_motor);
+GB_DEF b32   gb_platform_has_clipboard_text         (gbPlatform *p);
+GB_DEF void  gb_platform_set_clipboard_text         (gbPlatform *p, char const *str);
+GB_DEF char *gb_platform_get_clipboard_text         (gbPlatform *p, gbAllocator a);
+GB_DEF void  gb_platform_set_window_position        (gbPlatform *p, i32 x, i32 y);
+GB_DEF void  gb_platform_set_window_title           (gbPlatform *p, char const *title, ...) GB_PRINTF_ARGS(2);
+GB_DEF void  gb_platform_toggle_fullscreen          (gbPlatform *p, b32 fullscreen_desktop);
+GB_DEF void  gb_platform_toggle_borderless          (gbPlatform *p);
+GB_DEF void  gb_platform_make_opengl_context_current(gbPlatform *p);
+GB_DEF void  gb_platform_show_window                (gbPlatform *p);
+GB_DEF void  gb_platform_hide_window                (gbPlatform *p);
 
 
 #if defined(__cplusplus)
@@ -3232,7 +3279,6 @@ gb_inline u32 gb_thread_current_id(void) {
 
 void gb_thread_set_name(gbThread *t, char const *name) {
 #if defined(_MSC_VER)
-	// TODO(bill): Bloody Windows!!!
 	#pragma pack(push, 8)
 		typedef struct {
 			DWORD      type;
@@ -6503,7 +6549,6 @@ gb_inline u32 gb_endian_swap32(u32 i) {
 }
 
 gb_inline u64 gb_endian_swap64(u64 i) {
-	// TODO(bill): Do I really need the cast here?
 	return (i>>56) | (i<<56) |
 	       ((i&0x00ff000000000000ull)>>40) | ((i&0x000000000000ff00ull)<<40) |
 	       ((i&0x0000ff0000000000ull)>>24) | ((i&0x0000000000ff0000ull)<<24) |
@@ -6523,9 +6568,10 @@ gb_inline u64 gb_endian_swap64(u64 i) {
 
 gb_inline void gb_key_state_update(gbKeyState *s, b32 is_down) {
 	b32 was_down = (*s & GB_KEY_STATE_DOWN) != 0;
-	GB_MASK_TOGGLE(*s, is_down,               GB_KEY_STATE_DOWN);
-	GB_MASK_TOGGLE(*s, !was_down &&  is_down, GB_KEY_STATE_PRESSED);
-	GB_MASK_TOGGLE(*s,  was_down && !is_down, GB_KEY_STATE_RELEASED);
+	is_down = is_down != 0; // NOTE(bill): Make sure it's a boolean
+	GB_MASK_SET(*s, is_down,               GB_KEY_STATE_DOWN);
+	GB_MASK_SET(*s, !was_down &&  is_down, GB_KEY_STATE_PRESSED);
+	GB_MASK_SET(*s,  was_down && !is_down, GB_KEY_STATE_RELEASED);
 }
 
 #if defined(GB_SYSTEM_WINDOWS)
@@ -6551,62 +6597,40 @@ gb_internal gb_inline f32 gb__process_xinput_stick_value(SHORT value, SHORT dead
 	return result;
 }
 
-gb_internal void gb__window_resize_dib_section(gbWindow *window, i32 width, i32 height) {
-	if (!(window->width == width && window->height == height)) {
+gb_internal void gb__platform_resize_dib_section(gbPlatform *p, i32 width, i32 height) {
+	if ((p->renderer_type == GB_RENDERER_SOFTWARE) &&
+	    !(p->window_width == width && p->window_height == height)) {
 		BITMAPINFO bmi = {0};
 
 		if (width == 0 || height == 0)
 			return;
 
-		window->width  = width;
-		window->height = height;
+		p->window_width  = width;
+		p->window_height = height;
 
-		window->software.bits_per_pixel = gb_video_mode_get_desktop().bits_per_pixel;
-		window->software.pitch = (window->software.bits_per_pixel * width / 8);
+		p->sw_framebuffer.bits_per_pixel = gb_video_mode_get_desktop().bits_per_pixel;
+		p->sw_framebuffer.pitch = (p->sw_framebuffer.bits_per_pixel * width / 8);
 
 		bmi.bmiHeader.biSize = gb_size_of(bmi.bmiHeader);
 		bmi.bmiHeader.biWidth       = width;
-		bmi.bmiHeader.biHeight      = -height; // NOTE(bill): -ve is top-down, +ve is bottom-up
+		bmi.bmiHeader.biHeight      = height; // NOTE(bill): -ve is top-down, +ve is bottom-up
 		bmi.bmiHeader.biPlanes      = 1;
-		bmi.bmiHeader.biBitCount    = cast(WORD)window->software.bits_per_pixel;
+		bmi.bmiHeader.biBitCount    = cast(WORD)p->sw_framebuffer.bits_per_pixel;
 		bmi.bmiHeader.biCompression = BI_RGB;
 
-		window->software.win32_bmi = bmi;
+		p->sw_framebuffer.win32_bmi = bmi;
 
 
-		if (window->software.memory)
-			gb_vm_free(gb_virtual_memory(window->software.memory, window->software.memory_size));
+		if (p->sw_framebuffer.memory)
+			gb_vm_free(gb_virtual_memory(p->sw_framebuffer.memory, p->sw_framebuffer.memory_size));
 
 		{
-			isize memory_size = window->software.pitch * height;
+			isize memory_size = p->sw_framebuffer.pitch * height;
 			gbVirtualMemory vm = gb_vm_alloc(0, memory_size);
-			window->software.memory      = vm.data;
-			window->software.memory_size = vm.size;
+			p->sw_framebuffer.memory      = vm.data;
+			p->sw_framebuffer.memory_size = vm.size;
 		}
 	}
-}
-
-void gb_platform_init(gbPlatform *p) {
-	gb_zero_item(p);
-
-	{ // Load XInput
-		gbDllHandle xinput_library = gb_dll_load("xinput1_4.dll");
-		if (!xinput_library) xinput_library = gb_dll_load("xinput9_1_0.dll");
-		if (!xinput_library) xinput_library = gb_dll_load("xinput1_3.dll");
-		if (!xinput_library) {
-			// TODO(bill): Diagnostic
-			gb_printf_err("XInput could not be loaded. Controllers will not work!\n");
-		} else {
-			p->xinput.get_state = cast(gbXInputGetStateProc *) gb_dll_proc_address(xinput_library, "XInputGetState");
-			if (!p->xinput.get_state) p->xinput.get_state = gbXInputGetState_Stub;
-
-			p->xinput.set_state = cast(gbXInputSetStateProc *) gb_dll_proc_address(xinput_library, "XInputSetState");
-			if (!p->xinput.set_state) p->xinput.set_state = gbXInputSetState_Stub;
-		}
-	}
-
-	// Init keys
-	gb_zero_array(p->keys, gb_count_of(p->keys));
 }
 
 gb_internal gbKeyType gb__win32_from_vk(UINT key) {
@@ -6694,36 +6718,12 @@ gb_internal gbKeyType gb__win32_from_vk(UINT key) {
 	return GB_KEY_UNKNOWN;
 }
 
-
 LRESULT CALLBACK gb__win32_window_callback(HWND wnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	// NOTE(bill): Silly callbacks
 	gbPlatform *platform = cast(gbPlatform *)GetWindowLongPtr(wnd, GWLP_USERDATA);
-	gbWindow *window = platform ? &platform->window : NULL;
-	b32 window_has_focus = (platform != NULL) && (window->flags & GB_WINDOW_HAS_FOCUS) != 0;
+	b32 window_has_focus = (platform != NULL) && platform->window_has_focus;
 
-	// TODO(bill): Do more in here?
-	switch (msg) {
-	case WM_CLOSE:
-	case WM_DESTROY:
-		if (platform)
-			window->flags |= GB_WINDOW_IS_CLOSED;
-		return 0;
-
-	case WM_UNICHAR:
-		if (window_has_focus) {
-			if (wParam == '\r')
-				wParam = '\n';
-			// TODO(bill): Does this need to be thread-safe?
-			platform->char_buffer[platform->char_buffer_count++] = cast(char32)wParam;
-		}
-		break;
-
-	case WM_MOUSEWHEEL: {
-		i32 delta = GET_WHEEL_DELTA_WPARAM(wParam);
-		platform->mouse.wheel_delta = delta;
-	} break;
-
-	case WM_CREATE: {
+	if (msg == WM_CREATE) { // NOTE(bill): Doesn't need the platform
 		// NOTE(bill): https://msdn.microsoft.com/en-us/library/windows/desktop/ms645536(v=vs.85).aspx
 		RAWINPUTDEVICE rid[2] = {0};
 
@@ -6742,7 +6742,30 @@ LRESULT CALLBACK gb__win32_window_callback(HWND wnd, UINT msg, WPARAM wParam, LP
 		if (!RegisterRawInputDevices(rid, gb_count_of(rid), gb_size_of(rid[0]))) {
 			GB_PANIC("Failed to initialize raw input device for win32.");
 		}
+	}
+
+	if (!platform)
+		return DefWindowProcW(wnd, msg, wParam, lParam);
+
+	switch (msg) {
+	case WM_CLOSE:
+	case WM_DESTROY:
+		platform->window_is_closed = true;
+		return 0;
+
+	case WM_QUIT: {
+		platform->quit_requested = true;
 	} break;
+
+	case WM_UNICHAR: {
+		if (window_has_focus) {
+			if (wParam == '\r')
+				wParam = '\n';
+			// TODO(bill): Does this need to be thread-safe?
+			platform->char_buffer[platform->char_buffer_count++] = cast(char32)wParam;
+		}
+	} break;
+
 
 	case WM_INPUT: {
 		RAWINPUT raw = {0};
@@ -6816,11 +6839,15 @@ LRESULT CALLBACK gb__win32_window_callback(HWND wnd, UINT msg, WPARAM wParam, LP
 		} break;
 		case RIM_TYPEMOUSE: {
 			RAWMOUSE *raw_mouse = &raw.data.mouse;
-			LONG dx = raw_mouse->lLastX;
-			LONG dy = raw_mouse->lLastY;
+			USHORT flags = raw_mouse->usButtonFlags;
+			LONG dx = +raw_mouse->lLastX;
+			LONG dy = -raw_mouse->lLastY;
 
-			platform->mouse.raw_dx = dx;
-			platform->mouse.raw_dy = dy;
+			if (flags & RI_MOUSE_WHEEL)
+				platform->mouse_wheel_delta = cast(i16)raw_mouse->usButtonData;
+
+			platform->mouse_raw_dx = dx;
+			platform->mouse_raw_dy = dy;
 		} break;
 		}
 	} break;
@@ -6832,44 +6859,221 @@ LRESULT CALLBACK gb__win32_window_callback(HWND wnd, UINT msg, WPARAM wParam, LP
 }
 
 
+typedef HGLRC wglCreateContextAttribsARB_Proc(HDC hDC, HGLRC hshareContext, int const *attribList);
+
+
+b32 gb_platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode, gbRendererType type, u32 window_flags) {
+	WNDCLASSEXW wc = {gb_size_of(WNDCLASSEXW)};
+	DWORD ex_style, style;
+	RECT wr;
+	char16 title_buffer[256] = {0}; // TODO(bill): gb_local_persist this?
+
+	wc.style = CS_HREDRAW | CS_VREDRAW; // | CS_OWNDC
+	wc.lpfnWndProc   = gb__win32_window_callback;
+	wc.hIcon         = LoadIcon(NULL, IDI_WINLOGO);
+	wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
+	wc.hbrBackground = cast(HBRUSH)GetStockObject(WHITE_BRUSH);
+	wc.lpszMenuName  = NULL;
+	wc.lpszClassName = L"gb-win32-wndclass"; // TODO(bill): Is this enough?
+	wc.hInstance     = GetModuleHandle(NULL);
+	wc.hIconSm       = LoadIcon(NULL, IDI_WINLOGO);
+
+	if (RegisterClassExW(&wc) == 0) {
+		MessageBoxW(NULL, L"Failed to register the window class", L"ERROR", MB_OK | MB_ICONEXCLAMATION);
+		return false;
+	}
+
+	if ((window_flags & GB_WINDOW_FULLSCREEN) && !(window_flags & GB_WINDOW_BORDERLESS)) {
+		DEVMODEW screen_settings = {gb_size_of(DEVMODEW)};
+		GB_ASSERT(gb_video_mode_is_valid(mode));
+		screen_settings.dmPelsWidth	 = mode.width;
+		screen_settings.dmPelsHeight = mode.height;
+		screen_settings.dmBitsPerPel = mode.bits_per_pixel;
+		screen_settings.dmFields     = DM_BITSPERPEL|DM_PELSWIDTH|DM_PELSHEIGHT;
+
+		if (ChangeDisplaySettingsW(&screen_settings, CDS_FULLSCREEN) != DISP_CHANGE_SUCCESSFUL) {
+			if (MessageBoxW(NULL, L"The requested fullscreen mode is not supported by\n"
+			                L"your video card. Use windowed mode instead?",
+			                L"",
+			                MB_YESNO|MB_ICONEXCLAMATION) == IDYES) {
+				window_flags &= ~GB_WINDOW_FULLSCREEN;
+			} else {
+				MessageBoxW(NULL, L"Failed to create a window", L"ERROR", MB_OK|MB_ICONSTOP);
+				return false;
+			}
+		}
+	}
+
+
+	ex_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
+	style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_VISIBLE | WS_THICKFRAME | WS_SYSMENU | WS_MAXIMIZEBOX | WS_MINIMIZEBOX;
+	if (window_flags & (GB_WINDOW_BORDERLESS))
+		style |= WS_POPUP;
+	else
+		style |= WS_OVERLAPPEDWINDOW | WS_CAPTION;
+
+	if (window_flags & GB_WINDOW_HIDDEN)       style &= ~WS_VISIBLE;
+	if (!(window_flags & GB_WINDOW_RESIZABLE)) style &= ~WS_THICKFRAME;
+	if (window_flags & GB_WINDOW_MAXIMIZED)    style |=  WS_MAXIMIZE;
+	if (window_flags & GB_WINDOW_MINIMIZED)    style |=  WS_MINIMIZE;
+
+	// NOTE(bill): Completely ignore the give mode and just change it
+	if (window_flags & GB_WINDOW_FULLSCREEN_DESKTOP)
+		mode = gb_video_mode_get_desktop();
+
+	wr.left   = 0;
+	wr.top    = 0;
+	wr.right  = mode.width;
+	wr.bottom = mode.height;
+	AdjustWindowRect(&wr, style, false);
+
+	p->window_flags  = window_flags;
+	p->window_handle = CreateWindowExW(ex_style,
+	                                   wc.lpszClassName,
+	                                   cast(LPCWSTR)gb_utf8_to_ucs2(title_buffer, gb_size_of(title_buffer), window_title),
+	                                   style,
+	                                   CW_USEDEFAULT, CW_USEDEFAULT,
+	                                   wr.right - wr.left, wr.bottom - wr.top,
+	                                   0, 0,
+	                                   GetModuleHandle(NULL),
+	                                   cast(HWND)NULL);
+
+	if (!p->window_handle) {
+		MessageBoxW(NULL, L"Window creation failed", L"Error", MB_OK|MB_ICONEXCLAMATION);
+		return false;
+	}
+
+	p->win32_dc = GetDC(cast(HWND)p->window_handle);
+
+	p->renderer_type = type;
+	switch (p->renderer_type) {
+	case GB_RENDERER_OPENGL: {
+		wglCreateContextAttribsARB_Proc *wglCreateContextAttribsARB;
+		i32 attribs[8] = {0};
+		isize c = 0;
+
+		PIXELFORMATDESCRIPTOR pfd = {gb_size_of(PIXELFORMATDESCRIPTOR)};
+		pfd.nVersion     = 1;
+		pfd.dwFlags      = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
+		pfd.iPixelType   = PFD_TYPE_RGBA;
+		pfd.cColorBits   = 32;
+		pfd.cAlphaBits   = 8;
+		pfd.cDepthBits   = 24;
+		pfd.cStencilBits = 8;
+		pfd.iLayerType   = PFD_MAIN_PLANE;
+
+		SetPixelFormat(p->win32_dc, ChoosePixelFormat(p->win32_dc, &pfd), NULL);
+		p->opengl.context = cast(void *)wglCreateContext(p->win32_dc);
+		wglMakeCurrent(p->win32_dc, cast(HGLRC)p->opengl.context);
+
+		if (p->opengl.major > 0) {
+			attribs[c++] = 0x2091; // WGL_CONTEXT_MAJOR_VERSION_ARB
+			attribs[c++] = gb_max(p->opengl.major, 1);
+		}
+		if (p->opengl.major > 0 && p->opengl.minor >= 0) {
+			attribs[c++] = 0x2092; // WGL_CONTEXT_MINOR_VERSION_ARB
+			attribs[c++] = gb_max(p->opengl.minor, 0);
+		}
+
+		if (p->opengl.core) {
+			attribs[c++] = 0x9126; // WGL_CONTEXT_PROFILE_MASK_ARB
+			attribs[c++] = 0x0001; // WGL_CONTEXT_CORE_PROFILE_BIT_ARB
+		} else if (p->opengl.compatible) {
+			attribs[c++] = 0x9126; // WGL_CONTEXT_PROFILE_MASK_ARB
+			attribs[c++] = 0x0002; // WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB
+		}
+		attribs[c++] = 0; // NOTE(bill): tells the proc that this is the end of attribs
+
+		wglCreateContextAttribsARB = cast(wglCreateContextAttribsARB_Proc *)wglGetProcAddress("wglCreateContextAttribsARB");
+		if (wglCreateContextAttribsARB) {
+			HGLRC rc = wglCreateContextAttribsARB(cast(HDC)p->win32_dc, 0, attribs);
+			if (rc && wglMakeCurrent(p->win32_dc, rc)) {
+				p->opengl.context = rc;
+			} else {
+				// TODO(bill): Handle errors from GetLastError
+				// ERROR_INVALID_VERSION_ARB 0x2095
+				// ERROR_INVALID_PROFILE_ARB 0x2096
+			}
+		}
+
+	} break;
+
+	case GB_RENDERER_SOFTWARE:
+		gb__platform_resize_dib_section(p, mode.width, mode.height);
+		break;
+
+	default:
+		GB_PANIC("Unknown window type");
+		break;
+	}
+
+	SetForegroundWindow(cast(HWND)p->window_handle);
+	SetFocus(cast(HWND)p->window_handle);
+	SetWindowLongPtr(cast(HWND)p->window_handle, GWLP_USERDATA, cast(LONG_PTR)p);
+
+	p->window_width  = mode.width;
+	p->window_height = mode.height;
+
+	if (p->renderer_type == GB_RENDERER_OPENGL) {
+		p->opengl.dll_handle = gb_dll_load("opengl32.dll");
+	}
+
+	{ // Load XInput
+		// TODO(bill): What other dlls should I look for?
+		gbDllHandle xinput_library = gb_dll_load("xinput1_4.dll");
+		p->xinput.get_state = gbXInputGetState_Stub;
+		p->xinput.set_state = gbXInputSetState_Stub;
+
+		if (!xinput_library) xinput_library = gb_dll_load("xinput9_1_0.dll");
+		if (!xinput_library) xinput_library = gb_dll_load("xinput1_3.dll");
+		if (!xinput_library) {
+			// TODO(bill): Proper Diagnostic
+			gb_printf_err("XInput could not be loaded. Controllers will not work!\n");
+		} else {
+			p->xinput.get_state = cast(gbXInputGetStateProc *)gb_dll_proc_address(xinput_library, "XInputGetState");
+			p->xinput.set_state = cast(gbXInputSetStateProc *)gb_dll_proc_address(xinput_library, "XInputSetState");
+		}
+	}
+
+	// Init keys
+	gb_zero_array(p->keys, gb_count_of(p->keys));
+
+	p->is_initialized = true;
+	return true;
+}
+
+
 void gb_platform_update(gbPlatform *p) {
 	isize i;
 
-	{ // NOTE(bill): Set window state]
+	{ // NOTE(bill): Set window state
 		// TODO(bill): Should this be moved to gb__win32_window_callback ?
 		RECT window_rect;
 		i32 x, y, w, h;
 
-		GetClientRect(cast(HWND)p->window.handle, &window_rect);
+		GetClientRect(cast(HWND)p->window_handle, &window_rect);
 		x = window_rect.left;
 		y = window_rect.top;
 		w = window_rect.right - window_rect.left;
 		h = window_rect.bottom - window_rect.top;
 
-		if ((p->window.width != w) || (p->window.height != h)) {
-			if (p->window.flags & GB_WINDOW_SOFTWARE)
-				gb__window_resize_dib_section(&p->window, w, h);
+		if ((p->window_width != w) || (p->window_height != h)) {
+			if (p->renderer_type == GB_RENDERER_SOFTWARE)
+				gb__platform_resize_dib_section(p, w, h);
 		}
 
 
-		p->window.x = x;
-		p->window.y = y;
-		p->window.width = w;
-		p->window.height = h;
+		p->window_x = x;
+		p->window_y = y;
+		p->window_width = w;
+		p->window_height = h;
+		GB_MASK_SET(p->window_flags, IsIconic(cast(HWND)p->window_handle) != 0, GB_WINDOW_MINIMIZED);
 
-		GB_MASK_TOGGLE(p->window.flags, GetFocus() == cast(HWND)p->window.handle,  GB_WINDOW_HAS_FOCUS);
-		GB_MASK_TOGGLE(p->window.flags, IsIconic(cast(HWND)p->window.handle) != 0, GB_WINDOW_MINIMIZED);
+		p->window_has_focus = GetFocus() == cast(HWND)p->window_handle;
 	}
 
 	{ // NOTE(bill): Set mouse position
 		POINT mouse_pos;
-		GetCursorPos(&mouse_pos);
-		ScreenToClient(cast(HWND)p->window.handle, &mouse_pos);
-		p->mouse.x = mouse_pos.x;
-		p->mouse.y = mouse_pos.y;
-	}
-
-	{ // NOTE(bill): Set mouse buttons
 		DWORD win_button_id[GB_MOUSE_BUTTON_COUNT] = {
 			VK_LBUTTON,
 			VK_MBUTTON,
@@ -6877,15 +7081,53 @@ void gb_platform_update(gbPlatform *p) {
 			VK_XBUTTON1,
 			VK_XBUTTON2,
 		};
-		for (i = 0; i < GB_MOUSE_BUTTON_COUNT; i++) {
-			// NOTE(bill): Needs to be Async in this case
-			b32 is_down = GetAsyncKeyState(win_button_id[i]) < 0;
-			gb_key_state_update(&p->mouse.buttons[i], is_down);
+
+		// NOTE(bill): This needs to be GetAsyncKeyState as RAWMOUSE doesn't aways work for some odd reason
+		// TODO(bill): Try and get RAWMOUSE to work for key presses
+		for (i = 0; i < GB_MOUSE_BUTTON_COUNT; i++)
+			gb_key_state_update(p->mouse_buttons+i, GetAsyncKeyState(win_button_id[i]) < 0);
+
+		GetCursorPos(&mouse_pos);
+		ScreenToClient(cast(HWND)p->window_handle, &mouse_pos);
+		{
+			i32 x = mouse_pos.x;
+			i32 y = p->window_height-1 - mouse_pos.y;
+			p->mouse_dx = x - p->mouse_x;
+			p->mouse_dy = y - p->mouse_y;
+			p->mouse_x = x;
+			p->mouse_y = y;
 		}
+
+		if (p->mouse_clip) {
+			b32 update = false;
+			i32 x = p->mouse_x;
+			i32 y = p->mouse_y;
+			if (p->mouse_x < 0) {
+				x = 0;
+				update = true;
+			} else if (p->mouse_y > p->window_height-1) {
+				y = p->window_height-1;
+				update = true;
+			}
+
+			if (p->mouse_y < 0) {
+				y = 0;
+				update = true;
+			} else if (p->mouse_x > p->window_width-1) {
+				x = p->window_width-1;
+				update = true;
+			}
+
+			if (update)
+				gb_platform_set_mouse_position(p, x, y);
+		}
+
+
 	}
 
-	// NOTE(bill): Set Key states
-	if (p->window.flags & GB_WINDOW_HAS_FOCUS) {
+
+	// NOTE(bill): Set Key/Button states
+	if (p->window_has_focus) {
 		p->char_buffer_count = 0; // TODO(bill): Reset buffer count here or else where?
 
 		// NOTE(bill): Need to update as the keys only get updates on events
@@ -6897,6 +7139,7 @@ void gb_platform_update(gbPlatform *p) {
 		p->key_modifiers.control = p->keys[GB_KEY_LCONTROL] | p->keys[GB_KEY_RCONTROL];
 		p->key_modifiers.alt     = p->keys[GB_KEY_LALT]     | p->keys[GB_KEY_RALT];
 		p->key_modifiers.shift   = p->keys[GB_KEY_LSHIFT]   | p->keys[GB_KEY_RSHIFT];
+
 	}
 
 	{ // NOTE(bill): Set Controller states
@@ -6975,16 +7218,14 @@ void gb_platform_update(gbPlatform *p) {
 }
 
 void gb_platform_display(gbPlatform *p) {
-	gbWindow *window = &p->window;
-
-	if (window->flags & GB_WINDOW_OPENGL) {
-		SwapBuffers(window->win32_dc);
-	} else if (window->flags & GB_WINDOW_SOFTWARE) {
-		StretchDIBits(window->win32_dc,
-		              0, 0, window->width, window->height,
-		              0, 0, window->width, window->height,
-		              window->software.memory,
-		              &window->software.win32_bmi,
+	if (p->renderer_type == GB_RENDERER_OPENGL) {
+		SwapBuffers(p->win32_dc);
+	} else if (p->renderer_type == GB_RENDERER_SOFTWARE) {
+		StretchDIBits(p->win32_dc,
+		              0, 0, p->window_width, p->window_height,
+		              0, 0, p->window_width, p->window_height,
+		              p->sw_framebuffer.memory,
+		              &p->sw_framebuffer.win32_bmi,
 		              DIB_RGB_COLORS, SRCCOPY);
 	} else {
 		GB_PANIC("Invalid window rendering type");
@@ -6998,6 +7239,16 @@ void gb_platform_display(gbPlatform *p) {
 	}
 }
 
+
+void gb_platform_destroy(gbPlatform *p) {
+	if (p->renderer_type == GB_RENDERER_OPENGL)
+		wglDeleteContext(cast(HGLRC)p->opengl.context);
+	else if (p->renderer_type == GB_RENDERER_SOFTWARE)
+		gb_vm_free(gb_virtual_memory(p->sw_framebuffer.memory, p->sw_framebuffer.memory_size));
+
+	DestroyWindow(cast(HWND)p->window_handle);
+}
+
 void gb_platform_show_cursor(gbPlatform *p, i32 show) {
 	gb_unused(p);
 	ShowCursor(show);
@@ -7006,12 +7257,12 @@ void gb_platform_show_cursor(gbPlatform *p, i32 show) {
 void gb_platform_set_mouse_position(gbPlatform *p, i32 x, i32 y) {
 	POINT point;
 	point.x = cast(LONG)x;
-	point.y = cast(LONG)y;
-	ClientToScreen(cast(HWND)p->window.handle, &point);
+	point.y = cast(LONG)(p->window_height-1 - y);
+	ClientToScreen(cast(HWND)p->window_handle, &point);
 	SetCursorPos(point.x, point.y);
 
-	p->mouse.x = point.x;
-	p->mouse.y = point.y;
+	p->mouse_x = point.x;
+	p->mouse_y = p->window_height-1 - point.y;
 }
 
 
@@ -7029,147 +7280,17 @@ void gb_platform_set_controller_vibration(gbPlatform *p, isize index, f32 left_m
 }
 
 
-// TODO(bill): Make this return errors rathern than silly message boxes
-gbWindow *gb_window_init(gbPlatform *platform, char const *title, gbVideoMode mode, u32 flags) {
-	gbWindow *window = &platform->window;
-	WNDCLASSEXW wc = {gb_size_of(WNDCLASSEXW)};
-	DWORD ex_style, style;
-	RECT wr;
-	char16 title_buffer[256] = {0}; // TODO(bill): gb_local_persist this?
-
-	gb_zero_item(window);
-
-	wc.style = CS_HREDRAW | CS_VREDRAW; // | CS_OWNDC
-	wc.lpfnWndProc   = gb__win32_window_callback;
-	wc.hIcon         = LoadIcon(NULL, IDI_WINLOGO);
-	wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
-	wc.hbrBackground = cast(HBRUSH)GetStockObject(WHITE_BRUSH);
-	wc.lpszMenuName  = NULL;
-	wc.lpszClassName = L"gb-win32-wndclass"; // TODO(bill): Is this enough?
-	wc.hInstance     = GetModuleHandle(NULL);
-	wc.hIconSm       = LoadIcon(NULL, IDI_WINLOGO);
-
-	if (RegisterClassExW(&wc) == 0) {
-		MessageBoxW(NULL, L"Failed to register the window class", L"ERROR", MB_OK | MB_ICONEXCLAMATION);
-		return NULL;
-	}
-
-	if ((flags & GB_WINDOW_FULLSCREEN) && !(flags & GB_WINDOW_BORDERLESS)) {
-		DEVMODEW screen_settings = {gb_size_of(DEVMODEW)};
-		GB_ASSERT(gb_video_mode_is_valid(mode));
-		screen_settings.dmPelsWidth	 = mode.width;
-		screen_settings.dmPelsHeight = mode.height;
-		screen_settings.dmBitsPerPel = mode.bits_per_pixel;
-		screen_settings.dmFields     = DM_BITSPERPEL|DM_PELSWIDTH|DM_PELSHEIGHT;
-
-		if (ChangeDisplaySettingsW(&screen_settings, CDS_FULLSCREEN) != DISP_CHANGE_SUCCESSFUL) {
-			if (MessageBoxW(NULL, L"The requested fullscreen mode is not supported by\n"
-			                L"your video card. Use windowed mode instead?",
-			                L"",
-			                MB_YESNO|MB_ICONEXCLAMATION) == IDYES) {
-				flags &= ~GB_WINDOW_FULLSCREEN;
-			} else {
-				MessageBoxW(NULL, L"Failed to create a window", L"ERROR", MB_OK|MB_ICONSTOP);
-				return NULL;
-			}
-		}
-	}
-
-
-	ex_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
-	style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_VISIBLE | WS_THICKFRAME | WS_SYSMENU | WS_MAXIMIZEBOX | WS_MINIMIZEBOX;
-	if (flags & (GB_WINDOW_BORDERLESS))
-		style |= WS_POPUP;
-	else
-		style |= WS_OVERLAPPEDWINDOW | WS_CAPTION;
-
-	if (flags & GB_WINDOW_HIDDEN)       style &= ~WS_VISIBLE;
-	if (!(flags & GB_WINDOW_RESIZABLE)) style &= ~WS_THICKFRAME;
-	if (flags & GB_WINDOW_MAXIMIZED)    style |=  WS_MAXIMIZE;
-	if (flags & GB_WINDOW_MINIMIZED)    style |=  WS_MINIMIZE;
-
-	// NOTE(bill): Completely ignore the give mode and just change it
-	if (flags & GB_WINDOW_FULLSCREEN_DESKTOP)
-		mode = gb_video_mode_get_desktop();
-
-	wr.left   = 0;
-	wr.top    = 0;
-	wr.right  = mode.width;
-	wr.bottom = mode.height;
-	AdjustWindowRect(&wr, style, false);
-
-	window->flags = flags;
-	window->handle = CreateWindowExW(ex_style,
-	                                 wc.lpszClassName,
-	                                 cast(LPCWSTR)gb_utf8_to_ucs2(title_buffer, gb_size_of(title_buffer), title),
-	                                 style,
-	                                 CW_USEDEFAULT, CW_USEDEFAULT,
-	                                 wr.right - wr.left, wr.bottom - wr.top,
-	                                 0, 0,
-	                                 GetModuleHandle(NULL),
-	                                 cast(HWND)NULL);
-
-	if (!window->handle) {
-		MessageBoxW(NULL, L"Window creation failed", L"Error", MB_OK|MB_ICONEXCLAMATION);
-		return NULL;
-	}
-
-	window->win32_dc = GetDC(cast(HWND)window->handle);
-
-	GB_ASSERT(!((window->flags & GB_WINDOW_OPENGL) && (window->flags & GB_WINDOW_SOFTWARE)));
-	if (window->flags & GB_WINDOW_OPENGL) {
-		PIXELFORMATDESCRIPTOR pfd = {gb_size_of(PIXELFORMATDESCRIPTOR)};
-		pfd.nVersion     = 1;
-		pfd.dwFlags      = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
-		pfd.iPixelType   = PFD_TYPE_RGBA;
-		pfd.cColorBits   = 32;
-		pfd.cAlphaBits   = 8;
-		pfd.cDepthBits   = 24;
-		pfd.cStencilBits = 8;
-		pfd.iLayerType   = PFD_MAIN_PLANE;
-
-		SetPixelFormat(window->win32_dc, ChoosePixelFormat(window->win32_dc, &pfd), NULL);
-
-		window->opengl.context = cast(void *)wglCreateContext(window->win32_dc);
-		wglMakeCurrent(window->win32_dc, cast(HGLRC)window->opengl.context);
-	} else if (window->flags & GB_WINDOW_SOFTWARE) {
-		gb__window_resize_dib_section(window, mode.width, mode.height);
-	} else {
-		GB_PANIC("Unknown window type");
-	}
-
-	SetForegroundWindow(cast(HWND)window->handle);
-	SetFocus(cast(HWND)window->handle);
-	SetWindowLongPtr(cast(HWND)window->handle, GWLP_USERDATA, cast(LONG_PTR)platform);
-
-	window->width  = mode.width;
-	window->height = mode.height;
-
-	return window;
-}
-
-void gb_window_destroy(gbWindow *w) {
-	if (w->flags & GB_WINDOW_OPENGL)
-		wglDeleteContext(cast(HGLRC)w->opengl.context);
-	else if (w->flags & GB_WINDOW_SOFTWARE)
-		gb_vm_free(gb_virtual_memory(w->software.memory, w->software.memory_size));
-
-	DestroyWindow(cast(HWND)w->handle);
-
-	gb_zero_item(w);
-}
-
-void gb_window_set_position(gbWindow *w, i32 x, i32 y) {
+void gb_platform_set_window_position(gbPlatform *p, i32 x, i32 y) {
 	RECT rect;
 	i32 width, height;
 
-	GetClientRect(cast(HWND)w->handle, &rect);
+	GetClientRect(cast(HWND)p->window_handle, &rect);
 	width  = rect.right - rect.left;
 	height = rect.bottom - rect.top;
-	MoveWindow(cast(HWND)w->handle, x, y, width, height, false);
+	MoveWindow(cast(HWND)p->window_handle, x, y, width, height, false);
 }
 
-void gb_window_set_title(gbWindow *w, char const *title, ...) {
+void gb_platform_set_window_title(gbPlatform *p, char const *title, ...) {
 	char16 buffer[256] = {0};
 	char str[512] = {0};
 	va_list va;
@@ -7178,24 +7299,23 @@ void gb_window_set_title(gbWindow *w, char const *title, ...) {
 	va_end(va);
 
 	if (str[0] != '\0')
-		SetWindowTextW(cast(HWND)w->handle, cast(LPCWSTR)gb_utf8_to_ucs2(buffer, gb_size_of(buffer), str));
+		SetWindowTextW(cast(HWND)p->window_handle, cast(LPCWSTR)gb_utf8_to_ucs2(buffer, gb_size_of(buffer), str));
 }
 
-void gb_window_toggle_fullscreen(gbWindow *w, b32 fullscreen_desktop) {
-	HWND handle = cast(HWND)w->handle;
+void gb_platform_toggle_fullscreen(gbPlatform *p, b32 fullscreen_desktop) {
+	// NOTE(bill): From the man himself, Raymond Chen! (Modified for my need.)
+	HWND handle = cast(HWND)p->window_handle;
 	DWORD style = GetWindowLong(handle, GWL_STYLE);
 	if (style & WS_OVERLAPPEDWINDOW) {
 		MONITORINFO monitor_info = {gb_size_of(monitor_info)};
-		if (GetWindowPlacement(handle, &w->win32_placement) &&
+		if (GetWindowPlacement(handle, &p->win32_placement) &&
 		    GetMonitorInfo(MonitorFromWindow(handle, 1), &monitor_info)) {
 			style &= ~WS_OVERLAPPEDWINDOW;
 			if (fullscreen_desktop) {
 				style &= ~WS_CAPTION;
 				style |= WS_POPUP;
-				SetWindowLong(handle, GWL_STYLE, style);
-			} else {
-				SetWindowLong(handle, GWL_STYLE, style);
 			}
+			SetWindowLong(handle, GWL_STYLE, style);
 			SetWindowPos(handle, HWND_TOP,
 			             monitor_info.rcMonitor.left, monitor_info.rcMonitor.top,
 			             monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
@@ -7203,37 +7323,52 @@ void gb_window_toggle_fullscreen(gbWindow *w, b32 fullscreen_desktop) {
 			             SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
 
 			if (fullscreen_desktop)
-				w->flags |= GB_WINDOW_FULLSCREEN_DESKTOP;
+				p->window_flags |= GB_WINDOW_FULLSCREEN_DESKTOP;
 			else
-				w->flags |= GB_WINDOW_FULLSCREEN;
+				p->window_flags |= GB_WINDOW_FULLSCREEN;
 		}
 	} else {
 		style &= ~WS_POPUP;
 		style |= WS_OVERLAPPEDWINDOW | WS_CAPTION;
 		SetWindowLong(handle, GWL_STYLE, style);
-		SetWindowPlacement(handle, &w->win32_placement);
+		SetWindowPlacement(handle, &p->win32_placement);
 		SetWindowPos(handle, 0, 0, 0, 0, 0,
 		             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
 		             SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
 
-		w->flags &= ~GB_WINDOW_FULLSCREEN;
+		p->window_flags &= ~GB_WINDOW_FULLSCREEN;
 	}
 }
 
-gb_inline void gb_window_make_context_current(gbWindow *w) {
-	if (w->flags & GB_WINDOW_OPENGL) {
-		wglMakeCurrent(w->win32_dc, cast(HGLRC)w->opengl.context);
+void gb_platform_toggle_borderless(gbPlatform *p) {
+	HWND handle = cast(HWND)p->window_handle;
+	DWORD style = GetWindowLong(handle, GWL_STYLE);
+	b32 is_borderless = (style & WS_POPUP) != 0;
+
+	GB_MASK_SET(style, is_borderless,  WS_OVERLAPPEDWINDOW | WS_CAPTION);
+	GB_MASK_SET(style, !is_borderless, WS_POPUP);
+
+	SetWindowLong(handle, GWL_STYLE, style);
+
+	GB_MASK_SET(p->window_flags, !is_borderless, GB_WINDOW_BORDERLESS);
+}
+
+
+
+gb_inline void gb_platform_make_opengl_context_current(gbPlatform *p) {
+	if (p->renderer_type == GB_RENDERER_OPENGL) {
+		wglMakeCurrent(p->win32_dc, cast(HGLRC)p->opengl.context);
 	}
 }
 
-gb_inline void gb_window_show(gbWindow *w) {
-	ShowWindow(cast(HWND)w->handle, SW_SHOW);
-	w->flags &= ~GB_WINDOW_HIDDEN;
+gb_inline void gb_platform_show_window(gbPlatform *p) {
+	ShowWindow(cast(HWND)p->window_handle, SW_SHOW);
+	p->window_flags &= ~GB_WINDOW_HIDDEN;
 }
 
-gb_inline void gb_window_hide(gbWindow *w) {
-	ShowWindow(cast(HWND)w->handle, SW_HIDE);
-	w->flags |= GB_WINDOW_HIDDEN;
+gb_inline void gb_platform_hide_window(gbPlatform *p) {
+	ShowWindow(cast(HWND)p->window_handle, SW_HIDE);
+	p->window_flags |= GB_WINDOW_HIDDEN;
 }
 
 gb_inline gbVideoMode gb_video_mode_get_desktop(void) {
@@ -7261,7 +7396,7 @@ b32 gb_platform_has_clipboard_text(gbPlatform *p) {
 	b32 result = false;
 
 	if (IsClipboardFormatAvailable(CF_TEXT) &&
-	    OpenClipboard(cast(HWND)p->window.handle)) {
+	    OpenClipboard(cast(HWND)p->window_handle)) {
 		HANDLE mem = GetClipboardData(CF_TEXT);
 		if (mem) {
 			char *str = cast(char *)GlobalLock(mem);
@@ -7280,7 +7415,7 @@ b32 gb_platform_has_clipboard_text(gbPlatform *p) {
 
 // TODO(bill): Handle UTF-8
 void gb_platform_set_clipboard_text(gbPlatform *p, char const *str) {
-	if (OpenClipboard(cast(HWND)p->window.handle)) {
+	if (OpenClipboard(cast(HWND)p->window_handle)) {
 		isize i, len = gb_strlen(str)+1;
 
 		HANDLE mem = GlobalAlloc(GMEM_MOVEABLE, len);
@@ -7312,7 +7447,7 @@ char *gb_platform_get_clipboard_text(gbPlatform *p, gbAllocator a) {
 	char *text = NULL;
 
 	if (IsClipboardFormatAvailable(CF_TEXT) &&
-	    OpenClipboard(cast(HWND)p->window.handle)) {
+	    OpenClipboard(cast(HWND)p->window_handle)) {
 		HANDLE mem = GetClipboardData(CF_TEXT);
 		if (mem) {
 			char *str = cast(char *)GlobalLock(mem);
@@ -7340,10 +7475,6 @@ gb_inline gbVideoMode gb_video_mode(i32 width, i32 height, i32 bits_per_pixel) {
 	m.height = height;
 	m.bits_per_pixel = bits_per_pixel;
 	return m;
-}
-
-gb_inline b32 gb_window_is_open(gbWindow const *w) {
-	return (w->flags & GB_WINDOW_IS_CLOSED) == 0;
 }
 
 gb_inline b32 gb_video_mode_is_valid(gbVideoMode mode) {
@@ -7389,55 +7520,4 @@ GB_COMPARE_PROC(gb_video_mode_dsc_cmp) {
 #endif
 
 #endif // GB_IMPLEMENTATION
-
-/*
-
-Version History:
-	0.20  - Improve file io
-	0.19  - Clipboard Text
-	0.18a - Controller vibration
-	0.18  - Raw keyboard and mouse input for WIN32
-	0.17d - Fixed printf bug for strings
-	0.17c - Compile as 32 bit
-	0.17b - Change formating style because why not?
-	0.17a - Dropped C90 Support (For numerous reasons)
-	0.17  - Instantiated Hash Table
-	0.16a - Minor code layout changes
-	0.16  - New file API and improved platform layer
-	0.15d - Linux Experimental Support (DON'T USE IT PLEASE)
-	0.15c - Linux Experimental Support (DON'T USE IT)
-	0.15b - C90 Support
-	0.15a - gb_atomic(32|64)_spin_(lock|unlock)
-	0.15  - Recursive "Mutex"; Key States; gbRandom
-	0.14  - Better File Handling and better printf (WIN32 Only)
-	0.13  - Highly experimental platform layer (WIN32 Only)
-	0.12b - Fix minor file bugs
-	0.12a - Compile as C++
-	0.12  - New File Handing System! No stdio or stdlib! (WIN32 Only)
-	0.11a - Add string precision and width (experimental)
-	0.11  - Started making stdio & stdlib optional (Not tested much)
-	0.10c - Fix gb_endian_swap32()
-	0.10b - Probable timing bug for gb_time_now()
-	0.10a - Work on multiple compilers
-	0.10  - Scratch Memory Allocator
-	0.09a - Faster Mutex and the Free List is slightly improved
-	0.09  - Basic Virtual Memory System and Dreadful Free List allocator
-	0.08a - Fix *_appendv bug
-	0.08  - Huge Overhaul!
-	0.07a - Fix alignment in gb_heap_allocator_proc
-	0.07  - Hash Table and Hashing Functions
-	0.06c - Better Documentation
-	0.06b - OS X Support
-	0.06a - Linux Support
-	0.06  - Windows GCC Support and MSVC x86 Support
-	0.05b - Formatting
-	0.05a - Minor function name changes
-	0.05  - Radix Sort for unsigned integers (TODO: Other primitives)
-	0.04  - Better UTF support and search/sort procs
-	0.03  - Completely change procedure naming convention
-	0.02a - Bug fixes
-	0.02  - Change naming convention and gbArray(Type)
-	0.01  - Initial Version
-
- */
 
