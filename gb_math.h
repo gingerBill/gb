@@ -1,8 +1,9 @@
-/* gb_math.h - v0.06f - public domain C math library - no warranty implied; use at your own risk
+/* gb_math.h - v0.06g - public domain C math library - no warranty implied; use at your own risk
    A C math library geared towards game development
    use '#define GB_MATH_IMPLEMENTATION' before including to create the implementation in _ONE_ file
 
 Version History:
+	0.06g - Remove memzero
 	0.06f - Remove warning on MSVC
 	0.06e - Change brace style and fix some warnings
 	0.06d - Bug fix
@@ -754,15 +755,6 @@ static void gb__memcpy_4byte(void *dest, void const *src, size_t size) {
 		*d++ = *s++;
 	}
 }
-
-/* NOTE(bill): To remove the need for memset */
-static void gb__memzero_byte4(void *dest, size_t size) {
-	unsigned *d = (unsigned *)dest;
-	unsigned i;
-	for (i = 0; i < size/4; i++)
-		*d++ = 0;
-}
-
 
 
 float gb_to_radians(float degrees) { return degrees * GB_MATH_TAU / 360.0f; }
@@ -1529,9 +1521,9 @@ void gb_mat4_ortho3d(gbMat4 *out, float left, float right, float bottom, float t
 
 void gb_mat4_perspective(gbMat4 *out, float fovy, float aspect, float z_near, float z_far) {
 	float tan_half_fovy = gb_tan(0.5f * fovy);
-
+	gbMat4 zero_mat = {0};
 	gbFloat4 *m = gb_float44_m(out);
-	gb__memzero_byte4(m, sizeof(gbMat4));
+	*out = zero_mat;
 
 	m[0][0] = 1.0f / (aspect*tan_half_fovy);
 	m[1][1] = 1.0f / (tan_half_fovy);
@@ -1546,9 +1538,9 @@ void gb_mat4_infinite_perspective(gbMat4 *out, float fovy, float aspect, float z
 	float right  =  range * aspect;
 	float bottom = -range;
 	float top    =  range;
-
+	gbMat4 zero_mat = {0};
 	gbFloat4 *m = gb_float44_m(out);
-	gb__memzero_byte4(m, sizeof(gbMat4));
+	*out = zero_mat;
 
 	m[0][0] = (2.0f*z_near) / (right - left);
 	m[1][1] = (2.0f*z_near) / (top   - bottom);
