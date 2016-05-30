@@ -1,4 +1,4 @@
-/* gb.h - v0.21  - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.22  - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -48,6 +48,7 @@ TODOS
 	- More date & time functions
 
 VERSION HISTORY
+	0.22  - gbAffinity - (Missing Linux version)
 	0.21  - Platform Layer Restructuring
 	0.20  - Improve file io
 	0.19  - Clipboard Text
@@ -131,28 +132,17 @@ extern "C" {
 	#endif
 #endif
 
-#if defined(_WIN64)
+#if defined(_WIN64) || defined(__x86_64__) || defined(_M_X64) || defined(__64BIT__) || defined(__powerpc64__) || defined(__ppc64__)
 	#ifndef GB_ARCH_64_BIT
 	#define GB_ARCH_64_BIT 1
 	#endif
-#elif defined(_WIN32)
+#else
+	// NOTE(bill): I'm only supporting 32 bit and 64 bit systems
 	#ifndef GB_ARCH_32_BIT
 	#define GB_ARCH_32_BIT 1
 	#endif
 #endif
 
-// TODO(bill): Check if this works on clang
-#if defined(__GNUC__)
-	#if defined(__x86_64__) || defined(__ppc64__)
-		#ifndef GB_ARCH_64_BIT
-		#define GB_ARCH_64_BIT 1
-		#endif
-	#else
-		#ifndef GB_ARCH_32_BIT
-		#define GB_ARCH_32_BIT 1
-		#endif
-	#endif
-#endif
 
 #ifndef GB_EDIAN_ORDER
 #define GB_EDIAN_ORDER
@@ -160,7 +150,6 @@ extern "C" {
 	#define GB_IS_BIG_EDIAN    (!*(u8*)&(u16){1})
 	#define GB_IS_LITTLE_EDIAN (!GB_IS_BIG_EDIAN)
 #endif
-
 
 #if defined(_WIN32) || defined(_WIN64)
 	#ifndef GB_SYSTEM_WINDOWS
@@ -189,6 +178,53 @@ extern "C" {
 #else
 	#error This operating system is not supported
 #endif
+
+#if defined(_MSC_VER)
+	#define GB_COMPILER_MSVC 1
+#elif defined(__GNUC__)
+	#define GB_COMPILER_GCC 1
+#elif defined(__clang__)
+	#define GB_COMPILER_CLANG 1
+#else
+	#error Unknown compiler
+#endif
+
+#if defined(_M_IX86) || defined(_M_X64) || defined(__i386__) || defined(__x86_64__)
+	#ifndef GB_CPU_X86
+	#define GB_CPU_X86 1
+	#endif
+	#ifndef GB_CACHE_LINE_SIZE
+	#define GB_CACHE_LINE_SIZE 64
+	#endif
+
+#elif defined(_M_PPC) || defined(__powerpc__) || defined(__powerpc64__)
+	#ifndef GB_CPU_PPC
+	#define GB_CPU_PPC 1
+	#endif
+	#ifndef GB_CACHE_LINE_SIZE
+	#define GB_CACHE_LINE_SIZE 128
+	#endif
+
+#elif defined(__arm__)
+	#ifndef GB_CPU_ARM
+	#define GB_CPU_ARM 1
+	#endif
+	#ifndef GB_CACHE_LINE_SIZE
+	#define GB_CACHE_LINE_SIZE 64
+	#endif
+
+#elif defined(__MIPSEL__) || defined(__mips_isa_rev)
+	#ifndef GB_CPU_MIPS
+	#define GB_CPU_MIPS 1
+	#endif
+	#ifndef GB_CACHE_LINE_SIZE
+	#define GB_CACHE_LINE_SIZE 64
+	#endif
+
+#else
+	#error Unknown CPU Type
+#endif
+
 
 
 #ifndef GB_STATIC_ASSERT
@@ -222,6 +258,10 @@ extern "C" {
 #include <stdarg.h>
 #include <stddef.h>
 
+#if !defined(GB_NO_STDLIB)
+#include <string.h> // NOTE(bill): memcpy. memmove, etc.
+#endif
+
 #if defined(GB_SYSTEM_WINDOWS)
 	#define NOMINMAX            1
 	#define WIN32_LEAN_AND_MEAN 1
@@ -236,23 +276,27 @@ extern "C" {
 	#include <malloc.h> // NOTE(bill): _aligned_*()
 	#include <intrin.h>
 #else
-	#include <stdlib.h> // NOTE(bill): malloc
 	#include <dlfcn.h>
+	#include <errno.h>
 	#include <fcntl.h>
 	#include <pthread.h>
-	#include <sys/sendfile.h>
+	#include <stdlib.h> // NOTE(bill): malloc on linux
 	#include <sys/mman.h>
+	#include <sys/sendfile.h>
 	#include <sys/stat.h>
 	#include <sys/time.h>
 	#include <sys/types.h>
 	#include <time.h>
 	#include <unistd.h>
-	#include <errno.h>
 #endif
 
 #if defined(GB_SYSTEM_OSX)
 #include <mach/mach.h>
+#include <mach/mach_init.h>
 #include <mach/mach_time.h>
+#include <mach/thread_act.h>
+#include <mach/thread_policy.h>
+#include <sys/sysctl.h>
 #endif
 
 #if defined(GB_SYSTEM_UNIX)
@@ -266,7 +310,7 @@ extern "C" {
 //
 //
 
-#if defined(_MSC_VER)
+#if defined(GB_COMPILER_MSVC)
 	#if _MSC_VER < 1300
 	typedef unsigned char     u8;
 	typedef   signed char     i8;
@@ -464,6 +508,18 @@ typedef i32 b32; // NOTE(bill): Prefer this!!!
 		#define gb_no_inline __attribute__ ((noinline))
 	#endif
 #endif
+
+
+#if !defined(gb_thread_local)
+	#if defined(_MSC_VER) && _MSC_VER >= 1300
+		#define gb_thread_local __declspec(thread)
+	#elif defined(__GNUC__)
+		#define gb_thread_local __thread
+	#else
+		#define gb_thread_local thread_local
+	#endif
+#endif
+
 
 // NOTE(bill): Easy to grep
 // NOTE(bill): Not needed in macros
@@ -707,7 +763,7 @@ GB_DEF void gb_zero_size(void *ptr, isize size);
 #define     gb_zero_array(a, count) gb_zero_size((a), gb_size_of(*(a))*count)
 #endif
 
-GB_DEF void *gb_memcopy   (void *gb_restrict dest, void const *gb_restrict source, isize size);
+GB_DEF void *gb_memcopy   (void *dest, void const *source, isize size);
 GB_DEF void *gb_memmove   (void *dest, void const *source, isize size);
 GB_DEF void *gb_memset    (void *data, u8 byte_value, isize size);
 GB_DEF i32   gb_memcompare(void const *s1, void const *s2, isize size);
@@ -736,7 +792,11 @@ GB_DEF void  gb_memswap   (void *i, void *j, isize size);
 
 
 // Atomics
-#if defined(_MSC_VER)
+
+// TODO(bill): Be specific with memory order?
+// e.g. relaxed, acquire, release, acquire_release
+
+#if defined(GB_COMPILER_MSVC)
 typedef struct gbAtomic32  { i32   volatile value; } gbAtomic32;
 typedef struct gbAtomic64  { i64   volatile value; } gbAtomic64;
 typedef struct gbAtomicPtr { void *volatile value; } gbAtomicPtr;
@@ -761,8 +821,10 @@ GB_DEF i32  gb_atomic32_exchanged       (gbAtomic32 volatile *a, i32 desired);
 GB_DEF i32  gb_atomic32_fetch_add       (gbAtomic32 volatile *a, i32 operand);
 GB_DEF i32  gb_atomic32_fetch_and       (gbAtomic32 volatile *a, i32 operand);
 GB_DEF i32  gb_atomic32_fetch_or        (gbAtomic32 volatile *a, i32 operand);
-GB_DEF void gb_atomic32_spin_lock       (gbAtomic32 volatile *a);
+GB_DEF b32  gb_atomic32_spin_lock       (gbAtomic32 volatile *a, isize time_out); // NOTE(bill): time_out = -1 as default
 GB_DEF void gb_atomic32_spin_unlock     (gbAtomic32 volatile *a);
+GB_DEF b32  gb_atomic32_try_acquire_lock(gbAtomic32 volatile *a);
+
 
 GB_DEF i64  gb_atomic64_load            (gbAtomic64 const volatile *a);
 GB_DEF void gb_atomic64_store           (gbAtomic64 volatile *a, i64 value);
@@ -771,8 +833,10 @@ GB_DEF i64  gb_atomic64_exchanged       (gbAtomic64 volatile *a, i64 desired);
 GB_DEF i64  gb_atomic64_fetch_add       (gbAtomic64 volatile *a, i64 operand);
 GB_DEF i64  gb_atomic64_fetch_and       (gbAtomic64 volatile *a, i64 operand);
 GB_DEF i64  gb_atomic64_fetch_or        (gbAtomic64 volatile *a, i64 operand);
-GB_DEF void gb_atomic64_spin_lock       (gbAtomic64 volatile *a);
+GB_DEF b32 gb_atomic64_spin_lock        (gbAtomic64 volatile *a, isize time_out); // NOTE(bill): time_out = -1 as default
 GB_DEF void gb_atomic64_spin_unlock     (gbAtomic64 volatile *a);
+GB_DEF b32  gb_atomic64_try_acquire_lock(gbAtomic64 volatile *a);
+
 
 GB_DEF void *gb_atomic_ptr_load            (gbAtomicPtr const volatile *a);
 GB_DEF void  gb_atomic_ptr_store           (gbAtomicPtr volatile *a, void *value);
@@ -781,26 +845,16 @@ GB_DEF void *gb_atomic_ptr_exchanged       (gbAtomicPtr volatile *a, void *desir
 GB_DEF void *gb_atomic_ptr_fetch_add       (gbAtomicPtr volatile *a, void *operand);
 GB_DEF void *gb_atomic_ptr_fetch_and       (gbAtomicPtr volatile *a, void *operand);
 GB_DEF void *gb_atomic_ptr_fetch_or        (gbAtomicPtr volatile *a, void *operand);
-GB_DEF void  gb_atomic_ptr_spin_lock       (gbAtomicPtr volatile *a);
+GB_DEF b32   gb_atomic_ptr_spin_lock       (gbAtomicPtr volatile *a, isize time_out); // NOTE(bill): time_out = -1 as default
 GB_DEF void  gb_atomic_ptr_spin_unlock     (gbAtomicPtr volatile *a);
+GB_DEF b32   gb_atomic_ptr_try_acquire_lock(gbAtomicPtr volatile *a);
 
 
-#if defined(_MSC_VER)
-	#define gb_read_write_barrier() _ReadWriteBarrier()
-	#define gb_memory_barrier()     MemoryBarrier()
-
-#elif defined(__i386__) || defined(__x86_64__)
-	#define gb_read_write_barrier() __asm__ volatile("" ::: "memory")
-
-	#if defined(GB_ARCH_64_BIT)
-	#define gb_memory_barrier() __asm__ volatile("lock; orl $0, (%%rsp)" ::: "memory")
-	#else
-	#define gb_memory_barrier() __asm__ volatile("lock; orl $0, (%%esp)" ::: "memory")
-	#endif
-
-#else
-#error Unknown architecture
-#endif
+// Fences
+GB_DEF void gb_yield_thread(void);
+GB_DEF void gb_mfence      (void);
+GB_DEF void gb_sfence      (void);
+GB_DEF void gb_lfence      (void);
 
 
 #if defined(GB_SYSTEM_WINDOWS)
@@ -820,6 +874,7 @@ GB_DEF void gb_semaphore_wait   (gbSemaphore *s);
 
 
 // Mutex
+// TODO(bill): Should this be replaced with a CRITICAL_SECTION on win32 or is the better?
 typedef struct gbMutex {
 	gbSemaphore semaphore;
 	gbAtomic32  counter;
@@ -846,10 +901,7 @@ gb_mutex_init(&m);
 }
 #endif
 
-// TODO(bill): Should I create a Condition Type? (gbCond vs gbCondition)
-
-
-
+// TODO(bill): Affinity Info?
 
 
 #define GB_THREAD_PROC(name) void name(void *data)
@@ -880,15 +932,46 @@ GB_DEF u32  gb_thread_current_id      (void);
 GB_DEF void gb_thread_set_name        (gbThread *t, char const *name);
 
 
+
+
+
+#if defined(GB_SYSTEM_WINDOWS)
+typedef struct gbAffinity {
+	b32   is_accurate;
+	isize core_count;
+	isize thread_count;
+	#define GB_WIN32_MAX_THREADS (8 * gb_size_of(usize))
+	ULONG_PTR core_masks[GB_WIN32_MAX_THREADS];
+
+} gbAffinity;
+
+#elif defined(GB_SYSTEM_OSX)
+typedef struct gbAffinity {
+	b32   is_accurate;
+	isize core_count;
+	isize thread_count;
+	isize threads_per_core;
+} gbAffinity;
+
+#elif defined(GB_SYSTEM_LINUX)
+#error TODO(bill): Implement gbAffinity for linux
+#else
+#error TODO(bill): Unknown system
+#endif
+
+GB_DEF void  gb_affinity_init   (gbAffinity *a);
+GB_DEF void  gb_affinity_destroy(gbAffinity *a);
+GB_DEF b32   gb_affinity_set    (gbAffinity *a, isize core, isize thread);
+GB_DEF isize gb_affinity_thread_count_for_core(gbAffinity *a, isize core);
+
+
+
+
 ////////////////////////////////////////////////////////////////
 //
 // Virtual Memory
 //
-// Still incomplete and needs working on a lot as it's shit!
 //
-
-
-// TODO(bill): Track a lot more than just the pointer and size!
 
 typedef struct gbVirtualMemory {
 	void *data;
@@ -897,9 +980,11 @@ typedef struct gbVirtualMemory {
 
 GB_DEF gbVirtualMemory gb_virtual_memory(void *data, isize size);
 GB_DEF gbVirtualMemory gb_vm_alloc      (void *addr, isize size);
-GB_DEF void            gb_vm_free       (gbVirtualMemory vm);
+GB_DEF b32             gb_vm_free       (gbVirtualMemory vm);
 GB_DEF gbVirtualMemory gb_vm_trim       (gbVirtualMemory vm, isize lead_size, isize size);
 GB_DEF b32             gb_vm_purge      (gbVirtualMemory vm);
+GB_DEF isize gb_virtual_memory_page_size(isize *alignment_out);
+
 
 
 
@@ -947,8 +1032,8 @@ GB_DEF char *gb_alloc_str       (gbAllocator a, char const *str);
 
 
 // NOTE(bill): These are very useful and the type cast has saved me from numerous bugs
-#ifndef gb_alloc_struct
-#define gb_alloc_struct(allocator, Type)       (Type *)gb_alloc(allocator, gb_size_of(Type))
+#ifndef gb_alloc_item
+#define gb_alloc_item (allocator, Type)        (Type *)gb_alloc(allocator, gb_size_of(Type))
 #define gb_alloc_array(allocator, Type, count) (Type *)gb_alloc(allocator, gb_size_of(Type) * (count))
 #endif
 
@@ -1142,7 +1227,7 @@ GB_DEF void gb_sort(void *base, isize count, isize size, gbCompareProc compare_p
 
 // NOTE(bill): the count of temp == count of items
 #define gb_radix_sort(Type) gb_radix_sort_##Type
-#define GB_RADIX_SORT_PROC(Type) void gb_radix_sort(Type)(Type *gb_restrict items, Type *gb_restrict temp, isize count)
+#define GB_RADIX_SORT_PROC(Type) void gb_radix_sort(Type)(Type *items, Type *temp, isize count)
 
 GB_DEF GB_RADIX_SORT_PROC(u8);
 GB_DEF GB_RADIX_SORT_PROC(u16);
@@ -1318,6 +1403,7 @@ int main(int argc, char **argv) {
 }
 #endif
 
+// TODO(bill): Should this be a wrapper to gbArray(char) or this extra type safety better?
 typedef char *gbString;
 
 // NOTE(bill): If you only need a small string, just use a standard c string or change the size from isize to u16, etc.
@@ -1928,7 +2014,6 @@ GB_DEF gbFile *const gb_file_get_standard(gbFileStandardType std);
 
 GB_DEF gbFileError gb_file_create        (gbFile *file, char const *filename);
 GB_DEF gbFileError gb_file_open          (gbFile *file, char const *filename);
-// TODO(bill): Get a better name for it
 GB_DEF gbFileError gb_file_open_mode     (gbFile *file, gbFileMode mode, char const *filename);
 GB_DEF gbFileError gb_file_new           (gbFile *file, gbFileDescriptor fd, gbFileOperations const *ops, char const *filename);
 GB_DEF b32         gb_file_read_at_check (gbFile *file, void *buffer, isize size, i64 offset, isize *bytes_read);
@@ -2034,13 +2119,20 @@ GB_DEF void gb_sleep_ms    (u32 ms);
 //
 
 typedef struct gbRandom {
-	u64 seed[2];
+	u32 offsets[8];
+	u32 value;
 } gbRandom;
 
-GB_DEF void gb_random_init     (gbRandom *r);
-GB_DEF u64  gb_random_next     (gbRandom *r);
-GB_DEF i64  gb_random_range_i64(gbRandom *r, i64 lower_inc, i64 higher_inc);
-GB_DEF f64  gb_random_range_f64(gbRandom *r, f64 lower_inc, f64 higher_inc);
+// NOTE(bill): Generates from numerous sources to produce a decent pseudo-random seed
+GB_DEF void gb_random_init          (gbRandom *r);
+GB_DEF u32  gb_random_gen_u32       (gbRandom *r);
+GB_DEF u32  gb_random_gen_u32_unique(gbRandom *r);
+GB_DEF u64  gb_random_gen_u64       (gbRandom *r); // NOTE(bill): (gb_random_gen_u32() << 32) | gb_random_gen_u32()
+GB_DEF i64  gb_random_range_i64     (gbRandom *r, i64 lower_inc, i64 higher_inc);
+GB_DEF f64  gb_random_range_f64     (gbRandom *r, f64 lower_inc, f64 higher_inc);
+
+
+
 
 GB_DEF void gb_exit     (u32 code);
 GB_DEF void gb_yield    (void);
@@ -2050,6 +2142,8 @@ GB_DEF void gb_unset_env(char const *name);
 GB_DEF u16 gb_endian_swap16(u16 i);
 GB_DEF u32 gb_endian_swap32(u32 i);
 GB_DEF u64 gb_endian_swap64(u64 i);
+
+GB_DEF isize gb_count_set_bits(u64 mask);
 
 
 
@@ -2367,8 +2461,10 @@ GB_DEF GB_COMPARE_PROC(gb_video_mode_cmp);     // NOTE(bill): Sort smallest to l
 GB_DEF GB_COMPARE_PROC(gb_video_mode_dsc_cmp); // NOTE(bill): Sort largest to smallest (Descending)
 
 
-// NOTE(bill): `config` can be NULL (i.e. optional)
-GB_DEF b32   gb_platform_init                       (gbPlatform *p, char const *window_title, gbVideoMode mode, gbRendererType type, u32 window_flags);
+// NOTE(bill): Software rendering
+GB_DEF b32   gb_platform_init_with_software         (gbPlatform *p, char const *window_title, gbVideoMode mode, u32 window_flags);
+// NOTE(bill): OpenGL Rendering
+GB_DEF b32   gb_platform_init_with_opengl           (gbPlatform *p, char const *window_title, gbVideoMode mode, u32 window_flags, i32 major, i32 minor, b32 core, b32 compatible);
 GB_DEF void  gb_platform_update                     (gbPlatform *p);
 GB_DEF void  gb_platform_display                    (gbPlatform *p);
 GB_DEF void  gb_platform_destroy                    (gbPlatform *p);
@@ -2509,114 +2605,135 @@ gb_inline isize       gb_pointer_diff     (void const *begin, void const *end) {
 
 gb_inline void gb_zero_size(void *ptr, isize size) { gb_memset(ptr, 0, size); }
 
-#if defined(_MSC_VER)
-#pragma intrinsic(__movsb)
-#endif
+#if !defined(GB_NO_STDLIB)
+	gb_inline void *gb_memcopy(void *dest, void const *source, isize size) {
+		return memcpy(dest, source, size);
+	}
 
-gb_inline void *gb_memcopy(void *gb_restrict dest, void const *gb_restrict source, isize size) {
-#if defined(_MSC_VER)
-	__movsb(cast(u8 *gb_restrict)dest, cast(u8 *gb_restrict)source, size);
-#elif (defined(__i386__) || defined(__x86_64___))
-	__asm__ __volatile__("rep movsb" : "+D"(cast(u8 *gb_restrict)dest), "+S"(cast(u8 *gb_restrict)source), "+c"(size) : : "memory");
+	gb_inline void *gb_memmove(void *dest, void const *source, isize size) {
+		return memmove(dest, source, size);
+	}
+
+	gb_inline void *gb_memset(void *data, u8 c, isize size) {
+		return memset(data, c, size);
+	}
+
+	gb_inline i32 gb_memcompare(void const *s1, void const *s2, isize size) {
+		return memcmp(s1, s2, size);
+	}
+
 #else
-	// TODO(bill): Heavily optimize
-	if ((cast(intptr)dest & 0x3) || (cast(intptr)source & 0x3)) {
-		// NOTE(bill): Do an unaligned byte copy
-		u8 *gb_restrict dp8 = cast(u8 *)dest;
+	#if defined(_MSC_VER)
+	#pragma intrinsic(__movsb)
+	#endif
+
+	gb_inline void *gb_memcopy(void *dest, void const *source, isize size) {
+	#if defined(_MSC_VER)
+		__movsb(cast(u8 *gb_restrict)dest, cast(u8 *gb_restrict)source, size);
+	#elif defined(GB_CPU_X86)
+		__asm__ __volatile__("rep movsb" : "+D"(cast(u8 *gb_restrict)dest), "+S"(cast(u8 *gb_restrict)source), "+c"(size) : : "memory");
+	#else
+		// TODO(bill): Heavily optimize
+		if ((cast(intptr)dest & 0x3) || (cast(intptr)source & 0x3)) {
+			// NOTE(bill): Do an unaligned byte copy
+			u8 *dp8 = cast(u8 *)dest;
+			u8 *sp8 = cast(u8 *)source;
+
+			while (size--)
+				*dp8++ = *sp8++;
+
+		} else {
+			isize left = (size % 4);
+			u32 *sp32;
+			u32 *dp32;
+			u8  *sp8;
+			u8  *dp8;
+
+			sp32 = cast(u32 *)source;
+			dp32 = cast(u32 *)dest;
+			size /= 4;
+			while (size--)
+				*dp32++ = *sp32++;
+
+			sp8 = cast(u8 *)sp32;
+			dp8 = cast(u8 *)dp32;
+			switch (left) {
+			case 3: *dp8++ = *sp8++;
+			case 2: *dp8++ = *sp8++;
+			case 1: *dp8++ = *sp8++;
+			}
+		}
+
+		// TODO(bill): More betterer memcpys!!!!
+	#endif
+		return dest;
+	}
+
+	gb_inline void *gb_memmove(void *dest, void const *source, isize size) {
+		// TODO(bill): Heavily optimize
+		u8 *dp8 = cast(u8 *)dest;
 		u8 *sp8 = cast(u8 *)source;
 
-		while (size--)
-			*dp8++ = *sp8++;
+		if (sp8 < dp8) {
+			dp8 += size-1;
+			sp8 += size-1;
+			while (size--)
+				*dp8-- = *sp8--;
+		} else {
+			gb_memcopy(dest, source, size);
+		}
 
-	} else {
-		isize left = (size % 4);
-		u32 *sp32;
+		return dest;
+	}
+
+	gb_inline void *gb_memset(void *data, u8 c, isize size) {
+		// TODO(bill): Heavily optimize
+		isize left;
 		u32 *dp32;
-		u8  *sp8;
-		u8  *dp8;
+		u8 *dp8 = cast(u8 *)data;
+		u32 c32 = (c | (c << 8) | (c << 16) | (c << 24));
 
-		sp32 = cast(u32 *)source;
-		dp32 = cast(u32 *)dest;
+		// NOTE(bill): The destination pointer needs to be aligned on a 4-byte
+		// boundary to execute a 32-bit set. Set first bytes manually if needed
+		// until it is aligned.
+		while (cast(intptr)dp8 & 0x3) {
+			if (size--)
+				*dp8++ = c;
+			else
+				return data;
+		}
+
+		dp32 = cast(u32 *)dp8;
+		left = (size % 4);
 		size /= 4;
 		while (size--)
-			*dp32++ = *sp32++;
+			*dp32++ = c32;
 
-		sp8 = cast(u8 *)sp32;
 		dp8 = cast(u8 *)dp32;
 		switch (left) {
-		case 3: *dp8++ = *sp8++;
-		case 2: *dp8++ = *sp8++;
-		case 1: *dp8++ = *sp8++;
+		case 3: *dp8++ = c;
+		case 2: *dp8++ = c;
+		case 1: *dp8++ = c;
 		}
+
+		return data;
 	}
 
-	// TODO(bill): More betterer memcpys!!!!
+	gb_inline i32 gb_memcompare(void const *s1, void const *s2, isize size) {
+		// TODO(bill): Heavily optimize
+
+		u8 const *s1p8 = cast(u8 const *)s1;
+		u8 const *s2p8 = cast(u8 const *)s2;
+		while (size--) {
+			if (*s1p8 != *s2p8)
+				return (*s1p8 - *s2p8);
+			s1p8++, s2p8++;
+		}
+		return 0;
+	}
 #endif
-	return dest;
-}
 
-gb_inline void *gb_memmove(void *dest, void const *source, isize size) {
-	// TODO(bill): Heavily optimize
-	u8 *dp8 = cast(u8 *)dest;
-	u8 *sp8 = cast(u8 *)source;
 
-	if (sp8 < dp8) {
-		dp8 += size-1;
-		sp8 += size-1;
-		while (size--)
-			*dp8-- = *sp8--;
-	} else {
-		gb_memcopy(dest, source, size);
-	}
-
-	return dest;
-}
-
-gb_inline void *gb_memset(void *data, u8 c, isize size) {
-	// TODO(bill): Heavily optimize
-	isize left;
-	u32 *dp32;
-	u8 *dp8 = cast(u8 *)data;
-	u32 c32 = (c | (c << 8) | (c << 16) | (c << 24));
-
-	// NOTE(bill): The destination pointer needs to be aligned on a 4-byte
-	// boundary to execute a 32-bit set. Set first bytes manually if needed
-	// until it is aligned.
-	while (cast(intptr)dp8 & 0x3) {
-		if (size--)
-			*dp8++ = c;
-		else
-			return data;
-	}
-
-	dp32 = cast(u32 *)dp8;
-	left = (size % 4);
-	size /= 4;
-	while (size--)
-		*dp32++ = c32;
-
-	dp8 = cast(u8 *)dp32;
-	switch (left) {
-	case 3: *dp8++ = c;
-	case 2: *dp8++ = c;
-	case 1: *dp8++ = c;
-	}
-
-	return data;
-}
-
-gb_inline i32 gb_memcompare(void const *s1, void const *s2, isize size) {
-	// TODO(bill): Heavily optimize
-
-	u8 const *s1p8 = cast(u8 const *)s1;
-	u8 const *s2p8 = cast(u8 const *)s2;
-	while (size--) {
-		if (*s1p8 != *s2p8)
-			return (*s1p8 - *s2p8);
-		s1p8++, s2p8++;
-	}
-	return 0;
-}
 
 void gb_memswap(void *i, void *j, isize size) {
 	if (i == j) return;
@@ -2701,7 +2818,9 @@ gb_inline void *gb_default_resize_align(gbAllocator a, void *old_memory, isize o
 // Concurrency
 //
 //
-#if defined(_MSC_VER) && !defined(__clang__)
+// IMPORTANT TODO(bill): Use compiler intrinsics for the atomics
+
+#if defined(GB_COMPILER_MSVC) && !defined(GB_COMPILER_CLANG)
 gb_inline i32  gb_atomic32_load (gbAtomic32 const volatile *a)      { return a->value;  }
 gb_inline void gb_atomic32_store(gbAtomic32 volatile *a, i32 value) { a->value = value; }
 
@@ -2724,7 +2843,7 @@ gb_inline i32 gb_atomic32_fetch_or(gbAtomic32 volatile *a, i32 operand) {
 gb_inline i64 gb_atomic64_load(gbAtomic64 const volatile *a) {
 #if defined(GB_ARCH_64_BIT)
 	return a->value;
-#else
+#elif GB_CPU_X86
 	// NOTE(bill): The most compatible way to get an atomic 64-bit load on x86 is with cmpxchg8b
 	i64 result;
 	__asm {
@@ -2736,13 +2855,15 @@ gb_inline i64 gb_atomic64_load(gbAtomic64 const volatile *a) {
 		mov dword ptr result[4], edx;
 	}
 	return result;
+#else
+#error TODO(bill): atomics for this CPU
 #endif
 }
 
 gb_inline void gb_atomic64_store(gbAtomic64 volatile *a, i64 value) {
 #if defined(GB_ARCH_64_BIT)
 	a->value = value;
-#else
+#elif GB_CPU_X86
 	// NOTE(bill): The most compatible way to get an atomic 64-bit store on x86 is with cmpxchg8b
 	__asm {
 		mov esi, a;
@@ -2752,6 +2873,8 @@ gb_inline void gb_atomic64_store(gbAtomic64 volatile *a, i64 value) {
 		cmpxchg8b [esi];
 		jne retry;
 	}
+#else
+#error TODO(bill): atomics for this CPU
 #endif
 }
 
@@ -2762,7 +2885,7 @@ gb_inline i64 gb_atomic64_compare_exchange(gbAtomic64 volatile *a, i64 expected,
 gb_inline i64 gb_atomic64_exchanged(gbAtomic64 volatile *a, i64 desired) {
 #if defined(GB_ARCH_64_BIT)
 	return _InterlockedExchange64(cast(i64 volatile *)a, desired);
-#else
+#elif GB_CPU_X86
 	i64 expected = a->value;
 	for (;;) {
 		i64 original = _InterlockedCompareExchange64(cast(i64 volatile *)a, desired, expected);
@@ -2770,13 +2893,15 @@ gb_inline i64 gb_atomic64_exchanged(gbAtomic64 volatile *a, i64 desired) {
 			return original;
 		expected = original;
 	}
+#else
+#error TODO(bill): atomics for this CPU
 #endif
 }
 
 gb_inline i64 gb_atomic64_fetch_add(gbAtomic64 volatile *a, i64 operand) {
 #if defined(GB_ARCH_64_BIT)
 	return _InterlockedExchangeAdd64(cast(i64 volatile *)a, operand);
-#else
+#elif GB_CPU_X86
 	i64 expected = a->value;
 	for (;;) {
 		i64 original = _InterlockedCompareExchange64(cast(i64 volatile *)a, expected + operand, expected);
@@ -2784,13 +2909,15 @@ gb_inline i64 gb_atomic64_fetch_add(gbAtomic64 volatile *a, i64 operand) {
 			return original;
 		expected = original;
 	}
+#else
+#error TODO(bill): atomics for this CPU
 #endif
 }
 
 gb_inline i64 gb_atomic64_fetch_and(gbAtomic64 volatile *a, i64 operand) {
 #if defined(GB_ARCH_64_BIT)
 	return _InterlockedAnd64(cast(i64 volatile *)a, operand);
-#else
+#elif GB_CPU_X86
 	i64 expected = a->value;
 	for (;;) {
 		i64 original = _InterlockedCompareExchange64(cast(i64 volatile *)a, expected & operand, expected);
@@ -2798,13 +2925,15 @@ gb_inline i64 gb_atomic64_fetch_and(gbAtomic64 volatile *a, i64 operand) {
 			return original;
 		expected = original;
 	}
+#else
+#error TODO(bill): atomics for this CPU
 #endif
 }
 
 gb_inline i64 gb_atomic64_fetch_or(gbAtomic64 volatile *a, i64 operand) {
 #if defined(GB_ARCH_64_BIT)
 	return _InterlockedAnd64(cast(i64 volatile *)a, operand);
-#else
+#elif GB_CPU_X86
 	i64 expected = a->value;
 	for (;;) {
 		i64 original = _InterlockedCompareExchange64(cast(i64 volatile *)a, expected | operand, expected);
@@ -2812,13 +2941,14 @@ gb_inline i64 gb_atomic64_fetch_or(gbAtomic64 volatile *a, i64 operand) {
 			return original;
 		expected = original;
 	}
+#else
+#error TODO(bill): atomics for this CPU
 #endif
 }
 
 
 
-#else // GCC
-
+#elif defined(GB_CPU_X86)
 
 gb_inline i32  gb_atomic32_load (gbAtomic32 const volatile *a)      { return a->value;  }
 gb_inline void gb_atomic32_store(gbAtomic32 volatile *a, i32 value) { a->value = value; }
@@ -2851,7 +2981,7 @@ gb_inline i32 gb_atomic32_fetch_add(gbAtomic32 volatile *a, i32 operand) {
 		: "=r"(original), "+m"(a->value)
 		: "0"(operand)
 	);
-    return original;
+	return original;
 }
 
 gb_inline i32 gb_atomic32_fetch_and(gbAtomic32 volatile *a, i32 operand) {
@@ -3018,26 +3148,58 @@ gb_inline i64 gb_atomic64_fetch_or(gbAtomic64 volatile *a, i64 operand) {
 	}
 #endif
 }
+
+#else
+#error TODO(bill): Implement Atomics for this CPU
 #endif
 
-gb_inline void gb_atomic32_spin_lock(gbAtomic32 volatile *a) {
-	a->value = 0;
-	for (;;) {
-		i32 expected = 0;
-		if (gb_atomic32_compare_exchange(a, expected, 1))
-			break;
+gb_inline b32 gb_atomic32_spin_lock(gbAtomic32 volatile *a, isize time_out) {
+	i32 old_value = gb_atomic32_compare_exchange(a, 1, 0);
+	i32 counter = 0;
+	while (old_value != 0 && (time_out < 0 || counter++ < time_out)) {
+		gb_yield_thread();
+		old_value = gb_atomic32_compare_exchange(a, 1, 0);
+		gb_mfence();
 	}
+	return old_value == 0;
 }
-gb_inline void gb_atomic32_spin_unlock(gbAtomic32 volatile *a) { gb_atomic32_store(a, 0); }
-gb_inline void gb_atomic64_spin_lock(gbAtomic64 volatile *a) {
-	a->value = 0;
-	for (;;) {
-		i64 expected = 0;
-		if (gb_atomic64_compare_exchange(a, expected, 1))
-			break;
+gb_inline void gb_atomic32_spin_unlock(gbAtomic32 volatile *a) {
+	gb_atomic32_store(a, 0);
+	gb_mfence();
+}
+
+gb_inline b32 gb_atomic64_spin_lock(gbAtomic64 volatile *a, isize time_out) {
+	i64 old_value = gb_atomic64_compare_exchange(a, 1, 0);
+	i64 counter = 0;
+	while (old_value != 0 && (time_out < 0 || counter++ < time_out)) {
+		gb_yield_thread();
+		old_value = gb_atomic64_compare_exchange(a, 1, 0);
+		gb_mfence();
 	}
+	return old_value == 0;
 }
-gb_inline void gb_atomic64_spin_unlock(gbAtomic64 volatile *a) { gb_atomic64_store(a, 0); }
+
+gb_inline void gb_atomic64_spin_unlock(gbAtomic64 volatile *a) {
+	gb_atomic64_store(a, 0);
+	gb_mfence();
+}
+
+gb_inline b32 gb_atomic32_try_acquire_lock(gbAtomic32 volatile *a) {
+	i32 old_value;
+	gb_yield_thread();
+	old_value = gb_atomic32_compare_exchange(a, 1, 0);
+	gb_mfence();
+	return old_value == 0;
+}
+
+gb_inline b32 gb_atomic64_try_acquire_lock(gbAtomic64 volatile *a) {
+	i64 old_value;
+	gb_yield_thread();
+	old_value = gb_atomic64_compare_exchange(a, 1, 0);
+	gb_mfence();
+	return old_value == 0;
+}
+
 
 
 #if defined(GB_ARCH_32_BIT)
@@ -3063,11 +3225,14 @@ gb_inline void *gb_atomic_ptr_fetch_and(gbAtomicPtr volatile *a, void *operand) 
 gb_inline void *gb_atomic_ptr_fetch_or(gbAtomicPtr volatile *a, void *operand) {
 	return cast(void *)cast(intptr)gb_atomic32_fetch_or(cast(gbAtomic32 volatile *)a, cast(i32)cast(intptr)operand);
 }
-gb_inline void gb_atomic_ptr_spin_lock(gbAtomicPtr volatile *a) {
-	gb_atomic32_spin_lock(cast(gbAtomic32 volatile *)a);
+gb_inline b32 gb_atomic_ptr_spin_lock(gbAtomicPtr volatile *a, isize time_out) {
+	return gb_atomic32_spin_lock(cast(gbAtomic32 volatile *)a, time_out);
 }
 gb_inline void gb_atomic_ptr_spin_unlock(gbAtomicPtr volatile *a) {
 	gb_atomic32_spin_unlock(cast(gbAtomic32 volatile *)a);
+}
+gb_inline b32 gb_atomic_ptr_try_acquire_lock(gbAtomicPtr volatile *a) {
+	return gb_atomic32_try_acquire_lock(cast(gbAtomic32 volatile *)a);
 }
 
 #elif defined(GB_ARCH_64_BIT)
@@ -3093,13 +3258,58 @@ gb_inline void *gb_atomic_ptr_fetch_and(gbAtomicPtr volatile *a, void *operand) 
 gb_inline void *gb_atomic_ptr_fetch_or(gbAtomicPtr volatile *a, void *operand) {
 	return cast(void *)cast(intptr)gb_atomic64_fetch_or(cast(gbAtomic64 volatile *)a, cast(i64)cast(intptr)operand);
 }
-gb_inline void gb_atomic_ptr_spin_lock(gbAtomicPtr volatile *a) {
-	gb_atomic64_spin_lock(cast(gbAtomic64 volatile *)a);
+gb_inline b32 gb_atomic_ptr_spin_lock(gbAtomicPtr volatile *a, isize time_out) {
+	return gb_atomic64_spin_lock(cast(gbAtomic64 volatile *)a, time_out);
 }
 gb_inline void gb_atomic_ptr_spin_unlock(gbAtomicPtr volatile *a) {
 	gb_atomic64_spin_unlock(cast(gbAtomic64 volatile *)a);
 }
+gb_inline b32 gb_atomic_ptr_try_acquire_lock(gbAtomicPtr volatile *a) {
+	return gb_atomic64_try_acquire_lock(cast(gbAtomic64 volatile *)a);
+}
 #endif
+
+
+gb_inline void gb_yield_thread(void) {
+#if defined(GB_SYSTEM_WINDOWS)
+	_mm_pause();
+#elif defined(GB_CPU_X86)
+	_mm_pause();
+#else
+#error Unknown architecture
+#endif
+}
+
+gb_inline void gb_mfence(void) {
+	_mm_mfence();
+#if defined(GB_SYSTEM_WINDOWS)
+	_ReadWriteBarrier();
+#elif defined(GB_CPU_X86)
+	_mm_mfence();
+#else
+#error Unknown architecture
+#endif
+}
+
+gb_inline void gb_sfence(void) {
+#if defined(GB_SYSTEM_WINDOWS)
+	_WriteBarrier();
+#elif defined(GB_CPU_X86)
+	_mm_sfence();
+#else
+#error Unknown architecture
+#endif
+}
+
+gb_inline void gb_lfence(void) {
+#if defined(GB_SYSTEM_WINDOWS)
+	_ReadBarrier();
+#elif defined(GB_CPU_X86)
+	_mm_lfence();
+#else
+#error Unknown architecture
+#endif
+}
 
 
 
@@ -3187,6 +3397,7 @@ gb_inline void gb_mutex_unlock(gbMutex *m) {
 
 
 
+
 void gb_thread_init(gbThread *t) {
 	gb_zero_item(t);
 #if defined(GB_SYSTEM_WINDOWS)
@@ -3261,15 +3472,22 @@ gb_inline b32 gb_thread_is_running(gbThread const *t) { return t->is_running != 
 gb_inline u32 gb_thread_current_id(void) {
 	u32 thread_id;
 #if defined(GB_SYSTEM_WINDOWS)
-	thread_id = GetCurrentThreadId();
+	#if defined(GB_ARCH_32_BIT) && defined(GB_CPU_X86)
+		thread_id = (cast(u32 *)__readfsdword(24))[9];
+	#elif defined(GB_ARCH_64_BIT) && defined(GB_CPU_X86)
+		thread_id = (cast(u32 *)__readgsqword(48))[18];
+	#else
+		thread_id = GetCurrentThreadId();
+	#endif
+
 #elif defined(GB_SYSTEM_OSX) && defined(GB_ARCH_64_BIT)
-	__asm__("mov %%gs:0x00,%0" : "=r"(thread_id));
-#elif defined(GB_ARCH_32_BIT)
+	thread_id = pthread_mach_thread_np(pthread_self());
+#elif defined(GB_ARCH_32_BIT) && defined(GB_CPU_X86)
 	__asm__("mov %%gs:0x08,%0" : "=r"(thread_id));
-#elif defined(GB_ARCH_64_BIT)
+#elif defined(GB_ARCH_64_BIT) && defined(GB_CPU_X86)
 	__asm__("mov %%gs:0x10,%0" : "=r"(thread_id));
 #else
-	#error Unsupported architecture for thread::current_id()
+	#error Unsupported architecture for gb_thread_current_id()
 #endif
 
 	return thread_id;
@@ -3278,7 +3496,7 @@ gb_inline u32 gb_thread_current_id(void) {
 
 
 void gb_thread_set_name(gbThread *t, char const *name) {
-#if defined(_MSC_VER)
+#if defined(GB_COMPILER_MSVC)
 	#pragma pack(push, 8)
 		typedef struct {
 			DWORD      type;
@@ -3298,7 +3516,7 @@ void gb_thread_set_name(gbThread *t, char const *name) {
 		} __except(EXCEPTION_EXECUTE_HANDLER) {
 		}
 
-#elif defined(GB_SYSTEM_WINDOWS) && !defined(_MSC_VER)
+#elif defined(GB_SYSTEM_WINDOWS) && !defined(GB_COMPILER_MSVC)
 	// IMPORTANT TODO(bill): Set thread name for GCC/Clang on windows
 	return;
 #elif defined(GB_SYSTEM_OSX)
@@ -3327,7 +3545,7 @@ GB_ALLOCATOR_PROC(gb_heap_allocator_proc) {
 	gb_unused(old_size);
 // TODO(bill): Throughly test!
 	switch (type) {
-#if defined(_MSC_VER)
+#if defined(GB_COMPILER_MSVC)
 	case GB_ALLOCATION_ALLOC:  return _aligned_malloc(size, alignment);
 	case GB_ALLOCATION_FREE:   _aligned_free(old_memory); break;
 	case GB_ALLOCATION_RESIZE: return _aligned_realloc(old_memory, size, alignment);
@@ -3360,6 +3578,147 @@ GB_ALLOCATOR_PROC(gb_heap_allocator_proc) {
 }
 
 
+#if defined(GB_SYSTEM_WINDOWS)
+void gb_affinity_init(gbAffinity *a) {
+	SYSTEM_LOGICAL_PROCESSOR_INFORMATION *start_processor_info = NULL;
+	DWORD length = 0;
+	BOOL result  = GetLogicalProcessorInformation(NULL, &length);
+
+	gb_zero_item(a);
+
+	if (!result && GetLastError() == ERROR_INSUFFICIENT_BUFFER && length > 0) {
+		start_processor_info = cast(SYSTEM_LOGICAL_PROCESSOR_INFORMATION *)gb_alloc(gb_heap_allocator(), length);
+		result = GetLogicalProcessorInformation(start_processor_info, &length);
+		if (result) {
+			SYSTEM_LOGICAL_PROCESSOR_INFORMATION *end_processor_info, *processor_info;
+
+			a->is_accurate  = true;
+			a->core_count   = 0;
+			a->thread_count = 0;
+			end_processor_info = cast(SYSTEM_LOGICAL_PROCESSOR_INFORMATION *)gb_pointer_add(start_processor_info, length);
+
+			for (processor_info = start_processor_info;
+			     processor_info < end_processor_info;
+			     processor_info++) {
+				if (processor_info->Relationship == RelationProcessorCore) {
+					isize thread = gb_count_set_bits(processor_info->ProcessorMask);
+					if (thread == 0) {
+						a->is_accurate = false;
+					} else if (a->thread_count + thread > GB_WIN32_MAX_THREADS) {
+						a->is_accurate = false;
+					} else {
+						GB_ASSERT(a->core_count <= a->thread_count &&
+						          a->thread_count < GB_WIN32_MAX_THREADS);
+						a->core_masks[a->core_count++] = processor_info->ProcessorMask;
+						a->thread_count += thread;
+					}
+				}
+			}
+		}
+	}
+
+	GB_ASSERT(a->core_count <= a->thread_count);
+	if (a->thread_count == 0) {
+		a->is_accurate   = false;
+		a->core_count    = 1;
+		a->thread_count  = 1;
+		a->core_masks[0] = 1;
+	}
+
+}
+void gb_affinity_destroy(gbAffinity *a) {
+	gb_unused(a);
+}
+
+
+b32 gb_affinity_set(gbAffinity *a, isize core, isize thread) {
+	usize available_mask, check_mask = 1;
+	GB_ASSERT(thread < gb_affinity_thread_count_for_core(a, core));
+
+	available_mask = a->core_masks[core];
+	for (;;) {
+		if ((available_mask & check_mask) != 0) {
+			if (thread-- == 0) {
+				DWORD_PTR result = SetThreadAffinityMask(GetCurrentThread(), check_mask);
+				return result != 0;
+			}
+		}
+		check_mask <<= 1; // NOTE(bill): Onto the next bit
+	}
+}
+
+isize gb_affinity_thread_count_for_core(gbAffinity *a, isize core) {
+	GB_ASSERT(core >= 0 && core < a->core_count);
+	return gb_count_set_bits(a->core_masks[core]);
+}
+
+#elif defined(GB_SYSTEM_OSX)
+void gb_affinity_init(gbAffinity *a) {
+	isize count, count_size = gb_size_of(count);
+
+	a->is_accurate               = false;
+	a->thread_count     = 1;
+	a->core_count       = 1;
+	a->threads_per_core = 1;
+
+	if (sysctlbyname("hw.logicalcpu", &count, &count_size, NULL, 0) == 0) {
+		if (count > 0) {
+			a->thread_count = count;
+			// Get # of physical cores
+			if (sysctlbyname("hw.physicalcpu", &count, &count_size, NULL, 0) == 0) {
+				if (count > 0) {
+					a->core_count = count;
+					a->threads_per_core = a->thread_count / count;
+					if (a->threads_per_core < 1)
+						a->threads_per_core = 1;
+					else
+						a->is_accurate = true;
+				}
+			}
+		}
+	}
+
+}
+
+void gb_affinity_destroy(gbAffinity *a) {
+	gb_unused(a);
+}
+
+b32 gb_affinity_set(gbAffinity *a, isize core, isize thread_index) {
+	isize index;
+	thread_t thread;
+	thread_affinity_policy_data_t info;
+	kern_return_t result;
+
+	GB_ASSERT(core < a->core_count);
+	GB_ASSERT(thread_index < a->threads_per_core);
+
+	index = core * a->threads_per_core + thread_index;
+	thread = mach_thread_self();
+	info = {cast(integer_t)index};
+	result = thread_policy_set(thread, THREAD_AFFINITY_POLICY, cast(thread_policy_t)&info, THREAD_AFFINITY_POLICY_COUNT);
+	return result == KERN_SUCCESS;
+}
+
+isize gb_affinity_thread_count_for_core(gbAffinity *a, isize core) {
+	GB_ASSERT(core >= 0 && core < a->core_count);
+	return gb_count_set_bits(a->core_masks[core]);
+}
+
+#elif defined(GB_SYSTEM_LINUX)
+#error TODO(bill): Implement gbAffinity for linux
+#else
+#error TODO(bill): Unknown system
+#endif
+
+
+
+
+
+
+
+
+
 ////////////////////////////////////////////////////////////////
 //
 // Virtual Memory
@@ -3383,8 +3742,22 @@ gb_inline gbVirtualMemory gb_vm_alloc(void *addr, isize size) {
 	return vm;
 }
 
-gb_inline void gb_vm_free(gbVirtualMemory vm) {
-	VirtualFree(vm.data, vm.size > 0 ? vm.size : 0, MEM_RELEASE);
+gb_inline b32 gb_vm_free(gbVirtualMemory vm) {
+	MEMORY_BASIC_INFORMATION info;
+	while (vm.size > 0) {
+		if (VirtualQuery(cast(LPCVOID)vm.data, &info, gb_size_of(info)) == 0)
+			return false;
+		if (info.BaseAddress != vm.data ||
+		    info.AllocationBase != vm.data ||
+		    info.State != MEM_COMMIT || info.RegionSize > cast(usize)vm.size) {
+			return false;
+		}
+		if (VirtualFree(vm.data, 0, MEM_RELEASE) == 0)
+			return false;
+		vm.data = gb_pointer_add(vm.data, info.RegionSize);
+		vm.size -= info.RegionSize;
+	}
+	return true;
 }
 
 gb_inline gbVirtualMemory gb_vm_trim(gbVirtualMemory vm, isize lead_size, isize size) {
@@ -3408,6 +3781,14 @@ gb_inline b32 gb_vm_purge(gbVirtualMemory vm) {
 	// NOTE(bill): Can this really fail?
 	return true;
 }
+
+isize gb_virtual_memory_page_size(isize *alignment_out) {
+	SYSTEM_INFO info;
+	GetSystemInfo(&info);
+	if (alignment_out) *alignment_out = info.dwAllocationGranularity;
+	return info.dwPageSize;
+}
+
 #else
 
 #ifndef MAP_ANONYMOUS
@@ -3417,16 +3798,14 @@ gb_inline b32 gb_vm_purge(gbVirtualMemory vm) {
 gb_inline gbVirtualMemory gb_vm_alloc(void *addr, isize size) {
 	gbVirtualMemory vm;
 	GB_ASSERT(size > 0);
-	vm.data = mmap(addr, size,
-	               PROT_READ | PROT_WRITE,
-	               MAP_ANONYMOUS | MAP_PRIVATE,
-	               -1, 0);
+	vm.data = mmap(addr, size, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 	vm.size = size;
 	return vm;
 }
 
-gb_inline void gb_vm_free(gbVirtualMemory vm) {
+gb_inline b32 gb_vm_free(gbVirtualMemory vm) {
 	munmap(vm.data, vm.size);
+	return true;
 }
 
 gb_inline gbVirtualMemory gb_vm_trim(gbVirtualMemory vm, isize lead_size, isize size) {
@@ -3449,6 +3828,14 @@ gb_inline b32 gb_vm_purge(gbVirtualMemory vm) {
 	int err = madvise(vm.data, vm.size, MADV_DONTNEED);
 	return err != 0;
 }
+
+isize gb_virtual_memory_page_size(isize *alignment_out) {
+	// TODO(bill): Is this always true?
+	isize result = cast(isize)sysconf(_SC_PAGE_SIZE);
+	if (alignment_out) *alignment_out = result;
+	return result;
+}
+
 #endif
 
 
@@ -4068,8 +4455,8 @@ void gb_sort(void *base_, isize count, isize size, gbCompareProc cmp) {
 
 
 #define GB_RADIX_SORT_PROC_GEN(Type) GB_RADIX_SORT_PROC(Type) { \
-	Type *gb_restrict source = items; \
-	Type *gb_restrict dest   = temp; \
+	Type *source = items; \
+	Type *dest   = temp; \
 	isize byte_index, i, byte_max = 8*gb_size_of(Type); \
 	for (byte_index = 0; byte_index < byte_max; byte_index += 8) { \
 		isize offsets[256] = {0}; \
@@ -4212,7 +4599,6 @@ gb_inline void gb_str_to_upper(char *str) {
 	}
 }
 
-
 gb_inline isize gb_strlen(char const *str) {
 	isize result = 0;
 	if (str) {
@@ -4232,7 +4618,6 @@ gb_inline isize gb_strnlen(char const *str, isize max_len) {
 	}
 	return result;
 }
-
 
 gb_inline isize gb_utf8_strlen(char const *str) {
 	isize result = 0;
@@ -4447,12 +4832,12 @@ i64 gb_str_to_i64(char const *str, char **end_ptr, i32 base) {
 	return value;
 }
 
-
+// TODO(bill): Are these good enough for characters?
 gb_global char const gb__num_to_char_table[] =
 	"0123456789"
 	"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	"abcdefghijklmnopqrstuvwxyz"
-	"_/";
+	"@$";
 
 gb_inline void gb_i64_to_str(i64 value, char *string, i32 base) {
 	char *buf = string;
@@ -6305,7 +6690,7 @@ gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) 
 //
 //
 
-#if defined(_MSC_VER) && !defined(__clang__)
+#if defined(GB_COMPILER_MSVC) && !defined(__clang__)
 	gb_inline u64 gb_rdtsc(void) { return __rdtsc(); }
 #elif defined(__i386__)
 	gb_inline u64 gb_rdtsc(void) {
@@ -6423,44 +6808,106 @@ gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) 
 //
 //
 
-gb_internal gb_inline u64 gb__basic_hash(u64 x) {
-	// NOTE(bill): Used in Murmur Hash
-	x ^= x >> 33;
-    x *= 0xff51afd7ed558ccdull;
-    x ^= x >> 33;
-    x *= 0xc4ceb9fe1a85ec53ull;
-    x ^= x >> 33;
-    return x;
+gb_global gbAtomic32 gb__random_shared_counter = {0};
+
+gb_internal u32 gb__get_noise_from_time(void) {
+	u32 accum = 0;
+	f64 start, remaining, end, curr = 0;
+	u64 interval = 100000ll;
+
+	start     = gb_time_now();
+	remaining = (interval - cast(u64)(interval*start)%interval) / cast(f64)interval;
+	end       = start + remaining;
+
+	do {
+		curr = gb_time_now();
+		accum += cast(u32)curr;
+	} while (curr >= end);
+	return accum;
+}
+
+// NOTE(bill): Partly from http://preshing.com/20121224/how-to-generate-a-sequence-of-unique-random-integers/
+// But the generation is even more random-er-est
+
+gb_internal gb_inline u32 gb__permute_qpr(u32 x) {
+	gb_local_persist u32 const prime = 4294967291; // 2^32 - 5
+	if (x >= prime) {
+		return x;
+	} else {
+		u32 residue = cast(u32)(cast(u64) x * x) % prime;
+		if (x <= prime / 2)
+			return residue;
+		else
+			return prime - residue;
+	}
+}
+
+gb_internal gb_inline u32 gb__permute_with_offset(u32 x, u32 offset) {
+	return (gb__permute_qpr(x) + offset) ^ 0x5bf03635;
 }
 
 
 void gb_random_init(gbRandom *r) {
-	u64 t;
-	isize i;
-	t = gb_utc_time_now();
-	t = gb__basic_hash(t);
-	r->seed[0] = gb__basic_hash(t|1);
+	u64 time, tick;
+	isize i, j;
+	u32 x = 0;
+	r->value = 0;
 
-	t = cast(u64)gb_time_now();
-	t = gb__basic_hash(t) + (gb__basic_hash(gb_thread_current_id()) << 1);
-	r->seed[1] = gb__basic_hash(t|1);
+	r->offsets[0] = gb__get_noise_from_time();
+	r->offsets[1] = gb_atomic32_fetch_add(&gb__random_shared_counter, 1);
+	r->offsets[2] = gb_thread_current_id();
+	r->offsets[3] = gb_thread_current_id() * 3 + 1;
+	time = gb_utc_time_now();
+	r->offsets[4] = cast(u32)(time >> 32);
+	r->offsets[5] = cast(u32)time;
+	r->offsets[6] = gb__get_noise_from_time();
+	tick = gb_rdtsc();
+	r->offsets[7] = cast(u32)(tick ^ (tick >> 32));
 
-	for (i = 0; i < 10; i++) {
-		cast(void)gb_random_next(r);
+	for (j = 0; j < 4; j++) {
+		for (i = 0; i < gb_count_of(r->offsets); i++) {
+			r->offsets[i] = x = gb__permute_with_offset(x, r->offsets[i]);
+		}
 	}
 }
 
-u64 gb_random_next(gbRandom *r) {
-	u64 s1 = r->seed[0];
-	u64 s0 = r->seed[1];
-	r->seed[0] = s0;
-	s1 ^= s1 << 23;
-	r->seed[1] = (s1 ^ s0 ^ (s1>>17) ^ (s0>>26) + s0);
-	return r->seed[1];
+u32 gb_random_gen_u32(gbRandom *r) {
+	u32 x = r->value;
+	u32 carry = 1;
+	isize i;
+	for (i = 0; i < gb_count_of(r->offsets); i++) {
+		x = gb__permute_with_offset(x, r->offsets[i]);
+		if (carry > 0) {
+			carry = ++r->offsets[i] ? 0 : 1;
+		}
+	}
+
+	r->value = x;
+	return x;
 }
 
+u32 gb_random_gen_u32_unique(gbRandom *r) {
+	u32 x = r->value;
+	isize i;
+	r->value++;
+	for (i = 0; i < gb_count_of(r->offsets); i++) {
+		x = gb__permute_with_offset(x, r->offsets[i]);
+	}
+
+	return x;
+}
+
+u64 gb_random_gen_u64(gbRandom *r) {
+	return ((cast(u64)gb_random_gen_u32(r)) << 32) | gb_random_gen_u32(r);
+}
+
+
+
+
+
+
 i64 gb_random_range_i64(gbRandom *r, i64 lower_inc, i64 higher_inc) {
-	u64 u = gb_random_next(r);
+	u64 u = gb_random_gen_u64(r);
 	i64 i = *cast(i64 *)&u;
 	i64 diff = higher_inc-lower_inc+1;
 	i %= diff;
@@ -6496,7 +6943,7 @@ f64 gb__mod64(f64 x, f64 y) {
 
 
 f64 gb_random_range_f64(gbRandom *r, f64 lower_inc, f64 higher_inc) {
-	u64 u = gb_random_next(r);
+	u64 u = gb_random_gen_u64(r);
 	f64 f = *cast(f64 *)&u;
 	f64 diff = higher_inc-lower_inc+1.0;
 	f = gb__mod64(f, diff);
@@ -6556,6 +7003,16 @@ gb_inline u64 gb_endian_swap64(u64 i) {
 }
 
 
+gb_inline isize gb_count_set_bits(u64 mask) {
+	isize count = 0;
+	while (mask) {
+		count += (mask & 1);
+		mask >>= 1;
+	}
+	return count;
+}
+
+
 
 
 
@@ -6608,6 +7065,7 @@ gb_internal void gb__platform_resize_dib_section(gbPlatform *p, i32 width, i32 h
 		p->window_width  = width;
 		p->window_height = height;
 
+		// TODO(bill): Is this slow to get the desktop mode everytime?
 		p->sw_framebuffer.bits_per_pixel = gb_video_mode_get_desktop().bits_per_pixel;
 		p->sw_framebuffer.pitch = (p->sw_framebuffer.bits_per_pixel * width / 8);
 
@@ -6862,9 +7320,9 @@ LRESULT CALLBACK gb__win32_window_callback(HWND wnd, UINT msg, WPARAM wParam, LP
 typedef HGLRC wglCreateContextAttribsARB_Proc(HDC hDC, HGLRC hshareContext, int const *attribList);
 
 
-b32 gb_platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode, gbRendererType type, u32 window_flags) {
+b32 gb__platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode, gbRendererType type, u32 window_flags) {
 	WNDCLASSEXW wc = {gb_size_of(WNDCLASSEXW)};
-	DWORD ex_style, style;
+	DWORD ex_style = 0, style = 0;
 	RECT wr;
 	char16 title_buffer[256] = {0}; // TODO(bill): gb_local_persist this?
 
@@ -6885,7 +7343,6 @@ b32 gb_platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode, 
 
 	if ((window_flags & GB_WINDOW_FULLSCREEN) && !(window_flags & GB_WINDOW_BORDERLESS)) {
 		DEVMODEW screen_settings = {gb_size_of(DEVMODEW)};
-		GB_ASSERT(gb_video_mode_is_valid(mode));
 		screen_settings.dmPelsWidth	 = mode.width;
 		screen_settings.dmPelsHeight = mode.height;
 		screen_settings.dmBitsPerPel = mode.bits_per_pixel;
@@ -6898,28 +7355,37 @@ b32 gb_platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode, 
 			                MB_YESNO|MB_ICONEXCLAMATION) == IDYES) {
 				window_flags &= ~GB_WINDOW_FULLSCREEN;
 			} else {
-				MessageBoxW(NULL, L"Failed to create a window", L"ERROR", MB_OK|MB_ICONSTOP);
-				return false;
+				mode = gb_video_mode_get_desktop();
+				screen_settings.dmPelsWidth	 = mode.width;
+				screen_settings.dmPelsHeight = mode.height;
+				screen_settings.dmBitsPerPel = mode.bits_per_pixel;
+				ChangeDisplaySettingsW(&screen_settings, CDS_FULLSCREEN);
 			}
 		}
 	}
 
 
-	ex_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
-	style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_VISIBLE | WS_THICKFRAME | WS_SYSMENU | WS_MAXIMIZEBOX | WS_MINIMIZEBOX;
-	if (window_flags & (GB_WINDOW_BORDERLESS))
-		style |= WS_POPUP;
-	else
-		style |= WS_OVERLAPPEDWINDOW | WS_CAPTION;
+	// ex_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;
+	// style = WS_CLIPSIBLINGS | WS_CLIPCHILDREN | WS_VISIBLE | WS_THICKFRAME | WS_SYSMENU | WS_MAXIMIZEBOX | WS_MINIMIZEBOX;
+
+	style |= WS_VISIBLE;
 
 	if (window_flags & GB_WINDOW_HIDDEN)       style &= ~WS_VISIBLE;
-	if (!(window_flags & GB_WINDOW_RESIZABLE)) style &= ~WS_THICKFRAME;
+	if (window_flags & GB_WINDOW_RESIZABLE)    style |= WS_THICKFRAME | WS_MAXIMIZEBOX;
 	if (window_flags & GB_WINDOW_MAXIMIZED)    style |=  WS_MAXIMIZE;
 	if (window_flags & GB_WINDOW_MINIMIZED)    style |=  WS_MINIMIZE;
 
-	// NOTE(bill): Completely ignore the give mode and just change it
-	if (window_flags & GB_WINDOW_FULLSCREEN_DESKTOP)
+	// NOTE(bill): Completely ignore the given mode and just change it
+	if (window_flags & GB_WINDOW_FULLSCREEN_DESKTOP) {
 		mode = gb_video_mode_get_desktop();
+	}
+
+	if ((window_flags & GB_WINDOW_FULLSCREEN) || (window_flags & GB_WINDOW_BORDERLESS)) {
+		style |= WS_POPUP;
+	} else {
+		style |= WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+	}
+
 
 	wr.left   = 0;
 	wr.top    = 0;
@@ -7040,6 +7506,20 @@ b32 gb_platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode, 
 
 	p->is_initialized = true;
 	return true;
+}
+
+gb_inline b32 gb_platform_init_with_software(gbPlatform *p, char const *window_title,
+                                             gbVideoMode mode, u32 window_flags) {
+	return gb__platform_init(p, window_title, mode, GB_RENDERER_SOFTWARE, window_flags);
+}
+
+gb_inline b32 gb_platform_init_with_opengl(gbPlatform *p, char const *window_title,
+                                           gbVideoMode mode, u32 window_flags, i32 major, i32 minor, b32 core, b32 compatible) {
+	p->opengl.major      = major;
+	p->opengl.minor      = minor;
+	p->opengl.core       = cast(b16)core;
+	p->opengl.compatible = cast(b16)compatible;
+	return gb__platform_init(p, window_title, mode, GB_RENDERER_OPENGL, window_flags);
 }
 
 
@@ -7381,7 +7861,7 @@ isize gb_video_mode_get_fullscreen_modes(gbVideoMode *modes, isize max_mode_coun
 	DEVMODE win32_mode = {gb_size_of(win32_mode)};
 	i32 count;
 	for (count = 0;
-	     count < max_mode_count && count < EnumDisplaySettings(NULL, count, &win32_mode);
+	     count < max_mode_count && EnumDisplaySettings(NULL, count, &win32_mode);
 	     count++) {
 		modes[count] = gb_video_mode(win32_mode.dmPelsWidth, win32_mode.dmPelsHeight, win32_mode.dmBitsPerPel);
 	}
@@ -7478,13 +7958,21 @@ gb_inline gbVideoMode gb_video_mode(i32 width, i32 height, i32 bits_per_pixel) {
 }
 
 gb_inline b32 gb_video_mode_is_valid(gbVideoMode mode) {
-	gb_local_persist gbVideoMode modes[256];
+	gb_local_persist gbVideoMode modes[256] = {0};
+	gb_local_persist isize mode_count = 0;
 	gb_local_persist b32 is_set = false;
+	isize i;
+
 	if (!is_set) {
-		gb_video_mode_get_fullscreen_modes(modes, gb_count_of(modes));
+		mode_count = gb_video_mode_get_fullscreen_modes(modes, gb_count_of(modes));
 		is_set = true;
 	}
-	return gb_binary_search_array(modes, gb_count_of(modes), &mode, gb_video_mode_cmp) == -1;
+
+	for (i = 0; i < mode_count; i++) {
+		gb_printf("%d %d\n", modes[i].width, modes[i].height);
+	}
+
+	return gb_binary_search_array(modes, mode_count, &mode, gb_video_mode_cmp) >= 0;
 }
 
 GB_COMPARE_PROC(gb_video_mode_cmp) {
@@ -7506,7 +7994,7 @@ GB_COMPARE_PROC(gb_video_mode_dsc_cmp) {
 
 
 
-#if defined(_MSC_VER)
+#if defined(GB_COMPILER_MSVC)
 #pragma warning(pop)
 #endif
 
