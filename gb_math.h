@@ -219,6 +219,15 @@ GB_MATH_DEF float gb_angle_diff(float radians_a, float radians_b);
 #define gb_max(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
+#ifndef gb_min3
+#define gb_min3(a, b, c) gb_min(gb_min(a, b), c)
+#endif
+
+#ifndef gb_max3
+#define gb_max3(a, b, c) gb_max(gb_max(a, b), c)
+#endif
+
+
 GB_MATH_DEF float gb_copy_sign  (float x, float y);
 GB_MATH_DEF float gb_remainder  (float x, float y);
 GB_MATH_DEF float gb_mod        (float x, float y);
@@ -824,7 +833,7 @@ float gb_quake_rsqrt(float a) {
 		static float const a5 = +2.08026600266304389e-2f;
 		static float const a6 = -3.03996055049204407e-3f;
 		static float const a7 = +1.38235642404333740e-4f;
-	    return a0 + a*(a1 + a*(a2 + a*(a3 + a*(a4 + a*(a5 + a*(a6 + a*a7))))));
+		return a0 + a*(a1 + a*(a2 + a*(a3 + a*(a4 + a*(a5 + a*(a6 + a*a7))))));
 	}
 	float
 	gb_cos(float a)
@@ -837,7 +846,7 @@ float gb_quake_rsqrt(float a) {
 		static float const a5 = -1.86637164165180873e-2f;
 		static float const a6 = +9.90140908664079833e-4f;
 		static float const a7 = -5.23022132118824778e-14f;
-	    return a0 + a*(a1 + a*(a2 + a*(a3 + a*(a4 + a*(a5 + a*(a6 + a*a7))))));
+		return a0 + a*(a1 + a*(a2 + a*(a3 + a*(a4 + a*(a5 + a*(a6 + a*a7))))));
 	}
 
 	float

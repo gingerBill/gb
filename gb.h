@@ -1,4 +1,4 @@
-/* gb.h - v0.22  - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.22a - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -48,6 +48,7 @@ TODOS
 	- More date & time functions
 
 VERSION HISTORY
+	0.22a - Remove gbVideoMode from gb_platform_init_*
 	0.22  - gbAffinity - (Missing Linux version)
 	0.21  - Platform Layer Restructuring
 	0.20  - Improve file io
@@ -1015,7 +1016,7 @@ typedef struct gbAllocator {
 } gbAllocator;
 
 #ifndef GB_DEFAULT_MEMORY_ALIGNMENT
-#define GB_DEFAULT_MEMORY_ALIGNMENT 4
+#define GB_DEFAULT_MEMORY_ALIGNMENT (2 * gb_size_of(void *))
 #endif
 
 GB_DEF void *gb_alloc_align (gbAllocator a, isize size, isize alignment);
@@ -1052,6 +1053,74 @@ GB_DEF GB_ALLOCATOR_PROC(gb_heap_allocator_proc);
 #define gb_malloc(sz) gb_alloc(gb_heap_allocator(), sz)
 #define gb_mfree(ptr) gb_free(gb_heap_allocator(), ptr)
 #endif
+
+#if 0
+////////////////////////////////////////////////////////////////
+//
+// DLMalloc Clone
+// Doug Lea's malloc: ftp://g.oswego.edu/pub/misc/malloc-2.8.6.c
+//
+
+typedef struct gbMallocChunk {
+	isize prev_foot, head;
+	struct gbMallocChunk *fd, *bk;
+} gbMallocChunk;
+
+typedef struct gbDLHeapStats {
+	isize peak_system_bytes;
+	isize system_bytes;
+	isize in_use_bytes;
+} gbDLHeapStats;
+
+#define GB_DL_SMALL_BIN_COUNT 32u
+#define GB_DL_TREE_BIN_COUNT  32u
+
+typedef struct gbMallocSegment {
+	u8 *base;
+	isize size;
+	struct gbMallocSegment *next;
+	u32 flags;
+} gbMallocSegment;
+
+typedef struct gbMallocState {
+	u32 small_map, tree_map;
+	isize dv_size, top_size;
+	u8 *least_addr;
+	gbMallocChunk *dv, *top;
+	isize trim_check;
+	isize release_checks;
+	isize magic;
+	gbMallocChunk *small_bins[(GB_DL_SMALL_BIN_COUNT+1) * 2];
+	gbMallocChunk *tree_bins [GB_DL_TREE_BIN_COUNT];
+	isize footprint;
+	isize max_footprint;
+	isize footprint_limit;
+	u32 flags;
+	gbMallocSegment segment;
+	void *extension; // NOTE(bill): Unused;
+	isize extension_size;
+} gbMallocState;
+
+GB_DEF void *gb_dl_alloc_align(gbMallocState *state, isize size, isize alignment);
+GB_DEF void *gb_dl_free       (gbMallocState *state, void *ptr);
+GB_DEF void *gb_dl_realloc    (gbMallocState *state, void *ptr, isize new_size);
+
+
+typedef struct gbDLHeap {
+	gbMallocState state;
+	gbMutex mutex;
+} gbDLHeap;
+
+GB_DEF void          gb_heap_init     (gbDLHeap *heap);
+GB_DEF gbDLHeapStats gb_heap_get_stats(gbDLHeap *heap);
+GB_DEF isize         gb_heap_get_size (gbDLHeap *heap, void *ptr);
+
+// Allocation Types: alloc, free, resize
+GB_DEF gbAllocator gb_dlheap_allocator(gbDLHeap *heap);
+GB_DEF GB_ALLOCATOR_PROC(gb_dlheap_allocator_proc);
+
+#endif
+
 
 
 //
@@ -1284,6 +1353,8 @@ GB_DEF void gb_str_concat(char *dest, isize dest_len,
                           char const *src_b, isize src_b_len);
 
 GB_DEF i64   gb_str_to_i64(char const *str, char **end_ptr, i32 base); // TODO(bill): Support more than just decimal and hexadecimal
+GB_DEF f32   gb_str_to_f32(char const *str, char **end_ptr);
+GB_DEF f64   gb_str_to_f64(char const *str, char **end_ptr);
 GB_DEF void  gb_i64_to_str(i64 value, char *string, i32 base);
 GB_DEF void  gb_u64_to_str(u64 value, char *string, i32 base);
 
@@ -2145,14 +2216,13 @@ GB_DEF u64 gb_endian_swap64(u64 i);
 
 GB_DEF isize gb_count_set_bits(u64 mask);
 
-
-
-
 ////////////////////////////////////////////////////////////////
 //
 // Platform Stuff
 //
 //
+
+#if !defined(GB_NO_PLATFORM)
 
 // NOTE(bill):
 // Coordiate system - +ve x - left to right
@@ -2462,9 +2532,9 @@ GB_DEF GB_COMPARE_PROC(gb_video_mode_dsc_cmp); // NOTE(bill): Sort largest to sm
 
 
 // NOTE(bill): Software rendering
-GB_DEF b32   gb_platform_init_with_software         (gbPlatform *p, char const *window_title, gbVideoMode mode, u32 window_flags);
+GB_DEF b32   gb_platform_init_with_software         (gbPlatform *p, char const *window_title, i32 width, i32 height, u32 window_flags);
 // NOTE(bill): OpenGL Rendering
-GB_DEF b32   gb_platform_init_with_opengl           (gbPlatform *p, char const *window_title, gbVideoMode mode, u32 window_flags, i32 major, i32 minor, b32 core, b32 compatible);
+GB_DEF b32   gb_platform_init_with_opengl           (gbPlatform *p, char const *window_title, i32 width, i32 height, u32 window_flags, i32 major, i32 minor, b32 core, b32 compatible);
 GB_DEF void  gb_platform_update                     (gbPlatform *p);
 GB_DEF void  gb_platform_display                    (gbPlatform *p);
 GB_DEF void  gb_platform_destroy                    (gbPlatform *p);
@@ -2482,6 +2552,8 @@ GB_DEF void  gb_platform_make_opengl_context_current(gbPlatform *p);
 GB_DEF void  gb_platform_show_window                (gbPlatform *p);
 GB_DEF void  gb_platform_hide_window                (gbPlatform *p);
 
+
+#endif // !defined(GB_NO_PLATFORM)
 
 #if defined(__cplusplus)
 }
@@ -3615,6 +3687,8 @@ void gb_affinity_init(gbAffinity *a) {
 				}
 			}
 		}
+
+		gb_free(gb_heap_allocator(), start_processor_info);
 	}
 
 	GB_ASSERT(a->core_count <= a->thread_count);
@@ -3846,6 +3920,70 @@ isize gb_virtual_memory_page_size(isize *alignment_out) {
 // Custom Allocation
 //
 //
+
+
+#if 0
+////////////////////////////////////////////////////////////////
+//
+// DLMalloc
+//
+//
+
+typedef struct gbMallocTreeChunk {
+	isize prev_foot, head;
+	struct gbMallocTreeChunk *fd, *bk;
+
+	struct gbMallocTreeChunk *child[2];
+	struct gbMallocTreeChunk *parent;
+	u32 index;
+} gbMallocTreeChunk;
+
+#define gb__leftmost_child(t) ((t)->child[0] != 0 ? (t)->child[0] : (t)->child[1])
+
+typedef struct gbMallocParams {
+	isize magic;
+	isize page_size;
+	isize granularity;
+	isize mmap_threshold;
+	isize trim_threshold;
+	u32  default_flags;
+} gbMallocParams;
+
+gb_global gbMallocParams gb__params = {0};
+#define gb__ensure_initialization() (void)(gb__params.magic != 0 || gb__init_malloc_params())
+#define gb__is_initialized(M) ((M)->top != 0)
+
+#endif
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 //
@@ -4877,6 +5015,98 @@ gb_inline void gb_u64_to_str(u64 value, char *string, i32 base) {
 
 	gb_strrev(string);
 }
+
+gb_inline f32 gb_str_to_f32(char const *str, char **end_ptr) {
+	f32 result = 0.0f;
+	isize signed_exponent = 0;
+	char c;
+	for (c = *str; c != '\0' && gb_char_is_digit(c); c = *str++)
+		result = result*10.0f + (c-'0');
+
+	if (c == '.') {
+		for (c = *str++; c != '\0' && gb_char_is_digit(c); c = *str++) {
+			result = result*1.0f + (c-'0');
+			signed_exponent--;
+		}
+	}
+
+	if (gb_char_to_upper(c) == 'E') {
+		isize sign = +1, i = 0;
+		c = *str++;
+		if (c == '+') {
+			c = *str++;
+		} else if (c == '-') {
+			c = *str++;
+			sign = -1;
+		}
+		while (gb_char_is_digit(c)) {
+			i = i*10 + (c-'0');
+			c = *str++;
+		}
+		signed_exponent += i*sign;
+	}
+
+	while (signed_exponent > 0) {
+		result *= 10.0f;
+		signed_exponent--;
+	}
+	while (signed_exponent < 0) {
+		result *= 0.1f;
+		signed_exponent++;
+	}
+
+	if (end_ptr) *end_ptr = cast(char *)str;
+
+	return result;
+}
+
+
+
+gb_inline f64 gb_str_to_f64(char const *str, char **end_ptr) {
+	f64 result = 0.0;
+	isize signed_exponent = 0;
+	char c;
+	for (c = *str; c != '\0' && gb_char_is_digit(c); c = *str++)
+		result = result*10.0 + (c-'0');
+
+
+	if (c == '.') {
+		for (c = *str; c != '\0' && gb_char_is_digit(c); c = *str++) {
+			result = result*1.0 + (c-'0');
+			signed_exponent--;
+		}
+	}
+
+	if (gb_char_to_upper(c) == 'E') {
+		isize sign = +1, i = 0;
+		c = *str++;
+		if (c == '+') {
+			c = *str++;
+		} else if (c == '-') {
+			c = *str++;
+			sign = -1;
+		}
+		while (gb_char_is_digit(c)) {
+			i = i*10 + (c-'0');
+			c = *str++;
+		}
+		signed_exponent += i*sign;
+	}
+
+	while (signed_exponent > 0) {
+		result *= 10.0;
+		signed_exponent--;
+	}
+	while (signed_exponent < 0) {
+		result *= 0.1;
+		signed_exponent++;
+	}
+
+	if (end_ptr) *end_ptr = cast(char *)str;
+
+	return result;
+}
+
 
 
 
@@ -7023,6 +7253,8 @@ gb_inline isize gb_count_set_bits(u64 mask) {
 //
 //
 
+#if !defined(GB_NO_PLATFORM)
+
 gb_inline void gb_key_state_update(gbKeyState *s, b32 is_down) {
 	b32 was_down = (*s & GB_KEY_STATE_DOWN) != 0;
 	is_down = is_down != 0; // NOTE(bill): Make sure it's a boolean
@@ -7509,12 +7741,20 @@ b32 gb__platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode,
 }
 
 gb_inline b32 gb_platform_init_with_software(gbPlatform *p, char const *window_title,
-                                             gbVideoMode mode, u32 window_flags) {
+                                             i32 width, i32 height, u32 window_flags) {
+	gbVideoMode mode;
+	mode.width          = width;
+	mode.height         = height;
+	mode.bits_per_pixel = 32;
 	return gb__platform_init(p, window_title, mode, GB_RENDERER_SOFTWARE, window_flags);
 }
 
 gb_inline b32 gb_platform_init_with_opengl(gbPlatform *p, char const *window_title,
-                                           gbVideoMode mode, u32 window_flags, i32 major, i32 minor, b32 core, b32 compatible) {
+                                           i32 width, i32 height, u32 window_flags, i32 major, i32 minor, b32 core, b32 compatible) {
+	gbVideoMode mode;
+	mode.width          = width;
+	mode.height         = height;
+	mode.bits_per_pixel = 32;
 	p->opengl.major      = major;
 	p->opengl.minor      = minor;
 	p->opengl.core       = cast(b16)core;
@@ -7990,6 +8230,8 @@ GB_COMPARE_PROC(gb_video_mode_cmp) {
 GB_COMPARE_PROC(gb_video_mode_dsc_cmp) {
 	return gb_video_mode_cmp(b, a);
 }
+
+#endif // !defined(GB_NO_PLATFORM)
 
 
 
