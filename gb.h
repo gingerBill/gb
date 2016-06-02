@@ -1,4 +1,4 @@
-/* gb.h - v0.22a - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.23  - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -48,6 +48,7 @@ TODOS
 	- More date & time functions
 
 VERSION HISTORY
+	0.23  - Optional Windows.h removal (because I'm crazy)
 	0.22a - Remove gbVideoMode from gb_platform_init_*
 	0.22  - gbAffinity - (Missing Linux version)
 	0.21  - Platform Layer Restructuring
@@ -106,13 +107,10 @@ VERSION HISTORY
 extern "C" {
 #endif
 
-
-#ifndef GB_EXTERN
-	#if defined(__cplusplus)
-		#define GB_EXTERN extern "C"
-	#else
-		#define GB_EXTERN extern
-	#endif
+#if defined(__cplusplus)
+	#define GB_EXTERN extern "C"
+#else
+	#define GB_EXTERN extern
 #endif
 
 #ifndef GB_DLL_EXPORT
@@ -264,15 +262,17 @@ extern "C" {
 #endif
 
 #if defined(GB_SYSTEM_WINDOWS)
-	#define NOMINMAX            1
-	#define WIN32_LEAN_AND_MEAN 1
-	#define WIN32_MEAN_AND_LEAN 1
-	#define VC_EXTRALEAN        1
-	#include <windows.h>
- 	#undef NOMINMAX
-	#undef WIN32_LEAN_AND_MEAN
-	#undef WIN32_MEAN_AND_LEAN
-	#undef VC_EXTRALEAN
+	#if !defined(GB_NO_WINDOWS_H)
+		#define NOMINMAX            1
+		#define WIN32_LEAN_AND_MEAN 1
+		#define WIN32_MEAN_AND_LEAN 1
+		#define VC_EXTRALEAN        1
+		#include <windows.h>
+		#undef NOMINMAX
+		#undef WIN32_LEAN_AND_MEAN
+		#undef WIN32_MEAN_AND_LEAN
+		#undef VC_EXTRALEAN
+	#endif
 
 	#include <malloc.h> // NOTE(bill): _aligned_*()
 	#include <intrin.h>
@@ -733,7 +733,7 @@ extern "C++" {
 
 // NOTE(bill): Things that shouldn't happen with a message!
 #ifndef GB_PANIC
-#define GB_PANIC(msg) GB_ASSERT_MSG(0, msg)
+#define GB_PANIC(msg, ...) GB_ASSERT_MSG(0, msg, ##__VA_ARGS__)
 #endif
 
 GB_DEF void gb_assert_handler(char const *condition, char const *file, i32 line, char const *msg, ...);
@@ -937,12 +937,13 @@ GB_DEF void gb_thread_set_name        (gbThread *t, char const *name);
 
 
 #if defined(GB_SYSTEM_WINDOWS)
+
 typedef struct gbAffinity {
 	b32   is_accurate;
 	isize core_count;
 	isize thread_count;
 	#define GB_WIN32_MAX_THREADS (8 * gb_size_of(usize))
-	ULONG_PTR core_masks[GB_WIN32_MAX_THREADS];
+	usize core_masks[GB_WIN32_MAX_THREADS];
 
 } gbAffinity;
 
@@ -2231,13 +2232,6 @@ GB_DEF isize gb_count_set_bits(u64 mask);
 
 // TODO(bill): Proper documentation for this with code examples
 
-#if defined(GB_SYSTEM_WINDOWS)
-#include <xinput.h>
-#ifndef XUSER_MAX_COUNT
-#define XUSER_MAX_COUNT 4
-#endif
-#endif
-
 #ifndef GB_MAX_GAME_CONTROLLER_COUNT
 #define GB_MAX_GAME_CONTROLLER_COUNT 4
 #endif
@@ -2416,11 +2410,15 @@ typedef struct gbGameController {
 } gbGameController;
 
 #if defined(GB_SYSTEM_WINDOWS)
-#define GB_XINPUT_GET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_STATE *pState)
-typedef GB_XINPUT_GET_STATE(gbXInputGetStateProc);
+	typedef struct _XINPUT_GAMEPAD XINPUT_GAMEPAD;
+	typedef struct _XINPUT_STATE   XINPUT_STATE;
+	typedef struct _XINPUT_VIBRATION XINPUT_VIBRATION;
 
-#define GB_XINPUT_SET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_VIBRATION *pVibration)
-typedef GB_XINPUT_SET_STATE(gbXInputSetStateProc);
+	#define GB_XINPUT_GET_STATE(name) unsigned long __stdcall name(unsigned long dwUserIndex, XINPUT_STATE *pState)
+	typedef GB_XINPUT_GET_STATE(gbXInputGetStateProc);
+
+	#define GB_XINPUT_SET_STATE(name) unsigned long __stdcall name(unsigned long dwUserIndex, XINPUT_VIBRATION *pVibration)
+	typedef GB_XINPUT_SET_STATE(gbXInputSetStateProc);
 #endif
 
 
@@ -2447,6 +2445,35 @@ typedef enum gbRendererType {
 #pragma warning(disable:4201)
 #endif
 
+#ifndef _WINDOWS_
+
+typedef struct tagBITMAPINFOHEADER {
+	unsigned long biSize;
+	long          biWidth;
+	long          biHeight;
+	u16           biPlanes;
+	u16           biBitCount;
+	unsigned long biCompression;
+	unsigned long biSizeImage;
+	long          biXPelsPerMeter;
+	long          biYPelsPerMeter;
+	unsigned long biClrUsed;
+	unsigned long biClrImportant;
+} BITMAPINFOHEADER, *PBITMAPINFOHEADER;
+
+typedef struct tagRGBQUAD {
+	u8 rgbBlue;
+	u8 rgbGreen;
+	u8 rgbRed;
+	u8 rgbReserved;
+} RGBQUAD;
+
+typedef struct tagBITMAPINFO {
+	BITMAPINFOHEADER bmiHeader;
+	RGBQUAD          bmiColors[1];
+} BITMAPINFO, *PBITMAPINFO;
+#endif
+
 typedef struct gbPlatform {
 	b32 is_initialized;
 
@@ -2457,8 +2484,7 @@ typedef struct gbPlatform {
 	b16   window_is_closed, window_has_focus;
 
 #if defined(GB_SYSTEM_WINDOWS)
-	WINDOWPLACEMENT win32_placement;
-	HDC             win32_dc;
+	void *win32_dc;
 #endif
 
 	gbRendererType renderer_type;
@@ -2616,13 +2642,1023 @@ GB_DEF void  gb_platform_hide_window                (gbPlatform *p);
 #if defined(GB_IMPLEMENTATION) && !defined(GB_IMPLEMENTATION_DONE)
 #define GB_IMPLEMENTATION_DONE
 
-#if defined(GB_SYSTEM_WINDOWS)
-
-#endif
-
 #if defined(__cplusplus)
 extern "C" {
 #endif
+
+
+#if defined(_MSC_VER) && !defined(_WINDOWS_)
+	////////////////////////////////////////////////////////////////
+	//
+	// Bill's Mini Windows.h
+	//
+	//
+
+	#define WINAPI   __stdcall
+	#define WINAPIV  __cdecl
+	#define CALLBACK __stdcall
+	#define MAX_PATH 260
+	#define CCHDEVICENAME 32
+	#define CCHFORMNAME   32
+
+	typedef unsigned long DWORD;
+	typedef int WINBOOL;
+	#ifndef XFree86Server
+		#ifndef __OBJC__
+		typedef WINBOOL BOOL;
+		#else
+		#define BOOL WINBOOL
+		#endif
+	typedef unsigned char BYTE;
+	#endif
+	typedef unsigned short WORD;
+	typedef float FLOAT;
+	typedef int INT;
+	typedef unsigned int UINT;
+	typedef short SHORT;
+	typedef long LONG;
+	typedef long long LONGLONG;
+	typedef unsigned short USHORT;
+	typedef unsigned long ULONG;
+	typedef unsigned long long ULONGLONG;
+
+	typedef UINT WPARAM;
+	typedef LONG LPARAM;
+	typedef LONG LRESULT;
+	#ifndef _HRESULT_DEFINED
+	typedef LONG HRESULT;
+	#define _HRESULT_DEFINED
+	#endif
+	#ifndef XFree86Server
+	typedef WORD ATOM;
+	#endif /* XFree86Server */
+	typedef void *HANDLE;
+	typedef HANDLE HGLOBAL;
+	typedef HANDLE HLOCAL;
+	typedef HANDLE GLOBALHANDLE;
+	typedef HANDLE LOCALHANDLE;
+	typedef void *HGDIOBJ;
+
+	#define DECLARE_HANDLE(name) typedef HANDLE name
+	DECLARE_HANDLE(HACCEL);
+	DECLARE_HANDLE(HBITMAP);
+	DECLARE_HANDLE(HBRUSH);
+	DECLARE_HANDLE(HCOLORSPACE);
+	DECLARE_HANDLE(HDC);
+	DECLARE_HANDLE(HGLRC);
+	DECLARE_HANDLE(HDESK);
+	DECLARE_HANDLE(HENHMETAFILE);
+	DECLARE_HANDLE(HFONT);
+	DECLARE_HANDLE(HICON);
+	DECLARE_HANDLE(HKEY);
+	typedef HKEY *PHKEY;
+	DECLARE_HANDLE(HMENU);
+	DECLARE_HANDLE(HMETAFILE);
+	DECLARE_HANDLE(HINSTANCE);
+	typedef HINSTANCE HMODULE;
+	DECLARE_HANDLE(HPALETTE);
+	DECLARE_HANDLE(HPEN);
+	DECLARE_HANDLE(HRGN);
+	DECLARE_HANDLE(HRSRC);
+	DECLARE_HANDLE(HSTR);
+	DECLARE_HANDLE(HTASK);
+	DECLARE_HANDLE(HWND);
+	DECLARE_HANDLE(HWINSTA);
+	DECLARE_HANDLE(HKL);
+	DECLARE_HANDLE(HRAWINPUT);
+	DECLARE_HANDLE(HMONITOR);
+	#undef DECLARE_HANDLE
+
+	typedef int HFILE;
+	typedef HICON HCURSOR;
+	typedef DWORD COLORREF;
+	typedef int (WINAPI *FARPROC)();
+	typedef int (WINAPI *NEARPROC)();
+	typedef int (WINAPI *PROC)();
+	typedef LRESULT (CALLBACK *WNDPROC)(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+	#if defined(_WIN64)
+	typedef unsigned __int64 ULONG_PTR;
+	typedef signed __int64 LONG_PTR;
+	#else
+	typedef unsigned long ULONG_PTR;
+	typedef signed long LONG_PTR;
+	#endif
+	typedef ULONG_PTR DWORD_PTR;
+
+	typedef struct tagRECT {
+		LONG left;
+		LONG top;
+		LONG right;
+		LONG bottom;
+	} RECT;
+	typedef struct tagRECTL {
+		LONG left;
+		LONG top;
+		LONG right;
+		LONG bottom;
+	} RECTL;
+	typedef struct tagPOINT {
+		LONG x;
+		LONG y;
+	} POINT;
+	typedef struct tagSIZE {
+		LONG cx;
+		LONG cy;
+	} SIZE;
+	typedef struct tagPOINTS {
+		SHORT x;
+		SHORT y;
+	} POINTS;
+	typedef struct _SECURITY_ATTRIBUTES {
+		DWORD  nLength;
+		HANDLE lpSecurityDescriptor;
+		BOOL   bInheritHandle;
+	} SECURITY_ATTRIBUTES;
+	typedef enum _LOGICAL_PROCESSOR_RELATIONSHIP {
+		RelationProcessorCore,
+		RelationNumaNode,
+		RelationCache,
+		RelationProcessorPackage,
+		RelationGroup,
+		RelationAll               = 0xffff
+	} LOGICAL_PROCESSOR_RELATIONSHIP;
+	typedef enum _PROCESSOR_CACHE_TYPE {
+		CacheUnified,
+		CacheInstruction,
+		CacheData,
+		CacheTrace
+	} PROCESSOR_CACHE_TYPE;
+	typedef struct _CACHE_DESCRIPTOR {
+		BYTE                 Level;
+		BYTE                 Associativity;
+		WORD                 LineSize;
+		DWORD                Size;
+		PROCESSOR_CACHE_TYPE Type;
+	} CACHE_DESCRIPTOR;
+	typedef struct _SYSTEM_LOGICAL_PROCESSOR_INFORMATION {
+		ULONG_PTR                       ProcessorMask;
+		LOGICAL_PROCESSOR_RELATIONSHIP Relationship;
+		union {
+			struct {
+				BYTE Flags;
+			} ProcessorCore;
+			struct {
+				DWORD NodeNumber;
+			} NumaNode;
+			CACHE_DESCRIPTOR Cache;
+			ULONGLONG        Reserved[2];
+		};
+	} SYSTEM_LOGICAL_PROCESSOR_INFORMATION;
+	typedef struct _MEMORY_BASIC_INFORMATION {
+		void *BaseAddress;
+		void *AllocationBase;
+		DWORD AllocationProtect;
+		usize RegionSize;
+		DWORD State;
+		DWORD Protect;
+		DWORD Type;
+	} MEMORY_BASIC_INFORMATION;
+	typedef struct _SYSTEM_INFO {
+		union {
+			DWORD   dwOemId;
+			struct {
+				WORD wProcessorArchitecture;
+				WORD wReserved;
+			};
+		};
+		DWORD     dwPageSize;
+		void *    lpMinimumApplicationAddress;
+		void *    lpMaximumApplicationAddress;
+		DWORD_PTR dwActiveProcessorMask;
+		DWORD     dwNumberOfProcessors;
+		DWORD     dwProcessorType;
+		DWORD     dwAllocationGranularity;
+		WORD      wProcessorLevel;
+		WORD      wProcessorRevision;
+	} SYSTEM_INFO;
+	typedef union _LARGE_INTEGER {
+		struct {
+			DWORD LowPart;
+			LONG  HighPart;
+		};
+		struct {
+			DWORD LowPart;
+			LONG  HighPart;
+		} u;
+		LONGLONG QuadPart;
+	} LARGE_INTEGER;
+	typedef union _ULARGE_INTEGER {
+		struct {
+			DWORD LowPart;
+			DWORD HighPart;
+		};
+		struct {
+			DWORD LowPart;
+			DWORD HighPart;
+		} u;
+		ULONGLONG QuadPart;
+	} ULARGE_INTEGER;
+
+	typedef struct _OVERLAPPED {
+		ULONG_PTR Internal;
+		ULONG_PTR InternalHigh;
+		union {
+			struct {
+				DWORD Offset;
+				DWORD OffsetHigh;
+			};
+			void *Pointer;
+		};
+		HANDLE hEvent;
+	} OVERLAPPED;
+	typedef struct _FILETIME {
+		DWORD dwLowDateTime;
+		DWORD dwHighDateTime;
+	} FILETIME;
+	typedef struct _WIN32_FIND_DATAW {
+		DWORD    dwFileAttributes;
+		FILETIME ftCreationTime;
+		FILETIME ftLastAccessTime;
+		FILETIME ftLastWriteTime;
+		DWORD    nFileSizeHigh;
+		DWORD    nFileSizeLow;
+		DWORD    dwReserved0;
+		DWORD    dwReserved1;
+		wchar_t  cFileName[MAX_PATH];
+		wchar_t  cAlternateFileName[14];
+	} WIN32_FIND_DATAW;
+	typedef struct _WIN32_FILE_ATTRIBUTE_DATA {
+		DWORD    dwFileAttributes;
+		FILETIME ftCreationTime;
+		FILETIME ftLastAccessTime;
+		FILETIME ftLastWriteTime;
+		DWORD    nFileSizeHigh;
+		DWORD    nFileSizeLow;
+	} WIN32_FILE_ATTRIBUTE_DATA;
+	typedef enum _GET_FILEEX_INFO_LEVELS {
+		GetFileExInfoStandard,
+		GetFileExMaxInfoLevel
+	} GET_FILEEX_INFO_LEVELS;
+	typedef struct tagRAWINPUTHEADER {
+		DWORD  dwType;
+		DWORD  dwSize;
+		HANDLE hDevice;
+		WPARAM wParam;
+	} RAWINPUTHEADER;
+	typedef struct tagRAWINPUTDEVICE {
+		USHORT usUsagePage;
+		USHORT usUsage;
+		DWORD  dwFlags;
+		HWND   hwndTarget;
+	} RAWINPUTDEVICE;
+	typedef struct tagRAWMOUSE {
+		WORD usFlags;
+		union {
+			ULONG ulButtons;
+			struct {
+				WORD usButtonFlags;
+				WORD usButtonData;
+			};
+		};
+		ULONG ulRawButtons;
+		LONG  lLastX;
+		LONG  lLastY;
+		ULONG ulExtraInformation;
+	} RAWMOUSE;
+	typedef struct tagRAWKEYBOARD {
+		WORD  MakeCode;
+		WORD  Flags;
+		WORD  Reserved;
+		WORD  VKey;
+		UINT  Message;
+		ULONG ExtraInformation;
+	} RAWKEYBOARD;
+	typedef struct tagRAWHID {
+		DWORD dwSizeHid;
+		DWORD dwCount;
+		BYTE  bRawData[1];
+	} RAWHID;
+	typedef struct tagRAWINPUT {
+		RAWINPUTHEADER header;
+		union {
+			RAWMOUSE    mouse;
+			RAWKEYBOARD keyboard;
+			RAWHID      hid;
+		} data;
+	} RAWINPUT;
+	typedef struct tagWNDCLASSEXW {
+		UINT           cbSize;
+		UINT           style;
+		WNDPROC        lpfnWndProc;
+		INT            cbClsExtra;
+		INT            cbWndExtra;
+		HINSTANCE      hInstance;
+		HICON          hIcon;
+		HCURSOR        hCursor;
+		HANDLE         hbrBackground;
+		wchar_t const *lpszMenuName;
+		wchar_t const *lpszClassName;
+		HICON          hIconSm;
+	} WNDCLASSEXW;
+	typedef struct _POINTL {
+		LONG x;
+		LONG y;
+	} POINTL;
+	typedef struct _devicemodew {
+		wchar_t dmDeviceName[CCHDEVICENAME];
+		WORD    dmSpecVersion;
+		WORD    dmDriverVersion;
+		WORD    dmSize;
+		WORD    dmDriverExtra;
+		DWORD   dmFields;
+		union {
+			struct {
+				short dmOrientation;
+				short dmPaperSize;
+				short dmPaperLength;
+				short dmPaperWidth;
+				short dmScale;
+				short dmCopies;
+				short dmDefaultSource;
+				short dmPrintQuality;
+			};
+			struct {
+				POINTL dmPosition;
+				DWORD  dmDisplayOrientation;
+				DWORD  dmDisplayFixedOutput;
+			};
+		};
+		short   dmColor;
+		short   dmDuplex;
+		short   dmYResolution;
+		short   dmTTOption;
+		short   dmCollate;
+		wchar_t dmFormName[CCHFORMNAME];
+		WORD    dmLogPixels;
+		DWORD   dmBitsPerPel;
+		DWORD   dmPelsWidth;
+		DWORD   dmPelsHeight;
+		union {
+			DWORD dmDisplayFlags;
+			DWORD dmNup;
+		};
+		DWORD dmDisplayFrequency;
+	#if (WINVER >= 0x0400)
+		DWORD dmICMMethod;
+		DWORD dmICMIntent;
+		DWORD dmMediaType;
+		DWORD dmDitherType;
+		DWORD dmReserved1;
+		DWORD dmReserved2;
+	#if (WINVER >= 0x0500) || (_WIN32_WINNT >= 0x0400)
+		DWORD dmPanningWidth;
+		DWORD dmPanningHeight;
+	#endif
+	#endif
+	} DEVMODEW;
+	typedef struct tagPIXELFORMATDESCRIPTOR {
+		WORD  nSize;
+		WORD  nVersion;
+		DWORD dwFlags;
+		BYTE  iPixelType;
+		BYTE  cColorBits;
+		BYTE  cRedBits;
+		BYTE  cRedShift;
+		BYTE  cGreenBits;
+		BYTE  cGreenShift;
+		BYTE  cBlueBits;
+		BYTE  cBlueShift;
+		BYTE  cAlphaBits;
+		BYTE  cAlphaShift;
+		BYTE  cAccumBits;
+		BYTE  cAccumRedBits;
+		BYTE  cAccumGreenBits;
+		BYTE  cAccumBlueBits;
+		BYTE  cAccumAlphaBits;
+		BYTE  cDepthBits;
+		BYTE  cStencilBits;
+		BYTE  cAuxBuffers;
+		BYTE  iLayerType;
+		BYTE  bReserved;
+		DWORD dwLayerMask;
+		DWORD dwVisibleMask;
+		DWORD dwDamageMask;
+	} PIXELFORMATDESCRIPTOR;
+	typedef struct tagMSG {     // msg
+		HWND   hwnd;
+		UINT   message;
+		WPARAM wParam;
+		LPARAM lParam;
+		DWORD time;
+		POINT pt;
+	} MSG;
+	typedef struct tagWINDOWPLACEMENT {
+		UINT length;
+		UINT flags;
+		UINT showCmd;
+		POINT ptMinPosition;
+		POINT ptMaxPosition;
+		RECT rcNormalPosition;
+	} WINDOWPLACEMENT;
+	typedef struct tagMONITORINFO {
+		DWORD cbSize;
+		RECT  rcMonitor;
+		RECT  rcWork;
+		DWORD dwFlags;
+	} MONITORINFO;
+
+
+
+	#define INFINITE 0xffffffffl
+	#define INVALID_HANDLE_VALUE ((void *)(intptr)(-1))
+
+
+	typedef DWORD WINAPI THREAD_START_ROUTINE(void *parameter);
+
+	GB_DLL_IMPORT DWORD   WINAPI GetLastError       (void);
+	GB_DLL_IMPORT BOOL    WINAPI CloseHandle        (HANDLE object);
+	GB_DLL_IMPORT HANDLE  WINAPI CreateSemaphoreA   (SECURITY_ATTRIBUTES *semaphore_attributes, LONG initial_count,
+	                                                 LONG maximum_count, char const *name);
+	GB_DLL_IMPORT BOOL    WINAPI ReleaseSemaphore   (HANDLE semaphore, LONG release_count, LONG *previous_count);
+	GB_DLL_IMPORT DWORD   WINAPI WaitForSingleObject(HANDLE handle, DWORD milliseconds);
+	GB_DLL_IMPORT HANDLE  WINAPI CreateThread       (SECURITY_ATTRIBUTES *semaphore_attributes, usize stack_size,
+	                                                 THREAD_START_ROUTINE *start_address, void *parameter,
+	                                                 DWORD creation_flags, DWORD *thread_id);
+	GB_DLL_IMPORT DWORD   WINAPI GetThreadId        (HANDLE handle);
+	GB_DLL_IMPORT void    WINAPI RaiseException     (DWORD, DWORD, DWORD, ULONG_PTR const *);
+
+
+
+	GB_DLL_IMPORT BOOL      WINAPI GetLogicalProcessorInformation(SYSTEM_LOGICAL_PROCESSOR_INFORMATION *buffer, DWORD *return_length);
+	GB_DLL_IMPORT DWORD_PTR WINAPI SetThreadAffinityMask(HANDLE thread, DWORD_PTR check_mask);
+	GB_DLL_IMPORT HANDLE    WINAPI GetCurrentThread(void);
+
+	#define PAGE_NOACCESS          0x01
+	#define PAGE_READONLY          0x02
+	#define PAGE_READWRITE         0x04
+	#define PAGE_WRITECOPY         0x08
+	#define PAGE_EXECUTE           0x10
+	#define PAGE_EXECUTE_READ      0x20
+	#define PAGE_EXECUTE_READWRITE 0x40
+	#define PAGE_EXECUTE_WRITECOPY 0x80
+	#define PAGE_GUARD            0x100
+	#define PAGE_NOCACHE          0x200
+	#define PAGE_WRITECOMBINE     0x400
+
+	#define MEM_COMMIT           0x1000
+	#define MEM_RESERVE          0x2000
+	#define MEM_DECOMMIT         0x4000
+	#define MEM_RELEASE          0x8000
+	#define MEM_FREE            0x10000
+	#define MEM_PRIVATE         0x20000
+	#define MEM_MAPPED          0x40000
+	#define MEM_RESET           0x80000
+	#define MEM_TOP_DOWN       0x100000
+	#define MEM_LARGE_PAGES  0x20000000
+	#define MEM_4MB_PAGES    0x80000000
+
+
+
+
+	GB_DLL_IMPORT void * WINAPI VirtualAlloc (void *addr, usize size, DWORD allocation_type, DWORD protect);
+	GB_DLL_IMPORT usize  WINAPI VirtualQuery (void const *address, MEMORY_BASIC_INFORMATION *buffer, usize length);
+	GB_DLL_IMPORT BOOL   WINAPI VirtualFree  (void *address, usize size, DWORD free_type);
+	GB_DLL_IMPORT void   WINAPI GetSystemInfo(SYSTEM_INFO *system_info);
+
+
+	#ifndef VK_UNKNOWN
+	#define VK_UNKNOWN 0
+	#define VK_LBUTTON  0x01
+	#define VK_RBUTTON  0x02
+	#define VK_CANCEL   0x03
+	#define VK_MBUTTON  0x04
+	#define VK_XBUTTON1 0x05
+	#define VK_XBUTTON2 0x06
+	#define VK_BACK 0x08
+	#define VK_TAB 0x09
+	#define VK_CLEAR 0x0C
+	#define VK_RETURN 0x0D
+	#define VK_SHIFT 0x10
+	#define VK_CONTROL 0x11 // CTRL key
+	#define VK_MENU 0x12 // ALT key
+	#define VK_PAUSE 0x13 // PAUSE key
+	#define VK_CAPITAL 0x14 // CAPS LOCK key
+	#define VK_KANA 0x15 // Input Method Editor (IME) Kana mode
+	#define VK_HANGUL 0x15 // IME Hangul mode
+	#define VK_JUNJA 0x17 // IME Junja mode
+	#define VK_FINAL 0x18 // IME final mode
+	#define VK_HANJA 0x19 // IME Hanja mode
+	#define VK_KANJI 0x19 // IME Kanji mode
+	#define VK_ESCAPE 0x1B // ESC key
+	#define VK_CONVERT 0x1C // IME convert
+	#define VK_NONCONVERT 0x1D // IME nonconvert
+	#define VK_ACCEPT 0x1E // IME accept
+	#define VK_MODECHANGE 0x1F // IME mode change request
+	#define VK_SPACE 0x20 // SPACE key
+	#define VK_PRIOR 0x21 // PAGE UP key
+	#define VK_NEXT 0x22 // PAGE DOWN key
+	#define VK_END 0x23 // END key
+	#define VK_HOME 0x24 // HOME key
+	#define VK_LEFT 0x25 // LEFT ARROW key
+	#define VK_UP 0x26 // UP ARROW key
+	#define VK_RIGHT 0x27 // RIGHT ARROW key
+	#define VK_DOWN 0x28 // DOWN ARROW key
+	#define VK_SELECT 0x29 // SELECT key
+	#define VK_PRINT 0x2A // PRINT key
+	#define VK_EXECUTE 0x2B // EXECUTE key
+	#define VK_SNAPSHOT 0x2C // PRINT SCREEN key
+	#define VK_INSERT 0x2D // INS key
+	#define VK_DELETE 0x2E // DEL key
+	#define VK_HELP 0x2F // HELP key
+	#define VK_0 0x30
+	#define VK_1 0x31
+	#define VK_2 0x32
+	#define VK_3 0x33
+	#define VK_4 0x34
+	#define VK_5 0x35
+	#define VK_6 0x36
+	#define VK_7 0x37
+	#define VK_8 0x38
+	#define VK_9 0x39
+	#define VK_A 0x41
+	#define VK_B 0x42
+	#define VK_C 0x43
+	#define VK_D 0x44
+	#define VK_E 0x45
+	#define VK_F 0x46
+	#define VK_G 0x47
+	#define VK_H 0x48
+	#define VK_I 0x49
+	#define VK_J 0x4A
+	#define VK_K 0x4B
+	#define VK_L 0x4C
+	#define VK_M 0x4D
+	#define VK_N 0x4E
+	#define VK_O 0x4F
+	#define VK_P 0x50
+	#define VK_Q 0x51
+	#define VK_R 0x52
+	#define VK_S 0x53
+	#define VK_T 0x54
+	#define VK_U 0x55
+	#define VK_V 0x56
+	#define VK_W 0x57
+	#define VK_X 0x58
+	#define VK_Y 0x59
+	#define VK_Z 0x5A
+	#define VK_LWIN 0x5B // Left Windows key (Microsoft Natural keyboard)
+	#define VK_RWIN 0x5C // Right Windows key (Natural keyboard)
+	#define VK_APPS 0x5D // Applications key (Natural keyboard)
+	#define VK_SLEEP 0x5F // Computer Sleep key
+	// Num pad keys
+	#define VK_NUMPAD0 0x60
+	#define VK_NUMPAD1 0x61
+	#define VK_NUMPAD2 0x62
+	#define VK_NUMPAD3 0x63
+	#define VK_NUMPAD4 0x64
+	#define VK_NUMPAD5 0x65
+	#define VK_NUMPAD6 0x66
+	#define VK_NUMPAD7 0x67
+	#define VK_NUMPAD8 0x68
+	#define VK_NUMPAD9 0x69
+	#define VK_MULTIPLY 0x6A
+	#define VK_ADD 0x6B
+	#define VK_SEPARATOR 0x6C
+	#define VK_SUBTRACT 0x6D
+	#define VK_DECIMAL 0x6E
+	#define VK_DIVIDE 0x6F
+	#define VK_F1 0x70
+	#define VK_F2 0x71
+	#define VK_F3 0x72
+	#define VK_F4 0x73
+	#define VK_F5 0x74
+	#define VK_F6 0x75
+	#define VK_F7 0x76
+	#define VK_F8 0x77
+	#define VK_F9 0x78
+	#define VK_F10 0x79
+	#define VK_F11 0x7A
+	#define VK_F12 0x7B
+	#define VK_F13 0x7C
+	#define VK_F14 0x7D
+	#define VK_F15 0x7E
+	#define VK_F16 0x7F
+	#define VK_F17 0x80
+	#define VK_F18 0x81
+	#define VK_F19 0x82
+	#define VK_F20 0x83
+	#define VK_F21 0x84
+	#define VK_F22 0x85
+	#define VK_F23 0x86
+	#define VK_F24 0x87
+	#define VK_NUMLOCK 0x90
+	#define VK_SCROLL 0x91
+	#define VK_LSHIFT 0xA0
+	#define VK_RSHIFT 0xA1
+	#define VK_LCONTROL 0xA2
+	#define VK_RCONTROL 0xA3
+	#define VK_LMENU 0xA4
+	#define VK_RMENU 0xA5
+	#define VK_BROWSER_BACK 0xA6 // Windows 2000/XP: Browser Back key
+	#define VK_BROWSER_FORWARD 0xA7 // Windows 2000/XP: Browser Forward key
+	#define VK_BROWSER_REFRESH 0xA8 // Windows 2000/XP: Browser Refresh key
+	#define VK_BROWSER_STOP 0xA9 // Windows 2000/XP: Browser Stop key
+	#define VK_BROWSER_SEARCH 0xAA // Windows 2000/XP: Browser Search key
+	#define VK_BROWSER_FAVORITES 0xAB // Windows 2000/XP: Browser Favorites key
+	#define VK_BROWSER_HOME 0xAC // Windows 2000/XP: Browser Start and Home key
+	#define VK_VOLUME_MUTE 0xAD // Windows 2000/XP: Volume Mute key
+	#define VK_VOLUME_DOWN 0xAE // Windows 2000/XP: Volume Down key
+	#define VK_VOLUME_UP 0xAF // Windows 2000/XP: Volume Up key
+	#define VK_MEDIA_NEXT_TRACK 0xB0 // Windows 2000/XP: Next Track key
+	#define VK_MEDIA_PREV_TRACK 0xB1 // Windows 2000/XP: Previous Track key
+	#define VK_MEDIA_STOP 0xB2 // Windows 2000/XP: Stop Media key
+	#define VK_MEDIA_PLAY_PAUSE 0xB3 // Windows 2000/XP: Play/Pause Media key
+	#define VK_MEDIA_LAUNCH_MAIL 0xB4 // Windows 2000/XP: Start Mail key
+	#define VK_MEDIA_LAUNCH_MEDIA_SELECT 0xB5 // Windows 2000/XP: Select Media key
+	#define VK_MEDIA_LAUNCH_APP1 0xB6 // VK_LAUNCH_APP1 (B6) Windows 2000/XP: Start Application 1 key
+	#define VK_MEDIA_LAUNCH_APP2 0xB7 // VK_LAUNCH_APP2 (B7) Windows 2000/XP: Start Application 2 key
+	#define VK_OEM_1 0xBA
+	#define VK_OEM_PLUS 0xBB
+	#define VK_OEM_COMMA 0xBC
+	#define VK_OEM_MINUS 0xBD
+	#define VK_OEM_PERIOD 0xBE
+	#define VK_OEM_2 0xBF
+	#define VK_OEM_3 0xC0
+	#define VK_OEM_4 0xDB
+	#define VK_OEM_5 0xDC
+	#define VK_OEM_6 0xDD
+	#define VK_OEM_7 0xDE
+	#define VK_OEM_8 0xDF
+	#define VK_OEM_102 0xE2
+	#define VK_PROCESSKEY 0xE5
+	#define VK_PACKET 0xE7
+	#define VK_ATTN 0xF6 // Attn key
+	#define VK_CRSEL 0xF7 // CrSel key
+	#define VK_EXSEL 0xF8 // ExSel key
+	#define VK_EREOF 0xF9 // Erase EOF key
+	#define VK_PLAY 0xFA // Play key
+	#define VK_ZOOM 0xFB // Zoom key
+	#define VK_NONAME 0xFC // Reserved for future use
+	#define VK_PA1 0xFD // VK_PA1 (FD) PA1 key
+	#define VK_OEM_CLEAR 0xFE // Clear key
+	#endif // VK_UNKNOWN
+
+
+
+	#define GENERIC_READ             0x80000000
+	#define GENERIC_WRITE            0x40000000
+	#define GENERIC_EXECUTE          0x20000000
+	#define GENERIC_ALL              0x10000000
+	#define FILE_SHARE_READ          0x00000001
+	#define FILE_SHARE_WRITE         0x00000002
+	#define FILE_SHARE_DELETE        0x00000004
+	#define CREATE_NEW               1
+	#define CREATE_ALWAYS            2
+	#define OPEN_EXISTING            3
+	#define OPEN_ALWAYS              4
+	#define TRUNCATE_EXISTING        5
+	#define FILE_ATTRIBUTE_READONLY  0x00000001
+	#define FILE_ATTRIBUTE_NORMAL    0x00000080
+	#define FILE_ATTRIBUTE_TEMPORARY 0x00000100
+	#define ERROR_FILE_NOT_FOUND     2l
+	#define ERROR_ACCESS_DENIED      5L
+	#define ERROR_NO_MORE_FILES      18l
+	#define ERROR_FILE_EXISTS        80l
+	#define ERROR_ALREADY_EXISTS     183l
+	#define STD_INPUT_HANDLE         ((DWORD)-10)
+	#define STD_OUTPUT_HANDLE        ((DWORD)-11)
+	#define STD_ERROR_HANDLE         ((DWORD)-12)
+
+	GB_DLL_IMPORT BOOL   WINAPI SetFilePointerEx(HANDLE file, LARGE_INTEGER distance_to_move,
+	                                             LARGE_INTEGER *new_file_pointer, DWORD move_method);
+	GB_DLL_IMPORT BOOL   WINAPI ReadFile        (HANDLE file, void *buffer, DWORD bytes_to_read, DWORD *bytes_read, OVERLAPPED *overlapped);
+	GB_DLL_IMPORT BOOL   WINAPI WriteFile       (HANDLE file, void const *buffer, DWORD bytes_to_write, DWORD *bytes_written, OVERLAPPED *overlapped);
+	GB_DLL_IMPORT HANDLE WINAPI CreateFileW     (wchar_t const *path, DWORD desired_access, DWORD share_mode,
+	                                             SECURITY_ATTRIBUTES *, DWORD creation_disposition,
+	                                             DWORD flags_and_attributes, HANDLE template_file);
+	GB_DLL_IMPORT HANDLE WINAPI GetStdHandle    (DWORD std_handle);
+	GB_DLL_IMPORT BOOL   WINAPI GetFileSizeEx   (HANDLE file, LARGE_INTEGER *size);
+	GB_DLL_IMPORT BOOL   WINAPI SetEndOfFile    (HANDLE file);
+	GB_DLL_IMPORT HANDLE WINAPI FindFirstFileW  (wchar_t const *path, WIN32_FIND_DATAW *data);
+	GB_DLL_IMPORT BOOL   WINAPI FindClose       (HANDLE find_file);
+	GB_DLL_IMPORT BOOL   WINAPI GetFileAttributesExW(wchar_t const *path, GET_FILEEX_INFO_LEVELS info_level_id, WIN32_FILE_ATTRIBUTE_DATA *data);
+	GB_DLL_IMPORT BOOL   WINAPI CopyFileW(wchar_t const *old_f, wchar_t const *new_f, BOOL fail_if_exists);
+	GB_DLL_IMPORT BOOL   WINAPI MoveFileW(wchar_t const *old_f, wchar_t const *new_f);
+
+	GB_DLL_IMPORT HMODULE WINAPI LoadLibraryA  (char const *filename);
+	GB_DLL_IMPORT BOOL    WINAPI FreeLibrary   (HMODULE module);
+	GB_DLL_IMPORT FARPROC WINAPI GetProcAddress(HMODULE module, char const *name);
+
+	GB_DLL_IMPORT BOOL WINAPI QueryPerformanceFrequency(LARGE_INTEGER *frequency);
+	GB_DLL_IMPORT BOOL WINAPI QueryPerformanceCounter  (LARGE_INTEGER *counter);
+	GB_DLL_IMPORT void WINAPI GetSystemTimeAsFileTime  (FILETIME *system_time_as_file_time);
+	GB_DLL_IMPORT void WINAPI Sleep(DWORD milliseconds);
+	GB_DLL_IMPORT void WINAPI ExitProcess(UINT exit_code);
+
+	GB_DLL_IMPORT BOOL WINAPI SetEnvironmentVariableA(char const *name, char const *value);
+
+
+	#define WM_NULL                   0x0000
+	#define WM_CREATE                 0x0001
+	#define WM_DESTROY                0x0002
+	#define WM_MOVE                   0x0003
+	#define WM_SIZE                   0x0005
+	#define WM_ACTIVATE               0x0006
+	#define WM_SETFOCUS               0x0007
+	#define WM_KILLFOCUS              0x0008
+	#define WM_ENABLE                 0x000A
+	#define WM_SETREDRAW              0x000B
+	#define WM_SETTEXT                0x000C
+	#define WM_GETTEXT                0x000D
+	#define WM_GETTEXTLENGTH          0x000E
+	#define WM_PAINT                  0x000F
+	#define WM_CLOSE                  0x0010
+	#define WM_QUERYENDSESSION        0x0011
+	#define WM_QUERYOPEN              0x0013
+	#define WM_ENDSESSION             0x0016
+	#define WM_QUIT                   0x0012
+	#define WM_ERASEBKGND             0x0014
+	#define WM_SYSCOLORCHANGE         0x0015
+	#define WM_SHOWWINDOW             0x0018
+	#define WM_WININICHANGE           0x001A
+	#define WM_SETTINGCHANGE          WM_WININICHANGE
+	#define WM_DEVMODECHANGE          0x001B
+	#define WM_ACTIVATEAPP            0x001C
+	#define WM_FONTCHANGE             0x001D
+	#define WM_TIMECHANGE             0x001E
+	#define WM_CANCELMODE             0x001F
+	#define WM_SETCURSOR              0x0020
+	#define WM_MOUSEACTIVATE          0x0021
+	#define WM_CHILDACTIVATE          0x0022
+	#define WM_QUEUESYNC              0x0023
+	#define WM_GETMINMAXINFO          0x0024
+	#define WM_PAINTICON              0x0026
+	#define WM_ICONERASEBKGND         0x0027
+	#define WM_NEXTDLGCTL             0x0028
+	#define WM_SPOOLERSTATUS          0x002A
+	#define WM_DRAWITEM               0x002B
+	#define WM_MEASUREITEM            0x002C
+	#define WM_DELETEITEM             0x002D
+	#define WM_VKEYTOITEM             0x002E
+	#define WM_CHARTOITEM             0x002F
+	#define WM_SETFONT                0x0030
+	#define WM_GETFONT                0x0031
+	#define WM_SETHOTKEY              0x0032
+	#define WM_GETHOTKEY              0x0033
+	#define WM_QUERYDRAGICON          0x0037
+	#define WM_COMPAREITEM            0x0039
+	#define WM_GETOBJECT              0x003D
+	#define WM_COMPACTING             0x0041
+	#define WM_COMMNOTIFY             0x0044  /* no longer suported */
+	#define WM_WINDOWPOSCHANGING      0x0046
+	#define WM_WINDOWPOSCHANGED       0x0047
+	#define WM_POWER                  0x0048
+	#define WM_COPYDATA               0x004A
+	#define WM_CANCELJOURNAL          0x004B
+	#define WM_NOTIFY                 0x004E
+	#define WM_INPUTLANGCHANGEREQUEST 0x0050
+	#define WM_INPUTLANGCHANGE        0x0051
+	#define WM_TCARD                  0x0052
+	#define WM_HELP                   0x0053
+	#define WM_USERCHANGED            0x0054
+	#define WM_NOTIFYFORMAT           0x0055
+	#define WM_CONTEXTMENU            0x007B
+	#define WM_STYLECHANGING          0x007C
+	#define WM_STYLECHANGED           0x007D
+	#define WM_DISPLAYCHANGE          0x007E
+	#define WM_GETICON                0x007F
+	#define WM_SETICON                0x0080
+	#define WM_INPUT                  0x00FF
+	#define WM_KEYFIRST               0x0100
+	#define WM_KEYDOWN                0x0100
+	#define WM_KEYUP                  0x0101
+	#define WM_CHAR                   0x0102
+	#define WM_DEADCHAR               0x0103
+	#define WM_SYSKEYDOWN             0x0104
+	#define WM_SYSKEYUP               0x0105
+	#define WM_SYSCHAR                0x0106
+	#define WM_SYSDEADCHAR            0x0107
+	#define WM_UNICHAR                0x0109
+	#define WM_KEYLAST                0x0109
+	#define WM_APP                    0x8000
+
+
+	#define RID_INPUT 0x10000003
+
+	#define RIM_TYPEMOUSE    0x00000000
+	#define RIM_TYPEKEYBOARD 0x00000001
+	#define RIM_TYPEHID      0x00000002
+
+	#define RI_KEY_MAKE    0x0000
+	#define RI_KEY_BREAK   0x0001
+	#define RI_KEY_E0      0x0002
+	#define RI_KEY_E1      0x0004
+	#define RI_MOUSE_WHEEL 0x0400
+
+	#define RIDEV_NOLEGACY 0x00000030
+
+	#define MAPVK_VK_TO_VSC    0
+	#define MAPVK_VSC_TO_VK    1
+	#define MAPVK_VK_TO_CHAR   2
+	#define MAPVK_VSC_TO_VK_EX 3
+
+	GB_DLL_IMPORT BOOL WINAPI RegisterRawInputDevices(RAWINPUTDEVICE const *raw_input_devices, UINT num_devices, UINT size);
+	GB_DLL_IMPORT UINT WINAPI GetRawInputData(HRAWINPUT raw_input, UINT ui_command, void *data, UINT *size, UINT size_header);
+	GB_DLL_IMPORT UINT WINAPI MapVirtualKeyW(UINT code, UINT map_type);
+
+
+	#define CS_DBLCLKS 		0x0008
+	#define CS_VREDRAW 		0x0001
+	#define CS_HREDRAW 		0x0002
+
+	#define MB_OK              0x0000l
+	#define MB_ICONSTOP        0x0010l
+	#define MB_YESNO           0x0004l
+	#define MB_HELP            0x4000l
+	#define MB_ICONEXCLAMATION 0x0030l
+
+	GB_DLL_IMPORT LRESULT WINAPI DefWindowProcW(HWND wnd, UINT msg, WPARAM wParam, LPARAM lParam);
+	GB_DLL_IMPORT HGDIOBJ WINAPI GetStockObject(int object);
+	GB_DLL_IMPORT HMODULE WINAPI GetModuleHandleW(wchar_t const *);
+	GB_DLL_IMPORT ATOM    WINAPI RegisterClassExW(WNDCLASSEXW const *wcx); // u16 == ATOM
+	GB_DLL_IMPORT int     WINAPI MessageBoxW(void *wnd, wchar_t const *text, wchar_t const *caption, unsigned int type);
+
+
+	#define DM_BITSPERPEL 0x00040000l
+	#define DM_PELSWIDTH  0x00080000l
+	#define DM_PELSHEIGHT 0x00100000l
+
+	#define CDS_FULLSCREEN 0x4
+	#define DISP_CHANGE_SUCCESSFUL 0
+	#define IDYES 6
+
+	#define WS_VISIBLE          0x10000000
+	#define WS_THICKFRAME       0x00040000
+	#define WS_MAXIMIZE         0x01000000
+	#define WS_MAXIMIZEBOX      0x00010000
+	#define WS_MINIMIZE         0x20000000
+	#define WS_MINIMIZEBOX      0x00020000
+	#define WS_POPUP            0x80000000
+	#define WS_OVERLAPPED	    0
+	#define WS_OVERLAPPEDWINDOW	0xcf0000
+	#define CW_USEDEFAULT       0x80000000
+	#define WS_BORDER           0x800000
+	#define WS_CAPTION          0xc00000
+	#define WS_SYSMENU          0x80000
+
+	#define HWND_NOTOPMOST (HWND)(-2)
+	#define HWND_TOPMOST   (HWND)(-1)
+	#define HWND_TOP       (HWND)(+0)
+	#define HWND_BOTTOM    (HWND)(+1)
+	#define SWP_NOSIZE          0x0001
+	#define SWP_NOMOVE          0x0002
+	#define SWP_NOZORDER        0x0004
+	#define SWP_NOREDRAW        0x0008
+	#define SWP_NOACTIVATE      0x0010
+	#define SWP_FRAMECHANGED    0x0020
+	#define SWP_SHOWWINDOW      0x0040
+	#define SWP_HIDEWINDOW      0x0080
+	#define SWP_NOCOPYBITS      0x0100
+	#define SWP_NOOWNERZORDER   0x0200
+	#define SWP_NOSENDCHANGING  0x0400
+
+	#define SW_HIDE             0
+	#define SW_SHOWNORMAL       1
+	#define SW_NORMAL           1
+	#define SW_SHOWMINIMIZED    2
+	#define SW_SHOWMAXIMIZED    3
+	#define SW_MAXIMIZE         3
+	#define SW_SHOWNOACTIVATE   4
+	#define SW_SHOW             5
+	#define SW_MINIMIZE         6
+	#define SW_SHOWMINNOACTIVE  7
+	#define SW_SHOWNA           8
+	#define SW_RESTORE          9
+	#define SW_SHOWDEFAULT      10
+	#define SW_FORCEMINIMIZE    11
+	#define SW_MAX              11
+
+	#define ENUM_CURRENT_SETTINGS  cast(DWORD)-1
+	#define ENUM_REGISTRY_SETTINGS cast(DWORD)-2
+
+	GB_DLL_IMPORT LONG    WINAPI ChangeDisplaySettingsW(DEVMODEW *dev_mode, DWORD flags);
+	GB_DLL_IMPORT BOOL    WINAPI AdjustWindowRect(RECT *rect, DWORD style, BOOL enu);
+	GB_DLL_IMPORT HWND    WINAPI CreateWindowExW(DWORD ex_style, wchar_t const *class_name, wchar_t const *window_name,
+	                                             DWORD style, int x, int y, int width, int height, HWND wnd_parent,
+	                                             HMENU menu, HINSTANCE instance, void *param);
+	GB_DLL_IMPORT HMODULE  WINAPI GetModuleHandleW(wchar_t const *);
+	GB_DLL_IMPORT HDC             GetDC(HANDLE);
+	GB_DLL_IMPORT BOOL     WINAPI GetWindowPlacement(HWND hWnd, WINDOWPLACEMENT *lpwndpl);
+	GB_DLL_IMPORT BOOL            GetMonitorInfoW(HMONITOR hMonitor, MONITORINFO *lpmi);
+	GB_DLL_IMPORT HMONITOR        MonitorFromWindow(HWND hwnd, DWORD dwFlags);
+	GB_DLL_IMPORT LONG     WINAPI SetWindowLongW(HWND hWnd, int nIndex, LONG dwNewLong);
+	GB_DLL_IMPORT BOOL     WINAPI SetWindowPos(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags);
+	GB_DLL_IMPORT BOOL     WINAPI SetWindowPlacement(HWND hWnd, WINDOWPLACEMENT const *lpwndpl);
+	GB_DLL_IMPORT BOOL     WINAPI ShowWindow(HWND hWnd, int nCmdShow);
+	GB_DLL_IMPORT LONG_PTR WINAPI GetWindowLongPtrW(HWND wnd, int index);
+
+	GB_DLL_IMPORT BOOL           EnumDisplaySettingsW(wchar_t const *lpszDeviceName, DWORD iModeNum, DEVMODEW *lpDevMode);
+	GB_DLL_IMPORT void *  WINAPI GlobalLock(HGLOBAL hMem);
+	GB_DLL_IMPORT BOOL    WINAPI GlobalUnlock(HGLOBAL hMem);
+	GB_DLL_IMPORT HGLOBAL WINAPI GlobalAlloc(UINT uFlags, usize dwBytes);
+	GB_DLL_IMPORT HANDLE  WINAPI GetClipboardData(UINT uFormat);
+	GB_DLL_IMPORT BOOL    WINAPI IsClipboardFormatAvailable(UINT format);
+	GB_DLL_IMPORT BOOL    WINAPI OpenClipboard(HWND hWndNewOwner);
+	GB_DLL_IMPORT BOOL    WINAPI EmptyClipboard(void);
+	GB_DLL_IMPORT BOOL    WINAPI CloseClipboard(void);
+	GB_DLL_IMPORT HANDLE  WINAPI SetClipboardData(UINT uFormat, HANDLE hMem);
+
+	#define PFD_TYPE_RGBA             0
+	#define PFD_TYPE_COLORINDEX       1
+	#define PFD_MAIN_PLANE            0
+	#define PFD_OVERLAY_PLANE         1
+	#define PFD_UNDERLAY_PLANE        (-1)
+	#define PFD_DOUBLEBUFFER          1
+	#define PFD_STEREO                2
+	#define PFD_DRAW_TO_WINDOW        4
+	#define PFD_DRAW_TO_BITMAP        8
+	#define PFD_SUPPORT_GDI           16
+	#define PFD_SUPPORT_OPENGL        32
+	#define PFD_GENERIC_FORMAT        64
+	#define PFD_NEED_PALETTE          128
+	#define PFD_NEED_SYSTEM_PALETTE   0x00000100
+	#define PFD_SWAP_EXCHANGE         0x00000200
+	#define PFD_SWAP_COPY             0x00000400
+	#define PFD_SWAP_LAYER_BUFFERS    0x00000800
+	#define PFD_GENERIC_ACCELERATED   0x00001000
+	#define PFD_DEPTH_DONTCARE        0x20000000
+	#define PFD_DOUBLEBUFFER_DONTCARE 0x40000000
+	#define PFD_STEREO_DONTCARE       0x80000000
+
+	#define GWLP_USERDATA -21
+
+	#define GWL_ID    -12
+	#define GWL_STYLE -16
+
+	GB_DLL_IMPORT BOOL  WINAPI SetPixelFormat   (HDC hdc, int pixel_format, PIXELFORMATDESCRIPTOR const *pfd);
+	GB_DLL_IMPORT int   WINAPI ChoosePixelFormat(HDC hdc, PIXELFORMATDESCRIPTOR const *pfd);
+	GB_DLL_IMPORT HGLRC WINAPI wglCreateContext (HDC hdc);
+	GB_DLL_IMPORT BOOL  WINAPI wglMakeCurrent   (HDC hdc, HGLRC hglrc);
+	GB_DLL_IMPORT PROC  WINAPI wglGetProcAddress(char const *str);
+	GB_DLL_IMPORT BOOL  WINAPI wglDeleteContext (HGLRC hglrc);
+
+	GB_DLL_IMPORT BOOL     WINAPI SetForegroundWindow(HWND hWnd);
+	GB_DLL_IMPORT HWND     WINAPI SetFocus(HWND hWnd);
+	GB_DLL_IMPORT LONG_PTR WINAPI SetWindowLongPtrW(HWND hWnd, int nIndex, LONG_PTR dwNewLong);
+	GB_DLL_IMPORT BOOL     WINAPI GetClientRect(HWND hWnd, RECT *lpRect);
+	GB_DLL_IMPORT BOOL     WINAPI IsIconic(HWND hWnd);
+	GB_DLL_IMPORT HWND     WINAPI GetFocus(void);
+	GB_DLL_IMPORT int      WINAPI ShowCursor(BOOL bShow);
+	GB_DLL_IMPORT SHORT    WINAPI GetAsyncKeyState(int key);
+	GB_DLL_IMPORT BOOL     WINAPI GetCursorPos(POINT *lpPoint);
+	GB_DLL_IMPORT BOOL     WINAPI SetCursorPos(int x, int y);
+	GB_DLL_IMPORT BOOL            ScreenToClient(HWND hWnd, POINT *lpPoint);
+	GB_DLL_IMPORT BOOL            ClientToScreen(HWND hWnd, POINT *lpPoint);
+	GB_DLL_IMPORT BOOL     WINAPI MoveWindow(HWND hWnd, int X, int Y, int nWidth, int nHeight, BOOL bRepaint);
+	GB_DLL_IMPORT BOOL     WINAPI SetWindowTextW(HWND hWnd, wchar_t const *lpString);
+	GB_DLL_IMPORT DWORD    WINAPI GetWindowLongW(HWND hWnd, int nIndex);
+
+
+
+
+	#define PM_NOREMOVE 0
+	#define PM_REMOVE   1
+
+	GB_DLL_IMPORT BOOL    WINAPI PeekMessageW(MSG *lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMax, UINT wRemoveMsg);
+	GB_DLL_IMPORT BOOL    WINAPI TranslateMessage(MSG const *lpMsg);
+	GB_DLL_IMPORT LRESULT WINAPI DispatchMessageW(MSG const *lpMsg);
+
+	typedef  enum
+	{
+		DIB_RGB_COLORS  = 0x00,
+		DIB_PAL_COLORS  = 0x01,
+		DIB_PAL_INDICES = 0x02
+	} DIBColors;
+
+	#define SRCCOPY     (u32)0x00CC0020
+	#define SRCPAINT    (u32)0x00EE0086
+	#define SRCAND      (u32)0x008800C6
+	#define SRCINVERT   (u32)0x00660046
+	#define SRCERASE    (u32)0x00440328
+	#define NOTSRCCOPY  (u32)0x00330008
+	#define NOTSRCERASE (u32)0x001100A6
+	#define MERGECOPY   (u32)0x00C000CA
+	#define MERGEPAINT  (u32)0x00BB0226
+	#define PATCOPY     (u32)0x00F00021
+	#define PATPAINT    (u32)0x00FB0A09
+	#define PATINVERT   (u32)0x005A0049
+	#define DSTINVERT   (u32)0x00550009
+	#define BLACKNESS   (u32)0x00000042
+	#define WHITENESS   (u32)0x00FF0062
+
+	GB_DLL_IMPORT BOOL WINAPI SwapBuffers(HDC hdc);
+	GB_DLL_IMPORT BOOL WINAPI DestroyWindow(HWND hWnd);
+	GB_DLL_IMPORT int         StretchDIBits(HDC hdc, int XDest, int YDest, int nDestWidth, int nDestHeight,
+	                                        int XSrc, int YSrc, int nSrcWidth, int nSrcHeight,
+	                                        void const *lpBits, BITMAPINFO const *lpBitsInfo, UINT iUsage, DWORD dwRop);
+#endif // Bill's Mini Windows.h
+
 
 
 #if defined(__GCC__) || defined(__GNUC__)
@@ -3385,10 +4421,8 @@ gb_inline void gb_lfence(void) {
 
 
 
-
-
 #if defined(GB_SYSTEM_WINDOWS)
-	gb_inline void gb_semaphore_init   (gbSemaphore *s)            { s->win32_handle = CreateSemaphoreA(NULL, 0, MAXLONG, NULL); }
+	gb_inline void gb_semaphore_init   (gbSemaphore *s)            { s->win32_handle = CreateSemaphoreA(NULL, 0, I32_MAX, NULL); }
 	gb_inline void gb_semaphore_destroy(gbSemaphore *s)            { CloseHandle(s->win32_handle); }
 	gb_inline void gb_semaphore_post   (gbSemaphore *s, i32 count) { ReleaseSemaphore(s->win32_handle, count, NULL); }
 	gb_inline void gb_semaphore_wait   (gbSemaphore *s)            { WaitForSingleObject(s->win32_handle, INFINITE); }
@@ -3571,21 +4605,21 @@ void gb_thread_set_name(gbThread *t, char const *name) {
 #if defined(GB_COMPILER_MSVC)
 	#pragma pack(push, 8)
 		typedef struct {
-			DWORD      type;
+			DWORD       type;
 			char const *name;
-			DWORD      id;
-			DWORD      flags;
+			DWORD       id;
+			DWORD       flags;
 		} gbprivThreadName;
 	#pragma pack(pop)
 		gbprivThreadName tn;
 		tn.type  = 0x1000;
 		tn.name  = name;
-		tn.id    = GetThreadId(t->win32_handle);
+		tn.id    = GetThreadId(cast(HANDLE)t->win32_handle);
 		tn.flags = 0;
 
 		__try {
-			RaiseException(0x406d1388, 0, gb_size_of(tn)/4, cast(ULONG_PTR *)&tn);
-		} __except(EXCEPTION_EXECUTE_HANDLER) {
+			RaiseException(0x406d1388, 0, gb_size_of(tn)/4, cast(usize *)&tn);
+		} __except(1 /*EXCEPTION_EXECUTE_HANDLER*/) {
 		}
 
 #elif defined(GB_SYSTEM_WINDOWS) && !defined(GB_COMPILER_MSVC)
@@ -3654,11 +4688,11 @@ GB_ALLOCATOR_PROC(gb_heap_allocator_proc) {
 void gb_affinity_init(gbAffinity *a) {
 	SYSTEM_LOGICAL_PROCESSOR_INFORMATION *start_processor_info = NULL;
 	DWORD length = 0;
-	BOOL result  = GetLogicalProcessorInformation(NULL, &length);
+	b32 result  = GetLogicalProcessorInformation(NULL, &length);
 
 	gb_zero_item(a);
 
-	if (!result && GetLastError() == ERROR_INSUFFICIENT_BUFFER && length > 0) {
+	if (!result && GetLastError() == 122l /*ERROR_INSUFFICIENT_BUFFER*/ && length > 0) {
 		start_processor_info = cast(SYSTEM_LOGICAL_PROCESSOR_INFORMATION *)gb_alloc(gb_heap_allocator(), length);
 		result = GetLogicalProcessorInformation(start_processor_info, &length);
 		if (result) {
@@ -3713,7 +4747,7 @@ b32 gb_affinity_set(gbAffinity *a, isize core, isize thread) {
 	for (;;) {
 		if ((available_mask & check_mask) != 0) {
 			if (thread-- == 0) {
-				DWORD_PTR result = SetThreadAffinityMask(GetCurrentThread(), check_mask);
+				usize result = SetThreadAffinityMask(GetCurrentThread(), check_mask);
 				return result != 0;
 			}
 		}
@@ -3819,7 +4853,7 @@ gb_inline gbVirtualMemory gb_vm_alloc(void *addr, isize size) {
 gb_inline b32 gb_vm_free(gbVirtualMemory vm) {
 	MEMORY_BASIC_INFORMATION info;
 	while (vm.size > 0) {
-		if (VirtualQuery(cast(LPCVOID)vm.data, &info, gb_size_of(info)) == 0)
+		if (VirtualQuery(vm.data, &info, gb_size_of(info)) == 0)
 			return false;
 		if (info.BaseAddress != vm.data ||
 		    info.AllocationBase != vm.data ||
@@ -5952,7 +6986,7 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 	gb_no_inline GB_FILE_OPEN_PROC(gb__win32_file_open) {
 		DWORD desired_access;
 		DWORD creation_disposition;
-		HANDLE handle;
+		void *handle;
 		char16 path[1024] = {0}; // TODO(bill): Is this really enough or should I heap allocate this if it's too large?
 
 		switch (mode & GB_FILE_MODES) {
@@ -5985,7 +7019,7 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 			return GB_FILE_ERR_INVALID;
 		}
 
-		handle = CreateFileW(cast(LPCWSTR)gb_utf8_to_ucs2(path, gb_count_of(path), filename),
+		handle = CreateFileW(cast(wchar_t const *)gb_utf8_to_ucs2(path, gb_count_of(path), filename),
 		                     desired_access,
 		                     FILE_SHARE_READ|FILE_SHARE_DELETE, NULL,
 		                     creation_disposition, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -6003,7 +7037,7 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 
 		if (mode & GB_FILE_APPEND) {
 			LARGE_INTEGER offset = {0};
-			if (!SetFilePointerEx(handle, offset, NULL, FILE_END)) {
+			if (!SetFilePointerEx(handle, offset, NULL, GB_SEEK_END)) {
 				CloseHandle(handle);
 				return GB_FILE_ERR_INVALID;
 			}
@@ -6239,7 +7273,7 @@ gbFileError gb_file_truncate(gbFile *f, i64 size) {
 
 b32 gb_file_exists(char const *name) {
 	WIN32_FIND_DATAW data;
-	HANDLE handle = FindFirstFileW(cast(LPCWSTR)gb_utf8_to_ucs2_buf(name), &data);
+	void *handle = FindFirstFileW(cast(wchar_t const *)gb_utf8_to_ucs2_buf(name), &data);
 	b32 found = handle != INVALID_HANDLE_VALUE;
 	if (found) FindClose(handle);
 	return found;
@@ -6289,7 +7323,7 @@ gbFileTime gb_file_last_write_time(char const *filepath) {
 	FILETIME last_write_time = {0};
 	WIN32_FILE_ATTRIBUTE_DATA data = {0};
 
-	if (GetFileAttributesExW(cast(LPCWSTR)gb_utf8_to_ucs2(path, gb_count_of(path), filepath),
+	if (GetFileAttributesExW(cast(wchar_t const *)gb_utf8_to_ucs2(path, gb_count_of(path), filepath),
 	                         GetFileExInfoStandard, &data))
 		last_write_time = data.ftLastWriteTime;
 
@@ -6303,8 +7337,8 @@ gb_inline b32 gb_file_copy(char const *existing_filename, char const *new_filena
 	char16 old_f[300] = {0};
 	char16 new_f[300] = {0};
 
-	return CopyFileW(cast(LPCWSTR)gb_utf8_to_ucs2(old_f, gb_count_of(old_f), existing_filename),
-	                 cast(LPCWSTR)gb_utf8_to_ucs2(new_f, gb_count_of(new_f), new_filename),
+	return CopyFileW(cast(wchar_t const *)gb_utf8_to_ucs2(old_f, gb_count_of(old_f), existing_filename),
+	                 cast(wchar_t const *)gb_utf8_to_ucs2(new_f, gb_count_of(new_f), new_filename),
 	                 fail_if_exists);
 }
 
@@ -6312,8 +7346,8 @@ gb_inline b32 gb_file_move(char const *existing_filename, char const *new_filena
 	char16 old_f[300] = {0};
 	char16 new_f[300] = {0};
 
-	return MoveFileW(cast(LPCWSTR)gb_utf8_to_ucs2(old_f, gb_count_of(old_f), existing_filename),
-	                 cast(LPCWSTR)gb_utf8_to_ucs2(new_f, gb_count_of(new_f), new_filename));
+	return MoveFileW(cast(wchar_t const *)gb_utf8_to_ucs2(old_f, gb_count_of(old_f), existing_filename),
+	                 cast(wchar_t const *)gb_utf8_to_ucs2(new_f, gb_count_of(new_f), new_filename));
 }
 
 
@@ -7265,6 +8299,10 @@ gb_inline void gb_key_state_update(gbKeyState *s, b32 is_down) {
 
 #if defined(GB_SYSTEM_WINDOWS)
 
+#ifndef ERROR_DEVICE_NOT_CONNECTED
+#define ERROR_DEVICE_NOT_CONNECTED 1167
+#endif
+
 GB_XINPUT_GET_STATE(gbXInputGetState_Stub) {
 	gb_unused(dwUserIndex); gb_unused(pState);
 	return ERROR_DEVICE_NOT_CONNECTED;
@@ -7275,7 +8313,7 @@ GB_XINPUT_SET_STATE(gbXInputSetState_Stub) {
 }
 
 
-gb_internal gb_inline f32 gb__process_xinput_stick_value(SHORT value, SHORT dead_zone_threshold) {
+gb_internal gb_inline f32 gb__process_xinput_stick_value(i16 value, i16 dead_zone_threshold) {
 	f32 result = 0;
 
 	if (value < -dead_zone_threshold)
@@ -7305,8 +8343,8 @@ gb_internal void gb__platform_resize_dib_section(gbPlatform *p, i32 width, i32 h
 		bmi.bmiHeader.biWidth       = width;
 		bmi.bmiHeader.biHeight      = height; // NOTE(bill): -ve is top-down, +ve is bottom-up
 		bmi.bmiHeader.biPlanes      = 1;
-		bmi.bmiHeader.biBitCount    = cast(WORD)p->sw_framebuffer.bits_per_pixel;
-		bmi.bmiHeader.biCompression = BI_RGB;
+		bmi.bmiHeader.biBitCount    = cast(u16)p->sw_framebuffer.bits_per_pixel;
+		bmi.bmiHeader.biCompression = 0 /*BI_RGB*/;
 
 		p->sw_framebuffer.win32_bmi = bmi;
 
@@ -7323,7 +8361,8 @@ gb_internal void gb__platform_resize_dib_section(gbPlatform *p, i32 width, i32 h
 	}
 }
 
-gb_internal gbKeyType gb__win32_from_vk(UINT key) {
+
+gb_internal gbKeyType gb__win32_from_vk(unsigned int key) {
 	// NOTE(bill): Letters and numbers are defined the same for VK_* and GB_*
 	if (key >= 'A' && key < 'Z') return cast(gbKeyType)key;
 	if (key >= '0' && key < '9') return cast(gbKeyType)key;
@@ -7407,10 +8446,9 @@ gb_internal gbKeyType gb__win32_from_vk(UINT key) {
 	}
 	return GB_KEY_UNKNOWN;
 }
-
-LRESULT CALLBACK gb__win32_window_callback(HWND wnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK gb__win32_window_callback(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	// NOTE(bill): Silly callbacks
-	gbPlatform *platform = cast(gbPlatform *)GetWindowLongPtr(wnd, GWLP_USERDATA);
+	gbPlatform *platform = cast(gbPlatform *)GetWindowLongPtrW(hWnd, GWLP_USERDATA);
 	b32 window_has_focus = (platform != NULL) && platform->window_has_focus;
 
 	if (msg == WM_CREATE) { // NOTE(bill): Doesn't need the platform
@@ -7420,22 +8458,24 @@ LRESULT CALLBACK gb__win32_window_callback(HWND wnd, UINT msg, WPARAM wParam, LP
 		// NOTE(bill): Keyboard
 		rid[0].usUsagePage = 0x01;
 		rid[0].usUsage     = 0x06;
-		rid[0].dwFlags     = RIDEV_NOLEGACY; // NOTE(bill): Do not generate legacy messages such as WM_KEYDOWN
-		rid[0].hwndTarget  = wnd;
+		rid[0].dwFlags     = 0x00000030/*RIDEV_NOLEGACY*/; // NOTE(bill): Do not generate legacy messages such as WM_KEYDOWN
+		rid[0].hwndTarget  = hWnd;
 
 		// NOTE(bill): Mouse
 		rid[1].usUsagePage = 0x01;
 		rid[1].usUsage     = 0x02;
 		rid[1].dwFlags     = 0; // NOTE(bill): adds HID mouse and also allows legacy mouse messages to allow for window movement etc.
-		rid[1].hwndTarget  = wnd;
+		rid[1].hwndTarget  = hWnd;
 
-		if (!RegisterRawInputDevices(rid, gb_count_of(rid), gb_size_of(rid[0]))) {
-			GB_PANIC("Failed to initialize raw input device for win32.");
+		if (RegisterRawInputDevices(rid, gb_count_of(rid), gb_size_of(rid[0])) == false) {
+			DWORD err = GetLastError();
+			GB_PANIC("Failed to initialize raw input device for win32."
+			         "Err: %u", err);
 		}
 	}
 
 	if (!platform)
-		return DefWindowProcW(wnd, msg, wParam, lParam);
+		return DefWindowProcW(hWnd, msg, wParam, lParam);
 
 	switch (msg) {
 	case WM_CLOSE:
@@ -7459,18 +8499,19 @@ LRESULT CALLBACK gb__win32_window_callback(HWND wnd, UINT msg, WPARAM wParam, LP
 
 	case WM_INPUT: {
 		RAWINPUT raw = {0};
-		UINT size = gb_size_of(RAWINPUT);
+		unsigned int size = gb_size_of(RAWINPUT);
 
-		if (GetRawInputData(cast(HRAWINPUT)lParam, RID_INPUT, &raw, &size, gb_size_of(RAWINPUTHEADER)) == FALSE)
+		if (!GetRawInputData(cast(HRAWINPUT)lParam, RID_INPUT, &raw, &size, gb_size_of(RAWINPUTHEADER))) {
 			return 0;
+		}
 		switch (raw.header.dwType) {
 		case RIM_TYPEKEYBOARD: {
 			// NOTE(bill): Many thanks to https://blog.molecular-matters.com/2011/09/05/properly-handling-keyboard-input/
 			// for the
 			RAWKEYBOARD *raw_kb = &raw.data.keyboard;
-			UINT vk = raw_kb->VKey;
-			UINT scan_code = raw_kb->MakeCode;
-			UINT flags = raw_kb->Flags;
+			unsigned int vk = raw_kb->VKey;
+			unsigned int scan_code = raw_kb->MakeCode;
+			unsigned int flags = raw_kb->Flags;
 			// NOTE(bill): e0 and e1 are escape sequences used for certain special keys, such as PRINT and PAUSE/BREAK.
 			// NOTE(bill): http://www.win.tue.nl/~aeb/linux/kbd/scancodes-1.html
 			b32 is_e0   = (flags & RI_KEY_E0) != 0;
@@ -7485,10 +8526,10 @@ LRESULT CALLBACK gb__win32_window_callback(HWND wnd, UINT msg, WPARAM wParam, LP
 				return 0;
 			} else if (vk == VK_SHIFT) {
 				// NOTE(bill): Correct left/right shift
-				vk = MapVirtualKey(scan_code, MAPVK_VSC_TO_VK_EX);
+				vk = MapVirtualKeyW(scan_code, MAPVK_VSC_TO_VK_EX);
 			} else if (vk == VK_NUMLOCK) {
 				// NOTE(bill): Correct PAUSE/BREAK and NUM LOCK and set the extended bit
-				scan_code = MapVirtualKey(vk, MAPVK_VK_TO_VSC) | 0x100;
+				scan_code = MapVirtualKeyW(vk, MAPVK_VK_TO_VSC) | 0x100;
 			}
 
 			if (is_e1) {
@@ -7497,7 +8538,7 @@ LRESULT CALLBACK gb__win32_window_callback(HWND wnd, UINT msg, WPARAM wParam, LP
 				if (vk == VK_PAUSE)
 					scan_code = 0x45;
 				else
-					scan_code = MapVirtualKey(vk, MAPVK_VK_TO_VSC);
+					scan_code = MapVirtualKeyW(vk, MAPVK_VK_TO_VSC);
 			}
 
 			switch (vk) {
@@ -7529,9 +8570,9 @@ LRESULT CALLBACK gb__win32_window_callback(HWND wnd, UINT msg, WPARAM wParam, LP
 		} break;
 		case RIM_TYPEMOUSE: {
 			RAWMOUSE *raw_mouse = &raw.data.mouse;
-			USHORT flags = raw_mouse->usButtonFlags;
-			LONG dx = +raw_mouse->lLastX;
-			LONG dy = -raw_mouse->lLastY;
+			u16 flags = raw_mouse->usButtonFlags;
+			long dx = +raw_mouse->lLastX;
+			long dy = -raw_mouse->lLastY;
 
 			if (flags & RI_MOUSE_WHEEL)
 				platform->mouse_wheel_delta = cast(i16)raw_mouse->usButtonData;
@@ -7545,11 +8586,11 @@ LRESULT CALLBACK gb__win32_window_callback(HWND wnd, UINT msg, WPARAM wParam, LP
 	default: break;
 	}
 
-	return DefWindowProcW(wnd, msg, wParam, lParam);
+	return DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
 
-typedef HGLRC wglCreateContextAttribsARB_Proc(HDC hDC, HGLRC hshareContext, int const *attribList);
+typedef void *wglCreateContextAttribsARB_Proc(void *hDC, void *hshareContext, int const *attribList);
 
 
 b32 gb__platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode, gbRendererType type, u32 window_flags) {
@@ -7560,13 +8601,10 @@ b32 gb__platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode,
 
 	wc.style = CS_HREDRAW | CS_VREDRAW; // | CS_OWNDC
 	wc.lpfnWndProc   = gb__win32_window_callback;
-	wc.hIcon         = LoadIcon(NULL, IDI_WINLOGO);
-	wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
-	wc.hbrBackground = cast(HBRUSH)GetStockObject(WHITE_BRUSH);
+	wc.hbrBackground = cast(HBRUSH)GetStockObject(0/*WHITE_BRUSH*/);
 	wc.lpszMenuName  = NULL;
 	wc.lpszClassName = L"gb-win32-wndclass"; // TODO(bill): Is this enough?
-	wc.hInstance     = GetModuleHandle(NULL);
-	wc.hIconSm       = LoadIcon(NULL, IDI_WINLOGO);
+	wc.hInstance     = GetModuleHandleW(NULL);
 
 	if (RegisterClassExW(&wc) == 0) {
 		MessageBoxW(NULL, L"Failed to register the window class", L"ERROR", MB_OK | MB_ICONEXCLAMATION);
@@ -7628,13 +8666,13 @@ b32 gb__platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode,
 	p->window_flags  = window_flags;
 	p->window_handle = CreateWindowExW(ex_style,
 	                                   wc.lpszClassName,
-	                                   cast(LPCWSTR)gb_utf8_to_ucs2(title_buffer, gb_size_of(title_buffer), window_title),
+	                                   cast(wchar_t const *)gb_utf8_to_ucs2(title_buffer, gb_size_of(title_buffer), window_title),
 	                                   style,
 	                                   CW_USEDEFAULT, CW_USEDEFAULT,
 	                                   wr.right - wr.left, wr.bottom - wr.top,
 	                                   0, 0,
-	                                   GetModuleHandle(NULL),
-	                                   cast(HWND)NULL);
+	                                   GetModuleHandleW(NULL),
+	                                   NULL);
 
 	if (!p->window_handle) {
 		MessageBoxW(NULL, L"Window creation failed", L"Error", MB_OK|MB_ICONEXCLAMATION);
@@ -7660,9 +8698,9 @@ b32 gb__platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode,
 		pfd.cStencilBits = 8;
 		pfd.iLayerType   = PFD_MAIN_PLANE;
 
-		SetPixelFormat(p->win32_dc, ChoosePixelFormat(p->win32_dc, &pfd), NULL);
-		p->opengl.context = cast(void *)wglCreateContext(p->win32_dc);
-		wglMakeCurrent(p->win32_dc, cast(HGLRC)p->opengl.context);
+		SetPixelFormat(cast(HDC)p->win32_dc, ChoosePixelFormat(cast(HDC)p->win32_dc, &pfd), NULL);
+		p->opengl.context = cast(void *)wglCreateContext(cast(HDC)p->win32_dc);
+		wglMakeCurrent(cast(HDC)p->win32_dc, cast(HGLRC)p->opengl.context);
 
 		if (p->opengl.major > 0) {
 			attribs[c++] = 0x2091; // WGL_CONTEXT_MAJOR_VERSION_ARB
@@ -7684,8 +8722,8 @@ b32 gb__platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode,
 
 		wglCreateContextAttribsARB = cast(wglCreateContextAttribsARB_Proc *)wglGetProcAddress("wglCreateContextAttribsARB");
 		if (wglCreateContextAttribsARB) {
-			HGLRC rc = wglCreateContextAttribsARB(cast(HDC)p->win32_dc, 0, attribs);
-			if (rc && wglMakeCurrent(p->win32_dc, rc)) {
+			HGLRC rc = cast(HGLRC)wglCreateContextAttribsARB(p->win32_dc, 0, attribs);
+			if (rc && wglMakeCurrent(cast(HDC)p->win32_dc, rc)) {
 				p->opengl.context = rc;
 			} else {
 				// TODO(bill): Handle errors from GetLastError
@@ -7707,7 +8745,7 @@ b32 gb__platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode,
 
 	SetForegroundWindow(cast(HWND)p->window_handle);
 	SetFocus(cast(HWND)p->window_handle);
-	SetWindowLongPtr(cast(HWND)p->window_handle, GWLP_USERDATA, cast(LONG_PTR)p);
+	SetWindowLongPtrW(cast(HWND)p->window_handle, GWLP_USERDATA, cast(LONG_PTR)p);
 
 	p->window_width  = mode.width;
 	p->window_height = mode.height;
@@ -7762,6 +8800,49 @@ gb_inline b32 gb_platform_init_with_opengl(gbPlatform *p, char const *window_tit
 	return gb__platform_init(p, window_title, mode, GB_RENDERER_OPENGL, window_flags);
 }
 
+#ifndef _XINPUT_H_
+typedef struct _XINPUT_GAMEPAD {
+	u16 wButtons;
+	u8  bLeftTrigger;
+	u8  bRightTrigger;
+	u16 sThumbLX;
+	u16 sThumbLY;
+	u16 sThumbRX;
+	u16 sThumbRY;
+} XINPUT_GAMEPAD;
+
+typedef struct _XINPUT_STATE {
+	DWORD          dwPacketNumber;
+	XINPUT_GAMEPAD Gamepad;
+} XINPUT_STATE;
+
+typedef struct _XINPUT_VIBRATION {
+	u16 wLeftMotorSpeed;
+	u16 wRightMotorSpeed;
+} XINPUT_VIBRATION;
+
+#define XINPUT_GAMEPAD_DPAD_UP              0x00000001
+#define XINPUT_GAMEPAD_DPAD_DOWN            0x00000002
+#define XINPUT_GAMEPAD_DPAD_LEFT            0x00000004
+#define XINPUT_GAMEPAD_DPAD_RIGHT           0x00000008
+#define XINPUT_GAMEPAD_START                0x00000010
+#define XINPUT_GAMEPAD_BACK                 0x00000020
+#define XINPUT_GAMEPAD_LEFT_THUMB           0x00000040
+#define XINPUT_GAMEPAD_RIGHT_THUMB          0x00000080
+#define XINPUT_GAMEPAD_LEFT_SHOULDER        0x0100
+#define XINPUT_GAMEPAD_RIGHT_SHOULDER       0x0200
+#define XINPUT_GAMEPAD_A                    0x1000
+#define XINPUT_GAMEPAD_B                    0x2000
+#define XINPUT_GAMEPAD_X                    0x4000
+#define XINPUT_GAMEPAD_Y                    0x8000
+#define XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE  7849
+#define XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE 8689
+#define XINPUT_GAMEPAD_TRIGGER_THRESHOLD    30
+#endif
+
+#ifndef XUSER_MAX_COUNT
+#define XUSER_MAX_COUNT 4
+#endif
 
 void gb_platform_update(gbPlatform *p) {
 	isize i;
@@ -7870,7 +8951,7 @@ void gb_platform_update(gbPlatform *p) {
 		for (i = 0; i < max_controller_count; i++) {
 			gbGameController *controller = &p->game_controllers[i];
 			XINPUT_STATE controller_state = {0};
-			if (p->xinput.get_state(cast(DWORD)i, &controller_state) != ERROR_SUCCESS) {
+			if (p->xinput.get_state(cast(DWORD)i, &controller_state) != 0) {
 				// NOTE(bill): The controller is not available
 				controller->is_connected = false;
 			} else {
@@ -7920,7 +9001,7 @@ void gb_platform_update(gbPlatform *p) {
 	{ // NOTE(bill): Process pending messages
 		MSG message;
 		for (;;) {
-			BOOL is_okay = PeekMessage(&message, 0, 0, 0, PM_REMOVE);
+			BOOL is_okay = PeekMessageW(&message, 0, 0, 0, PM_REMOVE);
 			if (!is_okay) break;
 
 			switch (message.message) {
@@ -7939,9 +9020,9 @@ void gb_platform_update(gbPlatform *p) {
 
 void gb_platform_display(gbPlatform *p) {
 	if (p->renderer_type == GB_RENDERER_OPENGL) {
-		SwapBuffers(p->win32_dc);
+		SwapBuffers(cast(HDC)p->win32_dc);
 	} else if (p->renderer_type == GB_RENDERER_SOFTWARE) {
-		StretchDIBits(p->win32_dc,
+		StretchDIBits(cast(HDC)p->win32_dc,
 		              0, 0, p->window_width, p->window_height,
 		              0, 0, p->window_width, p->window_height,
 		              p->sw_framebuffer.memory,
@@ -8019,23 +9100,25 @@ void gb_platform_set_window_title(gbPlatform *p, char const *title, ...) {
 	va_end(va);
 
 	if (str[0] != '\0')
-		SetWindowTextW(cast(HWND)p->window_handle, cast(LPCWSTR)gb_utf8_to_ucs2(buffer, gb_size_of(buffer), str));
+		SetWindowTextW(cast(HWND)p->window_handle, cast(wchar_t const *)gb_utf8_to_ucs2(buffer, gb_size_of(buffer), str));
 }
 
 void gb_platform_toggle_fullscreen(gbPlatform *p, b32 fullscreen_desktop) {
 	// NOTE(bill): From the man himself, Raymond Chen! (Modified for my need.)
 	HWND handle = cast(HWND)p->window_handle;
-	DWORD style = GetWindowLong(handle, GWL_STYLE);
+	DWORD style = cast(DWORD)GetWindowLongW(handle, GWL_STYLE);
+	WINDOWPLACEMENT placement;
+
 	if (style & WS_OVERLAPPEDWINDOW) {
 		MONITORINFO monitor_info = {gb_size_of(monitor_info)};
-		if (GetWindowPlacement(handle, &p->win32_placement) &&
-		    GetMonitorInfo(MonitorFromWindow(handle, 1), &monitor_info)) {
+		if (GetWindowPlacement(handle, &placement) &&
+		    GetMonitorInfoW(MonitorFromWindow(handle, 1), &monitor_info)) {
 			style &= ~WS_OVERLAPPEDWINDOW;
 			if (fullscreen_desktop) {
 				style &= ~WS_CAPTION;
 				style |= WS_POPUP;
 			}
-			SetWindowLong(handle, GWL_STYLE, style);
+			SetWindowLongW(handle, GWL_STYLE, style);
 			SetWindowPos(handle, HWND_TOP,
 			             monitor_info.rcMonitor.left, monitor_info.rcMonitor.top,
 			             monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
@@ -8050,8 +9133,8 @@ void gb_platform_toggle_fullscreen(gbPlatform *p, b32 fullscreen_desktop) {
 	} else {
 		style &= ~WS_POPUP;
 		style |= WS_OVERLAPPEDWINDOW | WS_CAPTION;
-		SetWindowLong(handle, GWL_STYLE, style);
-		SetWindowPlacement(handle, &p->win32_placement);
+		SetWindowLongW(handle, GWL_STYLE, style);
+		SetWindowPlacement(handle, &placement);
 		SetWindowPos(handle, 0, 0, 0, 0, 0,
 		             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
 		             SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
@@ -8062,13 +9145,13 @@ void gb_platform_toggle_fullscreen(gbPlatform *p, b32 fullscreen_desktop) {
 
 void gb_platform_toggle_borderless(gbPlatform *p) {
 	HWND handle = cast(HWND)p->window_handle;
-	DWORD style = GetWindowLong(handle, GWL_STYLE);
+	DWORD style = GetWindowLongW(handle, GWL_STYLE);
 	b32 is_borderless = (style & WS_POPUP) != 0;
 
 	GB_MASK_SET(style, is_borderless,  WS_OVERLAPPEDWINDOW | WS_CAPTION);
 	GB_MASK_SET(style, !is_borderless, WS_POPUP);
 
-	SetWindowLong(handle, GWL_STYLE, style);
+	SetWindowLongW(handle, GWL_STYLE, style);
 
 	GB_MASK_SET(p->window_flags, !is_borderless, GB_WINDOW_BORDERLESS);
 }
@@ -8077,7 +9160,7 @@ void gb_platform_toggle_borderless(gbPlatform *p) {
 
 gb_inline void gb_platform_make_opengl_context_current(gbPlatform *p) {
 	if (p->renderer_type == GB_RENDERER_OPENGL) {
-		wglMakeCurrent(p->win32_dc, cast(HGLRC)p->opengl.context);
+		wglMakeCurrent(cast(HDC)p->win32_dc, cast(HGLRC)p->opengl.context);
 	}
 }
 
@@ -8092,16 +9175,16 @@ gb_inline void gb_platform_hide_window(gbPlatform *p) {
 }
 
 gb_inline gbVideoMode gb_video_mode_get_desktop(void) {
-	DEVMODE win32_mode = {gb_size_of(win32_mode)};
-	EnumDisplaySettings(NULL, ENUM_CURRENT_SETTINGS, &win32_mode);
+	DEVMODEW win32_mode = {gb_size_of(win32_mode)};
+	EnumDisplaySettingsW(NULL, ENUM_CURRENT_SETTINGS, &win32_mode);
 	return gb_video_mode(win32_mode.dmPelsWidth, win32_mode.dmPelsHeight, win32_mode.dmBitsPerPel);
 }
 
 isize gb_video_mode_get_fullscreen_modes(gbVideoMode *modes, isize max_mode_count) {
-	DEVMODE win32_mode = {gb_size_of(win32_mode)};
+	DEVMODEW win32_mode = {gb_size_of(win32_mode)};
 	i32 count;
 	for (count = 0;
-	     count < max_mode_count && EnumDisplaySettings(NULL, count, &win32_mode);
+	     count < max_mode_count && EnumDisplaySettingsW(NULL, count, &win32_mode);
 	     count++) {
 		modes[count] = gb_video_mode(win32_mode.dmPelsWidth, win32_mode.dmPelsHeight, win32_mode.dmBitsPerPel);
 	}
@@ -8115,9 +9198,9 @@ isize gb_video_mode_get_fullscreen_modes(gbVideoMode *modes, isize max_mode_coun
 b32 gb_platform_has_clipboard_text(gbPlatform *p) {
 	b32 result = false;
 
-	if (IsClipboardFormatAvailable(CF_TEXT) &&
+	if (IsClipboardFormatAvailable(1/*CF_TEXT*/) &&
 	    OpenClipboard(cast(HWND)p->window_handle)) {
-		HANDLE mem = GetClipboardData(CF_TEXT);
+		HANDLE mem = GetClipboardData(1/*CF_TEXT*/);
 		if (mem) {
 			char *str = cast(char *)GlobalLock(mem);
 			if (str && str[0] != '\0')
@@ -8138,7 +9221,7 @@ void gb_platform_set_clipboard_text(gbPlatform *p, char const *str) {
 	if (OpenClipboard(cast(HWND)p->window_handle)) {
 		isize i, len = gb_strlen(str)+1;
 
-		HANDLE mem = GlobalAlloc(GMEM_MOVEABLE, len);
+		HANDLE mem = cast(HANDLE)GlobalAlloc(0x0002/*GMEM_MOVEABLE*/, len);
 		if (mem) {
 			char *dst = cast(char *)GlobalLock(mem);
 			if (dst) {
@@ -8156,7 +9239,7 @@ void gb_platform_set_clipboard_text(gbPlatform *p, char const *str) {
 		}
 
 		EmptyClipboard();
-		if (!SetClipboardData(CF_TEXT, mem))
+		if (!SetClipboardData(1/*CF_TEXT*/, mem))
 			return;
 		CloseClipboard();
 	}
@@ -8166,9 +9249,9 @@ void gb_platform_set_clipboard_text(gbPlatform *p, char const *str) {
 char *gb_platform_get_clipboard_text(gbPlatform *p, gbAllocator a) {
 	char *text = NULL;
 
-	if (IsClipboardFormatAvailable(CF_TEXT) &&
+	if (IsClipboardFormatAvailable(1/*CF_TEXT*/) &&
 	    OpenClipboard(cast(HWND)p->window_handle)) {
-		HANDLE mem = GetClipboardData(CF_TEXT);
+		HANDLE mem = GetClipboardData(1/*CF_TEXT*/);
 		if (mem) {
 			char *str = cast(char *)GlobalLock(mem);
 			text = gb_alloc_str(a, str);
