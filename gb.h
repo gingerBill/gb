@@ -17,6 +17,16 @@
 
 	All other files should just #include "gb.h" without #define
 
+
+	If you want the platform layer, YOU MUST
+
+		#define GB_PLATFORM
+
+	BEFORE the include like this:
+
+		#define GB_PLATFORM
+		#include "gb.h"
+
 ===========================================================================
 
 LICENSE
@@ -48,6 +58,7 @@ TODOS
 	- More date & time functions
 
 VERSION HISTORY
+	0.24  - Enum convention change
 	0.23  - Optional Windows.h removal (because I'm crazy)
 	0.22a - Remove gbVideoMode from gb_platform_init_*
 	0.22  - gbAffinity - (Missing Linux version)
@@ -387,8 +398,8 @@ GB_STATIC_ASSERT(sizeof(f32) == 4);
 GB_STATIC_ASSERT(sizeof(f64) == 8);
 
 typedef char char8;  // NOTE(bill): Probably redundant but oh well!
-typedef u16  char16;
-typedef u32  char32;
+typedef i16  char16;
+typedef i32  char32;
 
 // NOTE(bill): I think C99 and C++ `bool` is stupid for numerous reasons but there are too many
 // to write in this small comment.
@@ -667,6 +678,14 @@ extern "C++" {
 #define gb_max(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
+#ifndef gb_min3
+#define gb_min3(a, b, c) gb_min(gb_min(a, b), c)
+#endif
+
+#ifndef gb_max3
+#define gb_max3(a, b, c) gb_max(gb_max(a, b), c)
+#endif
+
 #ifndef gb_clamp
 #define gb_clamp(x, lower, upper) gb_min(gb_max((x), (lower)), (upper))
 #endif
@@ -682,8 +701,8 @@ extern "C++" {
 /* NOTE(bill): Very useful bit setting */
 #ifndef GB_MASK_SET
 #define GB_MASK_SET(var, set, mask) do { \
-	if (set) (var) |=  mask; \
-	else     (var) &= ~mask; \
+	if (set) (var) |=  (mask); \
+	else     (var) &= ~(mask); \
 } while (0)
 #endif
 
@@ -760,7 +779,7 @@ GB_DEF isize       gb_pointer_diff     (void const *begin, void const *end);
 
 GB_DEF void gb_zero_size(void *ptr, isize size);
 #ifndef     gb_zero_item
-#define     gb_zero_item(t) gb_zero_size((t), gb_size_of(*(t))) // NOTE(bill): Pass pointer of struct
+#define     gb_zero_item(t)         gb_zero_size((t), gb_size_of(*(t))) // NOTE(bill): Pass pointer of struct
 #define     gb_zero_array(a, count) gb_zero_size((a), gb_size_of(*(a))*count)
 #endif
 
@@ -834,7 +853,7 @@ GB_DEF i64  gb_atomic64_exchanged       (gbAtomic64 volatile *a, i64 desired);
 GB_DEF i64  gb_atomic64_fetch_add       (gbAtomic64 volatile *a, i64 operand);
 GB_DEF i64  gb_atomic64_fetch_and       (gbAtomic64 volatile *a, i64 operand);
 GB_DEF i64  gb_atomic64_fetch_or        (gbAtomic64 volatile *a, i64 operand);
-GB_DEF b32 gb_atomic64_spin_lock        (gbAtomic64 volatile *a, isize time_out); // NOTE(bill): time_out = -1 as default
+GB_DEF b32  gb_atomic64_spin_lock       (gbAtomic64 volatile *a, isize time_out); // NOTE(bill): time_out = -1 as default
 GB_DEF void gb_atomic64_spin_unlock     (gbAtomic64 volatile *a);
 GB_DEF b32  gb_atomic64_try_acquire_lock(gbAtomic64 volatile *a);
 
@@ -870,7 +889,7 @@ typedef struct gbSemaphore { sem_t unix_handle; }      gbSemaphore;
 
 GB_DEF void gb_semaphore_init   (gbSemaphore *s);
 GB_DEF void gb_semaphore_destroy(gbSemaphore *s);
-GB_DEF void gb_semaphore_post   (gbSemaphore *s, i32 count);
+GB_DEF void gb_semaphore_post   (gbSemaphore *s, i32 count); // NOTE(bill): Default count = 1
 GB_DEF void gb_semaphore_wait   (gbSemaphore *s);
 
 
@@ -902,7 +921,6 @@ gb_mutex_init(&m);
 }
 #endif
 
-// TODO(bill): Affinity Info?
 
 
 #define GB_THREAD_PROC(name) void name(void *data)
@@ -933,6 +951,24 @@ GB_DEF u32  gb_thread_current_id      (void);
 GB_DEF void gb_thread_set_name        (gbThread *t, char const *name);
 
 
+// NOTE(bill): Thread Merge Operation
+// Based on Sean Barrett's stb_sync
+typedef struct gbSync {
+	i32 target;  // Target Number of threads
+	i32 current; // Threads to hit
+	i32 waiting; // Threads waiting
+
+	gbMutex start;
+	gbMutex mutex;
+	gbSemaphore release;
+} gbSync;
+
+GB_DEF void gb_sync_init          (gbSync *s);
+GB_DEF void gb_sync_destroy       (gbSync *s);
+GB_DEF void gb_sync_set_target    (gbSync *s, i32 count);
+GB_DEF void gb_sync_release       (gbSync *s);
+GB_DEF i32  gb_sync_reach         (gbSync *s);
+GB_DEF void gb_sync_reach_and_wait(gbSync *s);
 
 
 
@@ -997,10 +1033,10 @@ GB_DEF isize gb_virtual_memory_page_size(isize *alignment_out);
 //
 
 typedef enum gbAllocationType {
-	GB_ALLOCATION_ALLOC,
-	GB_ALLOCATION_FREE,
-	GB_ALLOCATION_FREE_ALL,
-	GB_ALLOCATION_RESIZE
+	gbAllocation_Alloc,
+	gbAllocation_Free,
+	gbAllocation_FreeAll,
+	gbAllocation_Resize,
 } gbAllocationType;
 
 // NOTE(bill): This is useful so you can define an allocator of the same type and parameters
@@ -1031,12 +1067,13 @@ GB_DEF void *gb_resize_align(gbAllocator a, void *ptr, isize old_size, isize new
 GB_DEF void *gb_alloc_copy      (gbAllocator a, void const *src, isize size);
 GB_DEF void *gb_alloc_copy_align(gbAllocator a, void const *src, isize size, isize alignment);
 GB_DEF char *gb_alloc_str       (gbAllocator a, char const *str);
+GB_DEF char *gb_alloc_str_len   (gbAllocator a, char const *str, isize len);
 
 
 // NOTE(bill): These are very useful and the type cast has saved me from numerous bugs
 #ifndef gb_alloc_item
-#define gb_alloc_item (allocator, Type)        (Type *)gb_alloc(allocator, gb_size_of(Type))
-#define gb_alloc_array(allocator, Type, count) (Type *)gb_alloc(allocator, gb_size_of(Type) * (count))
+#define gb_alloc_item(allocator_, Type)         (Type *)gb_alloc(allocator_, gb_size_of(Type))
+#define gb_alloc_array(allocator_, Type, count) (Type *)gb_alloc(allocator_, gb_size_of(Type) * (count))
 #endif
 
 // NOTE(bill): Use this if you don't need a "fancy" resize allocation
@@ -1309,7 +1346,11 @@ GB_DEF GB_RADIX_SORT_PROC(u64);
 #define gb_binary_search_array(array, count, key, compare_proc) gb_binary_search(array, count, gb_size_of(*(array)), key, compare_proc)
 GB_DEF isize gb_binary_search(void const *base, isize count, isize size, void const *key, gbCompareProc compare_proc);
 
+#define gb_shuffle_array(array, count) gb_shuffle(array, count, gb_size_of(*(array)))
+GB_DEF void gb_shuffle(void *base, isize count, isize size);
 
+#define gb_reverse_array(array, count) gb_reverse(array, count, gb_size_of(*(array)))
+GB_DEF void gb_reverse(void *base, isize count, isize size);
 
 ////////////////////////////////////////////////////////////////
 //
@@ -1376,9 +1417,9 @@ GB_DEF char16 *gb_utf8_to_ucs2_buf(char const *str);   // NOTE(bill): Uses local
 GB_DEF char *  gb_ucs2_to_utf8_buf(char16 const *str); // NOTE(bill): Uses locally persisting buffer
 
 // NOTE(bill): Returns size of codepoint in bytes
-GB_DEF isize gb_utf8_decode    (char const *str, char32 *codepoint);
-GB_DEF isize gb_utf8_decode_len(char const *str, isize str_len, char32 *codepoint);
-
+GB_DEF isize gb_utf8_decode        (char const *str, char32 *codepoint);
+GB_DEF isize gb_utf8_decode_len    (char const *str, isize str_len, char32 *codepoint);
+GB_DEF isize gb_utf8_codepoint_size(char const *str, isize str_len);
 
 ////////////////////////////////////////////////////////////////
 //
@@ -2002,29 +2043,29 @@ gb_inline void GB_JOIN2(FUNC,clear)(NAME *h) { \
 
 
 typedef u32 gbFileMode;
-typedef enum gbFileFlag {
-	GB_FILE_READ       = GB_BIT(0),
-	GB_FILE_WRITE      = GB_BIT(1),
-	GB_FILE_APPEND     = GB_BIT(2),
-	GB_FILE_RW         = GB_BIT(3),
+typedef enum gbFileModeFlag {
+	gbFileMode_Read       = GB_BIT(0),
+	gbFileMode_Write      = GB_BIT(1),
+	gbFileMode_Append     = GB_BIT(2),
+	gbFileMode_Rw         = GB_BIT(3),
 
-	GB_FILE_MODES = GB_FILE_READ | GB_FILE_WRITE | GB_FILE_APPEND | GB_FILE_RW
-} gbFileFlag;
+	gbFileMode_Modes = gbFileMode_Read | gbFileMode_Write | gbFileMode_Append | gbFileMode_Rw,
+} gbFileModeFlag;
 
 // NOTE(bill): Only used internally and for the file operations
-typedef enum gbSeekWhence {
-	GB_SEEK_BEGIN   = 0,
-	GB_SEEK_CURRENT = 1,
-	GB_SEEK_END     = 2
-} gbSeekWhence;
+typedef enum gbSeekWhenceType {
+	gbSeekWhence_Begin   = 0,
+	gbSeekWhence_Current = 1,
+	gbSeekWhence_End     = 2,
+} gbSeekWhenceType;
 
 typedef enum gbFileError {
-	GB_FILE_ERR_NONE,
-	GB_FILE_ERR_INVALID,
-	GB_FILE_ERR_EXISTS,
-	GB_FILE_ERR_NOT_EXISTS,
-	GB_FILE_ERR_PERMISSION,
-	GB_FILE_ERR_TRUNCATION_FAILURE
+	gbFileError_None,
+	gbFileError_Invalid,
+	gbFileError_Exists,
+	gbFileError_NotExists,
+	gbFileError_Permission,
+	gbFileError_TruncationFailure,
 } gbFileError;
 
 typedef union gbFileDescriptor {
@@ -2038,7 +2079,7 @@ typedef struct gbFileOperations gbFileOperations;
 #define GB_FILE_OPEN_PROC(name)     gbFileError name(gbFileDescriptor *fd, gbFileOperations const **ops, gbFileMode mode, char const *filename)
 #define GB_FILE_READ_AT_PROC(name)  b32         name(gbFileDescriptor fd, void *buffer, isize size, i64 offset, isize *bytes_read)
 #define GB_FILE_WRITE_AT_PROC(name) b32         name(gbFileDescriptor fd, void const *buffer, isize size, i64 offset, isize *bytes_written)
-#define GB_FILE_SEEK_PROC(name)     b32         name(gbFileDescriptor fd, i64 offset, gbSeekWhence whence, i64 *new_offset)
+#define GB_FILE_SEEK_PROC(name)     b32         name(gbFileDescriptor fd, i64 offset, gbSeekWhenceType whence, i64 *new_offset)
 #define GB_FILE_CLOSE_PROC(name)    void        name(gbFileDescriptor fd)
 typedef GB_FILE_OPEN_PROC(gbFileOpenProc);
 typedef GB_FILE_READ_AT_PROC(gbFileReadProc);
@@ -2053,7 +2094,7 @@ struct gbFileOperations {
 	gbFileCloseProc *close;
 };
 
-extern gbFileOperations const GB_DEFAULT_FILE_OPERATIONS;
+extern gbFileOperations const gbDefaultFileOperations;
 
 
 // typedef struct gbDirInfo {
@@ -2075,11 +2116,11 @@ typedef struct gbFile {
 // TODO(bill): gbAsyncFile
 
 typedef enum gbFileStandardType {
-	GB_FILE_STANDARD_INPUT,
-	GB_FILE_STANDARD_OUTPUT,
-	GB_FILE_STANDARD_ERROR,
+	gbFileStandard_Input,
+	gbFileStandard_Output,
+	gbFileStandard_Error,
 
-	GB_FILE_STANDARD_COUNT
+	gbFileStandard_Count,
 } gbFileStandardType;
 
 GB_DEF gbFile *const gb_file_get_standard(gbFileStandardType std);
@@ -2196,12 +2237,14 @@ typedef struct gbRandom {
 } gbRandom;
 
 // NOTE(bill): Generates from numerous sources to produce a decent pseudo-random seed
-GB_DEF void gb_random_init          (gbRandom *r);
-GB_DEF u32  gb_random_gen_u32       (gbRandom *r);
-GB_DEF u32  gb_random_gen_u32_unique(gbRandom *r);
-GB_DEF u64  gb_random_gen_u64       (gbRandom *r); // NOTE(bill): (gb_random_gen_u32() << 32) | gb_random_gen_u32()
-GB_DEF i64  gb_random_range_i64     (gbRandom *r, i64 lower_inc, i64 higher_inc);
-GB_DEF f64  gb_random_range_f64     (gbRandom *r, f64 lower_inc, f64 higher_inc);
+GB_DEF void  gb_random_init          (gbRandom *r);
+GB_DEF u32   gb_random_gen_u32       (gbRandom *r);
+GB_DEF u32   gb_random_gen_u32_unique(gbRandom *r);
+GB_DEF u64   gb_random_gen_u64       (gbRandom *r); // NOTE(bill): (gb_random_gen_u32() << 32) | gb_random_gen_u32()
+GB_DEF isize gb_random_gen_isize     (gbRandom *r);
+GB_DEF i64   gb_random_range_i64     (gbRandom *r, i64 lower_inc, i64 higher_inc);
+GB_DEF isize gb_random_range_isize   (gbRandom *r, isize lower_inc, isize higher_inc);
+GB_DEF f64   gb_random_range_f64     (gbRandom *r, f64 lower_inc, f64 higher_inc);
 
 
 
@@ -2223,7 +2266,7 @@ GB_DEF isize gb_count_set_bits(u64 mask);
 //
 //
 
-#if !defined(GB_NO_PLATFORM)
+#if defined(GB_PLATFORM)
 
 // NOTE(bill):
 // Coordiate system - +ve x - left to right
@@ -2237,176 +2280,176 @@ GB_DEF isize gb_count_set_bits(u64 mask);
 #endif
 
 typedef enum gbKeyType {
-	GB_KEY_UNKNOWN = 0,  // Unhandled key
+	gbKey_Unknown = 0,  // Unhandled key
 
 	// NOTE(bill): Allow the basic printable keys to be aliased with their chars
-	GB_KEY_0 = '0',
-	GB_KEY_1,
-	GB_KEY_2,
-	GB_KEY_3,
-	GB_KEY_4,
-	GB_KEY_5,
-	GB_KEY_6,
-	GB_KEY_7,
-	GB_KEY_8,
-	GB_KEY_9,
+	gbKey_0 = '0',
+	gbKey_1,
+	gbKey_2,
+	gbKey_3,
+	gbKey_4,
+	gbKey_5,
+	gbKey_6,
+	gbKey_7,
+	gbKey_8,
+	gbKey_9,
 
-	GB_KEY_A = 'A',
-	GB_KEY_B,
-	GB_KEY_C,
-	GB_KEY_D,
-	GB_KEY_E,
-	GB_KEY_F,
-	GB_KEY_G,
-	GB_KEY_H,
-	GB_KEY_I,
-	GB_KEY_J,
-	GB_KEY_K,
-	GB_KEY_L,
-	GB_KEY_M,
-	GB_KEY_N,
-	GB_KEY_O,
-	GB_KEY_P,
-	GB_KEY_Q,
-	GB_KEY_R,
-	GB_KEY_S,
-	GB_KEY_T,
-	GB_KEY_U,
-	GB_KEY_V,
-	GB_KEY_W,
-	GB_KEY_X,
-	GB_KEY_Y,
-	GB_KEY_Z,
+	gbKey_A = 'A',
+	gbKey_B,
+	gbKey_C,
+	gbKey_D,
+	gbKey_E,
+	gbKey_F,
+	gbKey_G,
+	gbKey_H,
+	gbKey_I,
+	gbKey_J,
+	gbKey_K,
+	gbKey_L,
+	gbKey_M,
+	gbKey_N,
+	gbKey_O,
+	gbKey_P,
+	gbKey_Q,
+	gbKey_R,
+	gbKey_S,
+	gbKey_T,
+	gbKey_U,
+	gbKey_V,
+	gbKey_W,
+	gbKey_X,
+	gbKey_Y,
+	gbKey_Z,
 
-	GB_KEY_LBRACKET  = '[',
-	GB_KEY_RBRACKET  = ']',
-	GB_KEY_SEMICOLON = ';',
-	GB_KEY_COMMA     = ',',
-	GB_KEY_PERIOD    = '.',
-	GB_KEY_QUOTE     = '\'',
-	GB_KEY_SLASH     = '/',
-	GB_KEY_BACKSLASH = '\\',
-	GB_KEY_GRAVE     = '`',
-	GB_KEY_EQUALS    = '=',
-	GB_KEY_MINUS     = '-',
-	GB_KEY_SPACE     = ' ',
+	gbKey_Lbracket  = '[',
+	gbKey_Rbracket  = ']',
+	gbKey_Semicolon = ';',
+	gbKey_Comma     = ',',
+	gbKey_Period    = '.',
+	gbKey_Quote     = '\'',
+	gbKey_Slash     = '/',
+	gbKey_Backslash = '\\',
+	gbKey_Grave     = '`',
+	gbKey_Equals    = '=',
+	gbKey_Minus     = '-',
+	gbKey_Space     = ' ',
 
-	GB_KEY__PAD = 128,   // NOTE(bill): make sure ASCII is reserved
+	gbKey__Pad = 128,   // NOTE(bill): make sure ASCII is reserved
 
-	GB_KEY_ESCAPE,       // Escape
-	GB_KEY_LCONTROL,     // Left Control
-	GB_KEY_LSHIFT,       // Left Shift
-	GB_KEY_LALT,         // Left Alt
-	GB_KEY_LSYSTEM,      // Left OS specific: window (Windows and Linux), apple (MacOS X), ...
-	GB_KEY_RCONTROL,     // Right Control
-	GB_KEY_RSHIFT,       // Right Shift
-	GB_KEY_RALT,         // Right Alt
-	GB_KEY_RSYSTEM,      // Right OS specific: window (Windows and Linux), apple (MacOS X), ...
-	GB_KEY_MENU,         // Menu
-	GB_KEY_RETURN,       // Return
-	GB_KEY_BACKSPACE,    // Backspace
-	GB_KEY_TAB,          // Tabulation
-	GB_KEY_PAGEUP,       // Page up
-	GB_KEY_PAGEDOWN,     // Page down
-	GB_KEY_END,          // End
-	GB_KEY_HOME,         // Home
-	GB_KEY_INSERT,       // Insert
-	GB_KEY_DELETE,       // Delete
-	GB_KEY_PLUS,         // +
-	GB_KEY_SUBTRACT,     // -
-	GB_KEY_MULTIPLY,     // *
-	GB_KEY_DIVIDE,       // /
-	GB_KEY_LEFT,         // Left arrow
-	GB_KEY_RIGHT,        // Right arrow
-	GB_KEY_UP,           // Up arrow
-	GB_KEY_DOWN,         // Down arrow
-	GB_KEY_NUMPAD0,      // Numpad 0
-	GB_KEY_NUMPAD1,      // Numpad 1
-	GB_KEY_NUMPAD2,      // Numpad 2
-	GB_KEY_NUMPAD3,      // Numpad 3
-	GB_KEY_NUMPAD4,      // Numpad 4
-	GB_KEY_NUMPAD5,      // Numpad 5
-	GB_KEY_NUMPAD6,      // Numpad 6
-	GB_KEY_NUMPAD7,      // Numpad 7
-	GB_KEY_NUMPAD8,      // Numpad 8
-	GB_KEY_NUMPAD9,      // Numpad 9
-	GB_KEY_NUMPAD_DOT,   // Numpad .
-	GB_KEY_NUMPAD_ENTER, // Numpad Enter
-	GB_KEY_F1,           // F1
-	GB_KEY_F2,           // F2
-	GB_KEY_F3,           // F3
-	GB_KEY_F4,           // F4
-	GB_KEY_F5,           // F5
-	GB_KEY_F6,           // F6
-	GB_KEY_F7,           // F7
-	GB_KEY_F8,           // F8
-	GB_KEY_F9,           // F8
-	GB_KEY_F10,          // F10
-	GB_KEY_F11,          // F11
-	GB_KEY_F12,          // F12
-	GB_KEY_F13,          // F13
-	GB_KEY_F14,          // F14
-	GB_KEY_F15,          // F15
-	GB_KEY_PAUSE,        // Pause
+	gbKey_Escape,       // Escape
+	gbKey_Lcontrol,     // Left Control
+	gbKey_Lshift,       // Left Shift
+	gbKey_Lalt,         // Left Alt
+	gbKey_Lsystem,      // Left OS specific: window (Windows and Linux), apple (MacOS X), ...
+	gbKey_Rcontrol,     // Right Control
+	gbKey_Rshift,       // Right Shift
+	gbKey_Ralt,         // Right Alt
+	gbKey_Rsystem,      // Right OS specific: window (Windows and Linux), apple (MacOS X), ...
+	gbKey_Menu,         // Menu
+	gbKey_Return,       // Return
+	gbKey_Backspace,    // Backspace
+	gbKey_Tab,          // Tabulation
+	gbKey_Pageup,       // Page up
+	gbKey_Pagedown,     // Page down
+	gbKey_End,          // End
+	gbKey_Home,         // Home
+	gbKey_Insert,       // Insert
+	gbKey_Delete,       // Delete
+	gbKey_Plus,         // +
+	gbKey_Subtract,     // -
+	gbKey_Multiply,     // *
+	gbKey_Divide,       // /
+	gbKey_Left,         // Left arrow
+	gbKey_Right,        // Right arrow
+	gbKey_Up,           // Up arrow
+	gbKey_Down,         // Down arrow
+	gbKey_Numpad0,      // Numpad 0
+	gbKey_Numpad1,      // Numpad 1
+	gbKey_Numpad2,      // Numpad 2
+	gbKey_Numpad3,      // Numpad 3
+	gbKey_Numpad4,      // Numpad 4
+	gbKey_Numpad5,      // Numpad 5
+	gbKey_Numpad6,      // Numpad 6
+	gbKey_Numpad7,      // Numpad 7
+	gbKey_Numpad8,      // Numpad 8
+	gbKey_Numpad9,      // Numpad 9
+	gbKey_NumpadDot,   // Numpad .
+	gbKey_NumpadEnter, // Numpad Enter
+	gbKey_F1,           // F1
+	gbKey_F2,           // F2
+	gbKey_F3,           // F3
+	gbKey_F4,           // F4
+	gbKey_F5,           // F5
+	gbKey_F6,           // F6
+	gbKey_F7,           // F7
+	gbKey_F8,           // F8
+	gbKey_F9,           // F8
+	gbKey_F10,          // F10
+	gbKey_F11,          // F11
+	gbKey_F12,          // F12
+	gbKey_F13,          // F13
+	gbKey_F14,          // F14
+	gbKey_F15,          // F15
+	gbKey_Pause,        // Pause
 
-	GB_KEY_COUNT
+	gbKey_Count,
 } gbKeyType;
 
 /* TODO(bill): Change name? */
 typedef u8 gbKeyState;
-typedef enum gbKeyStateType {
-	GB_KEY_STATE_DOWN     = GB_BIT(0),
-	GB_KEY_STATE_PRESSED  = GB_BIT(1),
-	GB_KEY_STATE_RELEASED = GB_BIT(2)
-} gbKeyStateType;
+typedef enum gbKeyStateFlag {
+	gbKeyState_Down     = GB_BIT(0),
+	gbKeyState_Pressed  = GB_BIT(1),
+	gbKeyState_Released = GB_BIT(2)
+} gbKeyStateFlag;
 
 GB_DEF void gb_key_state_update(gbKeyState *s, b32 is_down);
 
-typedef enum gbMouseButton {
-	GB_MOUSE_BUTTON_LEFT,
-	GB_MOUSE_BUTTON_MIDDLE,
-	GB_MOUSE_BUTTON_RIGHT,
-	GB_MOUSE_BUTTON_X1,
-	GB_MOUSE_BUTTON_X2,
+typedef enum gbMouseButtonType {
+	gbMouseButton_Left,
+	gbMouseButton_Middle,
+	gbMouseButton_Right,
+	gbMouseButton_X1,
+	gbMouseButton_X2,
 
-	GB_MOUSE_BUTTON_COUNT
-} gbMouseButton;
+	gbMouseButton_Count
+} gbMouseButtonType;
 
 typedef enum gbControllerAxisType {
-	GB_CONTROLLER_AXIS_LEFT_X,
-	GB_CONTROLLER_AXIS_LEFT_Y,
-	GB_CONTROLLER_AXIS_RIGHT_X,
-	GB_CONTROLLER_AXIS_RIGHT_Y,
-	GB_CONTROLLER_AXIS_LEFT_TRIGGER,
-	GB_CONTROLLER_AXIS_RIGHT_TRIGGER,
+	gbControllerAxis_LeftX,
+	gbControllerAxis_LeftY,
+	gbControllerAxis_RightX,
+	gbControllerAxis_RightY,
+	gbControllerAxis_LeftTrigger,
+	gbControllerAxis_RightTrigger,
 
-	GB_CONTROLLER_AXIS_COUNT
+	gbControllerAxis_Count
 } gbControllerAxisType;
 
 typedef enum gbControllerButtonType {
-	GB_CONTROLLER_BUTTON_UP,
-	GB_CONTROLLER_BUTTON_DOWN,
-	GB_CONTROLLER_BUTTON_LEFT,
-	GB_CONTROLLER_BUTTON_RIGHT,
-	GB_CONTROLLER_BUTTON_A,
-	GB_CONTROLLER_BUTTON_B,
-	GB_CONTROLLER_BUTTON_X,
-	GB_CONTROLLER_BUTTON_Y,
-	GB_CONTROLLER_BUTTON_LEFT_SHOULDER,
-	GB_CONTROLLER_BUTTON_RIGHT_SHOULDER,
-	GB_CONTROLLER_BUTTON_BACK,
-	GB_CONTROLLER_BUTTON_START,
-	GB_CONTROLLER_BUTTON_LEFT_THUMB,
-	GB_CONTROLLER_BUTTON_RIGHT_THUMB,
+	gbControllerButton_Up,
+	gbControllerButton_Down,
+	gbControllerButton_Left,
+	gbControllerButton_Right,
+	gbControllerButton_A,
+	gbControllerButton_B,
+	gbControllerButton_X,
+	gbControllerButton_Y,
+	gbControllerButton_LeftShoulder,
+	gbControllerButton_RightShoulder,
+	gbControllerButton_Back,
+	gbControllerButton_Start,
+	gbControllerButton_LeftThumb,
+	gbControllerButton_RightThumb,
 
-	GB_CONTROLLER_BUTTON_COUNT
+	gbControllerButton_Count
 } gbControllerButtonType;
 
 typedef struct gbGameController {
 	b16 is_connected, is_analog;
 
-	f32        axes[GB_CONTROLLER_AXIS_COUNT];
-	gbKeyState buttons[GB_CONTROLLER_BUTTON_COUNT];
+	f32        axes[gbControllerAxis_Count];
+	gbKeyState buttons[gbControllerButton_Count];
 } gbGameController;
 
 #if defined(GB_SYSTEM_WINDOWS)
@@ -2423,20 +2466,20 @@ typedef struct gbGameController {
 
 
 typedef enum gbWindowFlag {
-	GB_WINDOW_FULLSCREEN         = GB_BIT(0),
-	GB_WINDOW_HIDDEN             = GB_BIT(1),
-	GB_WINDOW_BORDERLESS         = GB_BIT(2),
-	GB_WINDOW_RESIZABLE          = GB_BIT(3),
-	GB_WINDOW_MINIMIZED          = GB_BIT(4),
-	GB_WINDOW_MAXIMIZED          = GB_BIT(5),
-	GB_WINDOW_FULLSCREEN_DESKTOP = GB_WINDOW_FULLSCREEN | GB_WINDOW_BORDERLESS,
+	gbWindow_Fullscreen        = GB_BIT(0),
+	gbWindow_Hidden            = GB_BIT(1),
+	gbWindow_Borderless        = GB_BIT(2),
+	gbWindow_Resizable         = GB_BIT(3),
+	gbWindow_Minimized         = GB_BIT(4),
+	gbWindow_Maximized         = GB_BIT(5),
+	gbWindow_FullscreenDesktop = gbWindow_Fullscreen | gbWindow_Borderless,
 } gbWindowFlag;
 
 typedef enum gbRendererType {
-	GB_RENDERER_OPENGL,
-	GB_RENDERER_SOFTWARE,
+	gbRenderer_Opengl,
+	gbRenderer_Software,
 
-	GB_RENDERER_COUNT,
+	gbRenderer_Count,
 } gbRendererType;
 
 
@@ -2445,8 +2488,7 @@ typedef enum gbRendererType {
 #pragma warning(disable:4201)
 #endif
 
-#ifndef _WINDOWS_
-
+#if !defined(_WINDOWS_)
 typedef struct tagBITMAPINFOHEADER {
 	unsigned long biSize;
 	long          biWidth;
@@ -2460,14 +2502,12 @@ typedef struct tagBITMAPINFOHEADER {
 	unsigned long biClrUsed;
 	unsigned long biClrImportant;
 } BITMAPINFOHEADER, *PBITMAPINFOHEADER;
-
 typedef struct tagRGBQUAD {
 	u8 rgbBlue;
 	u8 rgbGreen;
 	u8 rgbRed;
 	u8 rgbReserved;
 } RGBQUAD;
-
 typedef struct tagBITMAPINFO {
 	BITMAPINFOHEADER bmiHeader;
 	RGBQUAD          bmiColors[1];
@@ -2509,7 +2549,7 @@ typedef struct gbPlatform {
 		} sw_framebuffer;
 	};
 
-	gbKeyState keys[GB_KEY_COUNT];
+	gbKeyState keys[gbKey_Count];
 	struct {
 		gbKeyState control;
 		gbKeyState alt;
@@ -2524,7 +2564,7 @@ typedef struct gbPlatform {
 	i32 mouse_dx, mouse_dy; // NOTE(bill): Not raw mouse movement
 	i32 mouse_raw_dx, mouse_raw_dy; // NOTE(bill): Raw mouse movement
 	i32 mouse_wheel_delta;
-	gbKeyState mouse_buttons[GB_MOUSE_BUTTON_COUNT];
+	gbKeyState mouse_buttons[gbMouseButton_Count];
 
 	gbGameController game_controllers[GB_MAX_GAME_CONTROLLER_COUNT];
 
@@ -2579,7 +2619,7 @@ GB_DEF void  gb_platform_show_window                (gbPlatform *p);
 GB_DEF void  gb_platform_hide_window                (gbPlatform *p);
 
 
-#endif // !defined(GB_NO_PLATFORM)
+#endif // GB_PLATFORM
 
 #if defined(__cplusplus)
 }
@@ -3656,7 +3696,8 @@ extern "C" {
 	GB_DLL_IMPORT BOOL WINAPI DestroyWindow(HWND hWnd);
 	GB_DLL_IMPORT int         StretchDIBits(HDC hdc, int XDest, int YDest, int nDestWidth, int nDestHeight,
 	                                        int XSrc, int YSrc, int nSrcWidth, int nSrcHeight,
-	                                        void const *lpBits, BITMAPINFO const *lpBitsInfo, UINT iUsage, DWORD dwRop);
+	                                        void const *lpBits, /*BITMAPINFO*/void const *lpBitsInfo, UINT iUsage, DWORD dwRop);
+	                                        // IMPORTANT TODO(bill): FIX THIS!!!!
 #endif // Bill's Mini Windows.h
 
 
@@ -3878,23 +3919,27 @@ void gb_memswap(void *i, void *j, isize size) {
 
 
 
-gb_inline void *gb_alloc_align (gbAllocator a, isize size, isize alignment)                                { return a.proc(a.data, GB_ALLOCATION_ALLOC, size, alignment, NULL, 0, 0); }
+gb_inline void *gb_alloc_align (gbAllocator a, isize size, isize alignment)                                { return a.proc(a.data, gbAllocation_Alloc, size, alignment, NULL, 0, 0); }
 gb_inline void *gb_alloc       (gbAllocator a, isize size)                                                 { return gb_alloc_align(a, size, GB_DEFAULT_MEMORY_ALIGNMENT); }
-gb_inline void  gb_free        (gbAllocator a, void *ptr)                                                  { a.proc(a.data, GB_ALLOCATION_FREE, 0, 0, ptr, 0, 0); }
-gb_inline void  gb_free_all    (gbAllocator a)                                                             { a.proc(a.data, GB_ALLOCATION_FREE_ALL, 0, 0, NULL, 0, 0); }
+gb_inline void  gb_free        (gbAllocator a, void *ptr)                                                  { a.proc(a.data, gbAllocation_Free, 0, 0, ptr, 0, 0); }
+gb_inline void  gb_free_all    (gbAllocator a)                                                             { a.proc(a.data, gbAllocation_FreeAll, 0, 0, NULL, 0, 0); }
 gb_inline void *gb_resize      (gbAllocator a, void *ptr, isize old_size, isize new_size)                  { return gb_resize_align(a, ptr, old_size, new_size, GB_DEFAULT_MEMORY_ALIGNMENT); }
-gb_inline void *gb_resize_align(gbAllocator a, void *ptr, isize old_size, isize new_size, isize alignment) { return a.proc(a.data, GB_ALLOCATION_RESIZE, new_size, alignment, ptr, old_size, 0); }
+gb_inline void *gb_resize_align(gbAllocator a, void *ptr, isize old_size, isize new_size, isize alignment) { return a.proc(a.data, gbAllocation_Resize, new_size, alignment, ptr, old_size, 0); }
 
 gb_inline void *gb_alloc_copy      (gbAllocator a, void const *src, isize size)                  { return gb_memcopy(gb_alloc(a, size), src, size); }
 gb_inline void *gb_alloc_copy_align(gbAllocator a, void const *src, isize size, isize alignment) { return gb_memcopy(gb_alloc_align(a, size, alignment), src, size); }
 
 gb_inline char *gb_alloc_str(gbAllocator a, char const *str) {
+	return gb_alloc_str_len(a, str, gb_strlen(str));
+}
+
+gb_inline char *gb_alloc_str_len(gbAllocator a, char const *str, isize len) {
 	char *result;
-	isize len = gb_strlen(str);
 	result = cast(char *)gb_alloc_copy(a, str, len+1);
 	result[len] = '\0';
 	return result;
 }
+
 
 gb_inline void *gb_default_resize_align(gbAllocator a, void *old_memory, isize old_size, isize new_size, isize alignment) {
 	if (!old_memory) return gb_alloc_align(a, new_size, alignment);
@@ -4637,6 +4682,79 @@ void gb_thread_set_name(gbThread *t, char const *name) {
 
 
 
+void gb_sync_init(gbSync *s) {
+	gb_zero_item(s);
+	gb_mutex_init(&s->mutex);
+	gb_mutex_init(&s->start);
+	gb_semaphore_init(&s->release);
+}
+
+void gb_sync_destroy(gbSync *s) {
+	if (s->waiting)
+		GB_PANIC("Cannot destroy while threads are waiting!");
+
+	gb_mutex_destroy(&s->mutex);
+	gb_mutex_destroy(&s->start);
+	gb_semaphore_destroy(&s->release);
+}
+
+void gb_sync_set_target(gbSync *s, i32 count) {
+	gb_mutex_lock(&s->start);
+
+	gb_mutex_lock(&s->mutex);
+	GB_ASSERT(s->target == 0);
+	s->target = count;
+	s->current = 0;
+	s->waiting = 0;
+	gb_mutex_unlock(&s->mutex);
+}
+
+void gb_sync_release(gbSync *s) {
+	if (s->waiting) {
+		gb_semaphore_post(&s->release, 1);
+	} else {
+		s->target = 0;
+		gb_mutex_unlock(&s->start);
+	}
+}
+
+i32 gb_sync_reach(gbSync *s) {
+	i32 n;
+	gb_mutex_lock(&s->mutex);
+	GB_ASSERT(s->current < s->target);
+	n = ++s->current; // NOTE(bill): Record this value to avoid possible race if `return s->current` was done
+	if (s->current == s->target)
+		gb_sync_release(s);
+	gb_mutex_unlock(&s->mutex);
+	return n;
+}
+
+void gb_sync_reach_and_wait(gbSync *s) {
+	gb_mutex_lock(&s->mutex);
+	GB_ASSERT(s->current < s->target);
+	s->current++;
+	if (s->current == s->target) {
+		gb_sync_release(s);
+		gb_mutex_unlock(&s->mutex);
+	} else {
+		s->waiting++;                   // NOTE(bill): Waiting, so one more waiter
+		gb_mutex_unlock(&s->mutex);     // NOTE(bill): Release the mutex to other threads
+
+		gb_semaphore_wait(&s->release); // NOTE(bill): Wait for merge completion
+
+		gb_mutex_lock(&s->mutex);       // NOTE(bill): On merge completion, lock mutex
+		s->waiting--;                   // NOTE(bill): Done waiting
+		gb_sync_release(s);             // NOTE(bill): Restart the next waiter
+		gb_mutex_unlock(&s->mutex);
+	}
+}
+
+
+
+
+
+
+
 
 gb_inline gbAllocator gb_heap_allocator(void) {
 	gbAllocator a;
@@ -4652,12 +4770,12 @@ GB_ALLOCATOR_PROC(gb_heap_allocator_proc) {
 // TODO(bill): Throughly test!
 	switch (type) {
 #if defined(GB_COMPILER_MSVC)
-	case GB_ALLOCATION_ALLOC:  return _aligned_malloc(size, alignment);
-	case GB_ALLOCATION_FREE:   _aligned_free(old_memory); break;
-	case GB_ALLOCATION_RESIZE: return _aligned_realloc(old_memory, size, alignment);
+	case gbAllocation_Alloc:  return _aligned_malloc(size, alignment);
+	case gbAllocation_Free:   _aligned_free(old_memory); break;
+	case gbAllocation_Resize: return _aligned_realloc(old_memory, size, alignment);
 #else
 	// TODO(bill): *nix version that's decent
-	case GB_ALLOCATION_ALLOC: {
+	case gbAllocation_Alloc: {
 		isize total_size = size + alignment + gb_size_of(gbAllocationHeader);
 		void *ptr = malloc(total_size);
 		gbAllocationHeader *header = cast(gbAllocationHeader *)ptr;
@@ -4666,17 +4784,17 @@ GB_ALLOCATOR_PROC(gb_heap_allocator_proc) {
 		return ptr;
 	} break;
 
-	case GB_ALLOCATION_FREE: {
+	case gbAllocation_Free: {
 		free(gb_allocation_header(old_memory));
 	} break;
 
-	case GB_ALLOCATION_RESIZE: {
+	case gbAllocation_Resize: {
 		gbAllocator a = gb_heap_allocator();
 		return gb_default_resize_align(a, old_memory, old_size, size, alignment);
 	} break;
 #endif
 
-	case GB_ALLOCATION_FREE_ALL:
+	case gbAllocation_FreeAll:
 		break;
 	}
 
@@ -5091,7 +5209,7 @@ GB_ALLOCATOR_PROC(gb_arena_allocator_proc) {
 	gb_unused(old_size);
 
 	switch (type) {
-	case GB_ALLOCATION_ALLOC: {
+	case gbAllocation_Alloc: {
 		void *ptr = NULL;
 		void *end = gb_pointer_add(arena->physical_start, arena->total_allocated);
 		isize total_size = size + alignment;
@@ -5105,16 +5223,16 @@ GB_ALLOCATOR_PROC(gb_arena_allocator_proc) {
 		return ptr;
 	} break;
 
-	case GB_ALLOCATION_FREE:
+	case gbAllocation_Free:
 		// NOTE(bill): Free all at once
 		// Use Temp_Arena_Memory if you want to free a block
 		break;
 
-	case GB_ALLOCATION_FREE_ALL:
+	case gbAllocation_FreeAll:
 		arena->total_allocated = 0;
 		break;
 
-	case GB_ALLOCATION_RESIZE: {
+	case gbAllocation_Resize: {
 		// TODO(bill): Check if ptr is on top of stack and just extend
 		gbAllocator a = gb_arena_allocator(arena);
 		return gb_default_resize_align(a, old_memory, old_size, size, alignment);
@@ -5203,7 +5321,7 @@ GB_ALLOCATOR_PROC(gb_pool_allocator_proc) {
 	gb_unused(old_size);
 
 	switch (type) {
-	case GB_ALLOCATION_ALLOC: {
+	case gbAllocation_Alloc: {
 		uintptr next_free;
 		void *ptr;
 		GB_ASSERT(size      == pool->block_size);
@@ -5217,7 +5335,7 @@ GB_ALLOCATOR_PROC(gb_pool_allocator_proc) {
 		return ptr;
 	} break;
 
-	case GB_ALLOCATION_FREE: {
+	case gbAllocation_Free: {
 		uintptr *next;
 		if (old_memory == NULL) return NULL;
 
@@ -5227,11 +5345,11 @@ GB_ALLOCATOR_PROC(gb_pool_allocator_proc) {
 		pool->total_size -= pool->block_size;
 	} break;
 
-	case GB_ALLOCATION_FREE_ALL:
+	case gbAllocation_FreeAll:
 		// TODO(bill):
 		break;
 
-	case GB_ALLOCATION_RESIZE:
+	case gbAllocation_Resize:
 		// NOTE(bill): Cannot resize
 		GB_PANIC("You cannot resize something allocated by with a pool.");
 		break;
@@ -5296,7 +5414,7 @@ GB_ALLOCATOR_PROC(gb_free_list_allocator_proc) {
 	gb_unused(options);
 
 	switch (type) {
-	case GB_ALLOCATION_ALLOC: {
+	case gbAllocation_Alloc: {
 		gbFreeListBlock *prev_block = NULL;
 		gbFreeListBlock *curr_block = fl->curr_block;
 
@@ -5353,7 +5471,7 @@ GB_ALLOCATOR_PROC(gb_free_list_allocator_proc) {
 		return NULL;
 	} break;
 
-	case GB_ALLOCATION_FREE: {
+	case gbAllocation_Free: {
 		gbAllocationHeader *header = gb_allocation_header(old_memory);
 		isize block_size = header->size;
 		uintptr block_start, block_end;
@@ -5396,11 +5514,11 @@ GB_ALLOCATOR_PROC(gb_free_list_allocator_proc) {
 		fl->total_allocated -= block_size;
 	} break;
 
-	case GB_ALLOCATION_FREE_ALL: {
+	case gbAllocation_FreeAll: {
 		gb_free_list_init(fl, fl->physical_start, fl->total_size);
 	} break;
 
-	case GB_ALLOCATION_RESIZE:
+	case gbAllocation_Resize:
 		return gb_default_resize_align(gb_free_list_allocator(fl), old_memory, old_size, size, alignment);
 	}
 
@@ -5438,7 +5556,7 @@ GB_ALLOCATOR_PROC(gb_scratch_allocator_proc) {
 	gb_unused(options);
 
 	switch (type) {
-	case GB_ALLOCATION_ALLOC: {
+	case gbAllocation_Alloc: {
 		void *ptr = s->alloc_point;
 		gbAllocationHeader *header = cast(gbAllocationHeader *)ptr;
 		void *data = gb_align_forward(header+1, alignment);
@@ -5464,7 +5582,7 @@ GB_ALLOCATOR_PROC(gb_scratch_allocator_proc) {
 		}
 	} break;
 
-	case GB_ALLOCATION_FREE: {
+	case gbAllocation_Free: {
 		if (old_memory) {
 			void *end = gb_pointer_add(s->physical_start, s->total_size);
 			if (old_memory < s->physical_start || old_memory >= end) {
@@ -5488,12 +5606,12 @@ GB_ALLOCATOR_PROC(gb_scratch_allocator_proc) {
 		}
 	} break;
 
-	case GB_ALLOCATION_FREE_ALL: {
+	case gbAllocation_FreeAll: {
 		s->alloc_point = s->physical_start;
 		s->free_point  = s->physical_start;
 	} break;
 
-	case GB_ALLOCATION_RESIZE:
+	case gbAllocation_Resize:
 		return gb_default_resize_align(gb_scratch_allocator(s), old_memory, old_size, size, alignment);
 	}
 
@@ -5678,6 +5796,24 @@ gb_inline isize gb_binary_search(void const *base, isize count, isize size, void
 	return -1;
 }
 
+void gb_shuffle(void *base, isize count, isize size) {
+	u8 *a;
+	isize i, j;
+	gbRandom random; gb_random_init(&random);
+
+	a = cast(u8 *)base + (count-1) * size;
+	for (i = count; i > 1; i--) {
+		j = gb_random_gen_isize(&random) % i;
+		gb_memswap(a, cast(u8 *)base + j*size, size);
+		a -= size;
+	}
+}
+
+void gb_reverse(void *base, isize count, isize size) {
+	isize i, j = count-1;
+	for (i = 0; i < j; i++, j++)
+		gb_memswap(cast(u8 *)base + i*size, cast(u8 *)base + j*size, size);
+}
 
 
 
@@ -6437,7 +6573,7 @@ char *gb_ucs2_to_utf8_buf(char16 const *str) { // NOTE(bill): Uses locally persi
 
 
 
-
+// TODO(bill): Is this good enough for UTF-8?
 #define GB__UTF_SIZE 4
 #define GB__UTF_INVALID 0xfffd
 
@@ -6476,11 +6612,10 @@ isize gb_utf8_decode_len(char const *s, isize str_len, char32 *c) {
 	char32 cp;
 
 	GB_ASSERT_NOT_NULL(s);
-	GB_ASSERT_NOT_NULL(c);
 
-	if (!s || !c) return 0;
+	if (!s) return 0;
 	if (!str_len) return 0;
-	*c = GB__UTF_INVALID;
+	if (c) *c = GB__UTF_INVALID;
 
 	cp = gb__utf_decode_byte(s[0], &len);
 	if (!gb_is_between(len, 1, GB__UTF_SIZE))
@@ -6493,10 +6628,20 @@ isize gb_utf8_decode_len(char const *s, isize str_len, char32 *c) {
 	}
 	if (j < len)
 		return 0;
-	*c = cp;
-	gb__utf_validate(c, len);
+	gb__utf_validate(&cp, len);
+	if (c) *c = cp;
 	return len;
 }
+
+isize gb_utf8_codepoint_size(char const *str, isize str_len) {
+	isize i = 0;
+	for (; i < str_len && str[i]; i++) {
+		if ((str[i] & 0xc0) != 0x80)
+			break;
+	}
+	return i+1;
+}
+
 
 
 
@@ -6952,7 +7097,7 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 		b32 result = false;
 		DWORD size_ = cast(DWORD)(size > I32_MAX ? I32_MAX : size);
 		DWORD bytes_read_;
-		gb__win32_file_seek(fd, offset, GB_SEEK_BEGIN, NULL);
+		gb__win32_file_seek(fd, offset, gbSeekWhence_Begin, NULL);
 		if (ReadFile(fd.p, buffer, size_, &bytes_read_, NULL)) {
 			if (bytes_read) *bytes_read = bytes_read_;
 			result = true;
@@ -6964,7 +7109,7 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 	gb_internal GB_FILE_WRITE_AT_PROC(gb__win32_file_write) {
 		DWORD size_ = cast(DWORD)(size > I32_MAX ? I32_MAX : size);
 		DWORD bytes_written_;
-		gb__win32_file_seek(fd, offset, GB_SEEK_BEGIN, NULL);
+		gb__win32_file_seek(fd, offset, gbSeekWhence_Begin, NULL);
 		if (WriteFile(fd.p, buffer, size_, &bytes_written_, NULL)) {
 			if (bytes_written) *bytes_written = bytes_written_;
 			return true;
@@ -6976,7 +7121,7 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 		CloseHandle(fd.p);
 	}
 
-	gbFileOperations const GB_DEFAULT_FILE_OPERATIONS = {
+	gbFileOperations const gbDefaultFileOperations = {
 		gb__win32_file_read,
 		gb__win32_file_write,
 		gb__win32_file_seek,
@@ -6989,34 +7134,34 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 		void *handle;
 		char16 path[1024] = {0}; // TODO(bill): Is this really enough or should I heap allocate this if it's too large?
 
-		switch (mode & GB_FILE_MODES) {
-		case GB_FILE_READ:
+		switch (mode & gbFileMode_Modes) {
+		case gbFileMode_Read:
 			desired_access = GENERIC_READ;
 			creation_disposition = OPEN_EXISTING;
 			break;
-		case GB_FILE_WRITE:
+		case gbFileMode_Write:
 			desired_access = GENERIC_WRITE;
 			creation_disposition = CREATE_ALWAYS;
 			break;
-		case GB_FILE_APPEND:
+		case gbFileMode_Append:
 			desired_access = GENERIC_WRITE;
 			creation_disposition = OPEN_ALWAYS;
 			break;
-		case GB_FILE_READ | GB_FILE_RW:
+		case gbFileMode_Read | gbFileMode_Rw:
 			desired_access = GENERIC_READ | GENERIC_WRITE;
 			creation_disposition = OPEN_EXISTING;
 			break;
-		case GB_FILE_WRITE | GB_FILE_RW:
+		case gbFileMode_Write | gbFileMode_Rw:
 			desired_access = GENERIC_READ | GENERIC_WRITE;
 			creation_disposition = CREATE_ALWAYS;
 			break;
-		case GB_FILE_APPEND | GB_FILE_RW:
+		case gbFileMode_Append | gbFileMode_Rw:
 			desired_access = GENERIC_READ | GENERIC_WRITE;
 			creation_disposition = OPEN_ALWAYS;
 			break;
 		default:
 			GB_PANIC("Invalid file mode");
-			return GB_FILE_ERR_INVALID;
+			return gbFileError_Invalid;
 		}
 
 		handle = CreateFileW(cast(wchar_t const *)gb_utf8_to_ucs2(path, gb_count_of(path), filename),
@@ -7027,25 +7172,25 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 		if (handle == INVALID_HANDLE_VALUE) {
 			DWORD err = GetLastError();
 			switch (err) {
-			case ERROR_FILE_NOT_FOUND: return GB_FILE_ERR_NOT_EXISTS;
-			case ERROR_FILE_EXISTS:    return GB_FILE_ERR_EXISTS;
-			case ERROR_ALREADY_EXISTS: return GB_FILE_ERR_EXISTS;
-			case ERROR_ACCESS_DENIED:  return GB_FILE_ERR_PERMISSION;
+			case ERROR_FILE_NOT_FOUND: return gbFileError_NotExists;
+			case ERROR_FILE_EXISTS:    return gbFileError_Exists;
+			case ERROR_ALREADY_EXISTS: return gbFileError_Exists;
+			case ERROR_ACCESS_DENIED:  return gbFileError_Permission;
 			}
-			return GB_FILE_ERR_INVALID;
+			return gbFileError_Invalid;
 		}
 
-		if (mode & GB_FILE_APPEND) {
+		if (mode & gbFileMode_Append) {
 			LARGE_INTEGER offset = {0};
-			if (!SetFilePointerEx(handle, offset, NULL, GB_SEEK_END)) {
+			if (!SetFilePointerEx(handle, offset, NULL, gbSeekWhence_End)) {
 				CloseHandle(handle);
-				return GB_FILE_ERR_INVALID;
+				return gbFileError_Invalid;
 			}
 		}
 
 		fd->p = handle;
-		*ops = &GB_DEFAULT_FILE_OPERATIONS;
-		return GB_FILE_ERR_NONE;
+		*ops = &gbDefaultFileOperations;
+		return gbFileError_None;
 	}
 
 #else // POSIX
@@ -7075,7 +7220,7 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 		close(fd.i);
 	}
 
-	gbFileOperations const GB_DEFAULT_FILE_OPERATIONS = {
+	gbFileOperations const gbDefaultFileOperations = {
 		gb__posix_file_read,
 		gb__posix_file_write,
 		gb__posix_file_seek,
@@ -7084,38 +7229,38 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 
 	gb_no_inline GB_FILE_OPEN_PROC(gb__posix_file_open) {
 		i32 os_mode;
-		switch (mode & GB_FILE_MODES) {
-		case GB_FILE_READ:
+		switch (mode & gbFileMode_Modes) {
+		case gbFileMode_Read:
 			os_mode = O_RDONLY;
 			break;
-		case GB_FILE_WRITE:
+		case gbFileMode_Write:
 			os_mode = O_WRONLY | O_CREAT | O_TRUNC;
 			break;
-		case GB_FILE_APPEND:
+		case gbFileMode_Append:
 			os_mode = O_WRONLY | O_APPEND | O_CREAT;
 			break;
-		case GB_FILE_READ | GB_FILE_RW:
+		case gbFileMode_Read | gbFileMode_Rw:
 			os_mode = O_RDWR;
 			break;
-		case GB_FILE_WRITE | GB_FILE_RW:
+		case gbFileMode_Write | gbFileMode_Rw:
 			os_mode = O_RDWR | O_CREAT | O_TRUNC;
 			break;
-		case GB_FILE_APPEND | GB_FILE_RW:
+		case gbFileMode_Append | gbFileMode_Rw:
 			os_mode = O_RDWR | O_APPEND | O_CREAT;
 			break;
 		default:
 			GB_PANIC("Invalid file mode");
-			return GB_FILE_ERR_INVALID;
+			return gbFileError_Invalid;
 		}
 
 		fd->i = open(filename, os_mode, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 		if (fd->i < 0) {
 			// TODO(bill): More file errors
-			return GB_FILE_ERR_INVALID;
+			return gbFileError_Invalid;
 		}
 
-		*ops = &GB_DEFAULT_FILE_OPERATIONS;
-		return GB_FILE_ERR_NONE;
+		*ops = &gbDefaultFileOperations;
+		return gbFileError_None;
 	}
 
 #endif
@@ -7123,7 +7268,7 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 
 
 gbFileError gb_file_new(gbFile *f, gbFileDescriptor fd, gbFileOperations const *ops, char const *filename) {
-	gbFileError err = GB_FILE_ERR_NONE;
+	gbFileError err = gbFileError_None;
 
 	f->ops = ops;
 	f->fd = fd;
@@ -7142,33 +7287,33 @@ gbFileError gb_file_open_mode(gbFile *f, gbFileMode mode, char const *filename) 
 #else
 	err = gb__posix_file_open(&f->fd, &f->ops, mode, filename);
 #endif
-	if (err == GB_FILE_ERR_NONE)
+	if (err == gbFileError_None)
 		return gb_file_new(f, f->fd, f->ops, filename);
 	return err;
 }
 
 gbFileError gb_file_close(gbFile *f) {
 	if (!f)
-		return GB_FILE_ERR_INVALID;
+		return gbFileError_Invalid;
 
 	if (f->filename) gb_free(gb_heap_allocator(), cast(char *)f->filename);
 
 	if (f->fd.p == INVALID_HANDLE_VALUE)
-		return GB_FILE_ERR_INVALID;
+		return gbFileError_Invalid;
 
-	if (!f->ops) f->ops = &GB_DEFAULT_FILE_OPERATIONS;
+	if (!f->ops) f->ops = &gbDefaultFileOperations;
 	f->ops->close(f->fd);
 
-	return GB_FILE_ERR_NONE;
+	return gbFileError_None;
 }
 
 gb_inline b32 gb_file_read_at_check(gbFile *f, void *buffer, isize size, i64 offset, isize *bytes_read) {
-	if (!f->ops) f->ops = &GB_DEFAULT_FILE_OPERATIONS;
+	if (!f->ops) f->ops = &gbDefaultFileOperations;
 	return f->ops->read_at(f->fd, buffer, size, offset, bytes_read);
 }
 
 gb_inline b32 gb_file_write_at_check(gbFile *f, void const *buffer, isize size, i64 offset, isize *bytes_written) {
-	if (!f->ops) f->ops = &GB_DEFAULT_FILE_OPERATIONS;
+	if (!f->ops) f->ops = &gbDefaultFileOperations;
 	return f->ops->write_at(f->fd, buffer, size, offset, bytes_written);
 }
 
@@ -7183,30 +7328,30 @@ gb_inline b32 gb_file_write_at(gbFile *f, void const *buffer, isize size, i64 of
 
 gb_inline i64 gb_file_seek(gbFile *f, i64 offset) {
 	i64 new_offset = 0;
-	if (!f->ops) f->ops = &GB_DEFAULT_FILE_OPERATIONS;
-	f->ops->seek(f->fd, offset, GB_SEEK_BEGIN, &new_offset);
+	if (!f->ops) f->ops = &gbDefaultFileOperations;
+	f->ops->seek(f->fd, offset, gbSeekWhence_Begin, &new_offset);
 	return new_offset;
 }
 
 gb_inline i64 gb_file_seek_to_end(gbFile *f) {
 	i64 new_offset = 0;
-	if (!f->ops) f->ops = &GB_DEFAULT_FILE_OPERATIONS;
-	f->ops->seek(f->fd, 0, GB_SEEK_END, &new_offset);
+	if (!f->ops) f->ops = &gbDefaultFileOperations;
+	f->ops->seek(f->fd, 0, gbSeekWhence_End, &new_offset);
 	return new_offset;
 }
 
 // NOTE(bill): Skips a certain amount of bytes
 gb_inline i64 gb_file_skip(gbFile *f, i64 bytes) {
 	i64 new_offset = 0;
-	if (!f->ops) f->ops = &GB_DEFAULT_FILE_OPERATIONS;
-	f->ops->seek(f->fd, bytes, GB_SEEK_CURRENT, &new_offset);
+	if (!f->ops) f->ops = &gbDefaultFileOperations;
+	f->ops->seek(f->fd, bytes, gbSeekWhence_Current, &new_offset);
 	return new_offset;
 }
 
 gb_inline i64 gb_file_tell(gbFile *f) {
 	i64 new_offset = 0;
-	if (!f->ops) f->ops = &GB_DEFAULT_FILE_OPERATIONS;
-	f->ops->seek(f->fd, 0, GB_SEEK_CURRENT, &new_offset);
+	if (!f->ops) f->ops = &gbDefaultFileOperations;
+	f->ops->seek(f->fd, 0, gbSeekWhence_Current, &new_offset);
 	return new_offset;
 }
 gb_inline b32 gb_file_read (gbFile *f, void *buffer, isize size)       { return gb_file_read_at(f, buffer, size, gb_file_tell(f)); }
@@ -7214,12 +7359,12 @@ gb_inline b32 gb_file_write(gbFile *f, void const *buffer, isize size) { return 
 
 
 gbFileError gb_file_create(gbFile *f, char const *filename) {
-	return gb_file_open_mode(f, GB_FILE_WRITE|GB_FILE_RW, filename);
+	return gb_file_open_mode(f, gbFileMode_Write|gbFileMode_Rw, filename);
 }
 
 
 gbFileError gb_file_open(gbFile *f, char const *filename) {
-	return gb_file_open_mode(f, GB_FILE_READ, filename);
+	return gb_file_open_mode(f, gbFileMode_Read, filename);
 }
 
 
@@ -7237,17 +7382,17 @@ gb_inline b32 gb_file_has_changed(gbFile *f) {
 
 // TODO(bill): Is this a bad idea?
 gb_global b32    gb__std_file_set = false;
-gb_global gbFile gb__std_files[GB_FILE_STANDARD_COUNT] = {0};
+gb_global gbFile gb__std_files[gbFileStandard_Count] = {0};
 
 
 #if defined(GB_SYSTEM_WINDOWS)
 
 gb_inline gbFile *const gb_file_get_standard(gbFileStandardType std) {
 	if (!gb__std_file_set) {
-	#define GB__SET_STD_FILE(type, v) gb__std_files[type].fd.p = v; gb__std_files[type].ops = &GB_DEFAULT_FILE_OPERATIONS
-		GB__SET_STD_FILE(GB_FILE_STANDARD_INPUT,  GetStdHandle(STD_INPUT_HANDLE));
-		GB__SET_STD_FILE(GB_FILE_STANDARD_OUTPUT, GetStdHandle(STD_OUTPUT_HANDLE));
-		GB__SET_STD_FILE(GB_FILE_STANDARD_ERROR,  GetStdHandle(STD_ERROR_HANDLE));
+	#define GB__SET_STD_FILE(type, v) gb__std_files[type].fd.p = v; gb__std_files[type].ops = &gbDefaultFileOperations
+		GB__SET_STD_FILE(gbFileStandard_Input,  GetStdHandle(STD_INPUT_HANDLE));
+		GB__SET_STD_FILE(gbFileStandard_Output, GetStdHandle(STD_OUTPUT_HANDLE));
+		GB__SET_STD_FILE(gbFileStandard_Error,  GetStdHandle(STD_ERROR_HANDLE));
 	#undef GB__SET_STD_FILE
 		gb__std_file_set = true;
 	}
@@ -7261,11 +7406,11 @@ gb_inline i64 gb_file_size(gbFile *f) {
 }
 
 gbFileError gb_file_truncate(gbFile *f, i64 size) {
-	gbFileError err = GB_FILE_ERR_NONE;
+	gbFileError err = gbFileError_None;
 	i64 prev_offset = gb_file_tell(f);
 	gb_file_seek(f, size);
 	if (!SetEndOfFile(f))
-		err = GB_FILE_ERR_TRUNCATION_FAILURE;
+		err = gbFileError_TruncationFailure;
 	gb_file_seek(f, prev_offset);
 	return err;
 }
@@ -7283,10 +7428,10 @@ b32 gb_file_exists(char const *name) {
 
 gb_inline gbFile *const gb_file_get_standard(gbFileStandardType std) {
 	if (!gb__std_file_set) {
-	#define GB__SET_STD_FILE(type, v) gb__std_files[type].fd.i = v; gb__std_files[type].ops = &GB_DEFAULT_FILE_OPERATIONS
-		GB__SET_STD_FILE(GB_FILE_STANDARD_INPUT,  0);
-		GB__SET_STD_FILE(GB_FILE_STANDARD_OUTPUT, 1);
-		GB__SET_STD_FILE(GB_FILE_STANDARD_ERROR,  2);
+	#define GB__SET_STD_FILE(type, v) gb__std_files[type].fd.i = v; gb__std_files[type].ops = &gbDefaultFileOperations
+		GB__SET_STD_FILE(gbFileStandard_Input,  0);
+		GB__SET_STD_FILE(gbFileStandard_Output, 1);
+		GB__SET_STD_FILE(gbFileStandard_Error,  2);
 	#undef GB__SET_STD_FILE
 		gb__std_file_set = true;
 	}
@@ -7303,9 +7448,9 @@ gb_inline i64 gb_file_size(gbFile *f) {
 }
 
 gb_inline gbFileError gb_file_truncate(gbFile *f, i64 size) {
-	gbFileError err = GB_FILE_ERR_NONE;
+	gbFileError err = gbFileError_None;
 	int i = ftruncate(f->fd.i, size);
-	if (i != 0) err = GB_FILE_ERR_TRUNCATION_FAILURE;
+	if (i != 0) err = gbFileError_TruncationFailure;
 	return err;
 }
 
@@ -7407,7 +7552,7 @@ gbFileContents gb_file_read_contents(gbAllocator a, b32 zero_terminate, char con
 
 	result.allocator = a;
 
-	if (gb_file_open(&file, filepath) == GB_FILE_ERR_NONE) {
+	if (gb_file_open(&file, filepath) == gbFileError_None) {
 		isize file_size = cast(isize)gb_file_size(&file);
 		if (file_size > 0) {
 			result.data = gb_alloc(a, zero_terminate ? file_size+1 : file_size);
@@ -7532,11 +7677,11 @@ isize gb_snprintf(char *str, isize n, char const *fmt, ...) {
 
 
 gb_inline isize gb_printf_va(char const *fmt, va_list va) {
-	return gb_fprintf_va(gb_file_get_standard(GB_FILE_STANDARD_OUTPUT), fmt, va);
+	return gb_fprintf_va(gb_file_get_standard(gbFileStandard_Output), fmt, va);
 }
 
 gb_inline isize gb_printf_err_va(char const *fmt, va_list va) {
-	return gb_fprintf_va(gb_file_get_standard(GB_FILE_STANDARD_ERROR), fmt, va);
+	return gb_fprintf_va(gb_file_get_standard(gbFileStandard_Error), fmt, va);
 }
 
 gb_inline isize gb_fprintf_va(struct gbFile *f, char const *fmt, va_list va) {
@@ -7555,28 +7700,28 @@ gb_inline char *gb_bprintf_va(char const *fmt, va_list va) {
 
 
 enum {
-	GB__FMT_MINUS     = GB_BIT(0),
-	GB__FMT_PLUS      = GB_BIT(1),
-	GB__FMT_ALT       = GB_BIT(2),
-	GB__FMT_SPACE     = GB_BIT(3),
-	GB__FMT_ZERO      = GB_BIT(4),
+	gbFmt_Minus     = GB_BIT(0),
+	gbFmt_Plus      = GB_BIT(1),
+	gbFmt_Alt       = GB_BIT(2),
+	gbFmt_Space     = GB_BIT(3),
+	gbFmt_Zero      = GB_BIT(4),
 
-	GB__FMT_CHAR      = GB_BIT(5),
-	GB__FMT_SHORT     = GB_BIT(6),
-	GB__FMT_INT       = GB_BIT(7),
-	GB__FMT_LONG      = GB_BIT(8),
-	GB__FMT_LLONG     = GB_BIT(9),
-	GB__FMT_SIZE      = GB_BIT(10),
-	GB__FMT_INTPTR    = GB_BIT(11),
+	gbFmt_Char      = GB_BIT(5),
+	gbFmt_Short     = GB_BIT(6),
+	gbFmt_Int       = GB_BIT(7),
+	gbFmt_Long      = GB_BIT(8),
+	gbFmt_Llong     = GB_BIT(9),
+	gbFmt_Size      = GB_BIT(10),
+	gbFmt_Intptr    = GB_BIT(11),
 
-	GB__FMT_UNSIGNED  = GB_BIT(12),
-	GB__FMT_LOWER     = GB_BIT(13),
-	GB__FMT_UPPER     = GB_BIT(14),
+	gbFmt_Unsigned  = GB_BIT(12),
+	gbFmt_Lower     = GB_BIT(13),
+	gbFmt_Upper     = GB_BIT(14),
 
 
-	GB__FMT_DONE      = GB_BIT(30),
+	gbFmt_Done      = GB_BIT(30),
 
-	GB__FMT_INTS = GB__FMT_CHAR|GB__FMT_SHORT|GB__FMT_INT|GB__FMT_LONG|GB__FMT_LLONG|GB__FMT_SIZE|GB__FMT_INTPTR
+	gbFmt_Ints = gbFmt_Char|gbFmt_Short|gbFmt_Int|gbFmt_Long|gbFmt_Llong|gbFmt_Size|gbFmt_Intptr
 };
 
 typedef struct {
@@ -7598,7 +7743,7 @@ gb_internal isize gb__print_string(char *text, isize max_len, gbprivFmtInfo *inf
 	else
 		len = gb_strlen(str);
 
-	if (info && (info->width == 0 || info->flags & GB__FMT_MINUS)) {
+	if (info && (info->width == 0 || info->flags & gbFmt_Minus)) {
 		if (info->precision > 0)
 			len = info->precision < len ? info->precision : len;
 
@@ -7606,14 +7751,14 @@ gb_internal isize gb__print_string(char *text, isize max_len, gbprivFmtInfo *inf
 
 		if (info->width > res) {
 			isize padding = info->width - len;
-			char pad = (info->flags & GB__FMT_ZERO) ? '0' : ' ';
+			char pad = (info->flags & gbFmt_Zero) ? '0' : ' ';
 			while (padding --> 0 && remaining --> 0)
 				*text++ = pad, res++;
 		}
 	} else {
 		if (info && (info->width > res)) {
 			isize padding = info->width - len;
-			char pad = (info->flags & GB__FMT_ZERO) ? '0' : ' ';
+			char pad = (info->flags & gbFmt_Zero) ? '0' : ' ';
 			while (padding --> 0 && remaining --> 0)
 				*text++ = pad, res++;
 		}
@@ -7623,9 +7768,9 @@ gb_internal isize gb__print_string(char *text, isize max_len, gbprivFmtInfo *inf
 
 
 	if (info) {
-		if (info->flags & GB__FMT_UPPER)
+		if (info->flags & gbFmt_Upper)
 			gb_str_to_upper(text);
-		else if (info->flags & GB__FMT_LOWER)
+		else if (info->flags & gbFmt_Lower)
 			gb_str_to_lower(text);
 	}
 
@@ -7664,7 +7809,7 @@ gb_internal isize gb__print_f64(char *text, isize max_len, gbprivFmtInfo *info, 
 				*text = '-', remaining--;
 			text++;
 			arg = -arg;
-		} else if (info->flags & GB__FMT_MINUS) {
+		} else if (info->flags & gbFmt_Minus) {
 			if (remaining > 1)
 				*text = '+', remaining--;
 			text++;
@@ -7683,7 +7828,7 @@ gb_internal isize gb__print_f64(char *text, isize max_len, gbprivFmtInfo *info, 
 		if (info->precision < 0)
 			info->precision = 6;
 
-		if ((info->flags & GB__FMT_ALT) || info->precision > 0) {
+		if ((info->flags & gbFmt_Alt) || info->precision > 0) {
 			i64 mult = 10;
 			if (remaining > 1)
 				*text = '.', remaining--;
@@ -7704,7 +7849,7 @@ gb_internal isize gb__print_f64(char *text, isize max_len, gbprivFmtInfo *info, 
 		if (remaining > 1)
 			*text = '0', remaining--;
 		text++;
-		if (info->flags & GB__FMT_ALT) {
+		if (info->flags & gbFmt_Alt) {
 			if (remaining > 1)
 				*text = '.', remaining--;
 			text++;
@@ -7713,7 +7858,7 @@ gb_internal isize gb__print_f64(char *text, isize max_len, gbprivFmtInfo *info, 
 
 	width = info->width - (text - text_begin);
 	if (width > 0) {
-		char fill = (info->flags & GB__FMT_ZERO) ? '0' : ' ';
+		char fill = (info->flags & gbFmt_Zero) ? '0' : ' ';
 		char *end = text+remaining-1;
 		len = (text - text_begin);
 
@@ -7755,21 +7900,21 @@ gb_no_inline isize gb_snprintf_va(char *text, isize max_len, char const *fmt, va
 		if (*fmt == '%') {
 			do {
 				switch (*fmt++) {
-				case '-': info.flags |= GB__FMT_MINUS; fmt++; break;
-				case '+': info.flags |= GB__FMT_PLUS;  fmt++; break;
-				case '#': info.flags |= GB__FMT_ALT;   fmt++; break;
-				case ' ': info.flags |= GB__FMT_SPACE; fmt++; break;
-				case '0': info.flags |= GB__FMT_ZERO;  fmt++; break;
-				default:  info.flags |= GB__FMT_DONE;         break;
+				case '-': info.flags |= gbFmt_Minus; fmt++; break;
+				case '+': info.flags |= gbFmt_Plus;  fmt++; break;
+				case '#': info.flags |= gbFmt_Alt;   fmt++; break;
+				case ' ': info.flags |= gbFmt_Space; fmt++; break;
+				case '0': info.flags |= gbFmt_Zero;  fmt++; break;
+				default:  info.flags |= gbFmt_Done;         break;
 				}
-			} while (!(info.flags & GB__FMT_DONE));
+			} while (!(info.flags & gbFmt_Done));
 		}
 
 		// NOTE(bill): Optional Width
 		if (*fmt == '*') {
 			int width = va_arg(va, int);
 			if (width < 0) {
-				info.flags |= GB__FMT_MINUS;
+				info.flags |= gbFmt_Minus;
 				info.width = -info.width;
 			} else {
 				info.width = -info.width;
@@ -7788,35 +7933,35 @@ gb_no_inline isize gb_snprintf_va(char *text, isize max_len, char const *fmt, va
 			} else {
 				info.precision = cast(i32)gb_str_to_i64(fmt, cast(char **)&fmt, 10);
 			}
-			info.flags &= ~GB__FMT_ZERO;
+			info.flags &= ~gbFmt_Zero;
 		}
 
 		switch (*fmt++) {
 		case 'h':
 			if (*fmt == 'h') { // hh => char
-				info.flags |= GB__FMT_CHAR;
+				info.flags |= gbFmt_Char;
 				fmt++;
 			} else { // h => short
-				info.flags |= GB__FMT_SHORT;
+				info.flags |= gbFmt_Short;
 			}
 			break;
 
 		case 'l':
 			if (*fmt == 'l') { // ll => long long
-				info.flags |= GB__FMT_LLONG;
+				info.flags |= gbFmt_Llong;
 				fmt++;
 			} else { // l => long
-				info.flags |= GB__FMT_LONG;
+				info.flags |= gbFmt_Long;
 			}
 			break;
 
 			break;
 
 		case 'z': // NOTE(bill): usize
-			info.flags |= GB__FMT_UNSIGNED;
+			info.flags |= gbFmt_Unsigned;
 			// fallthrough
 		case 't': // NOTE(bill): isize
-			info.flags |= GB__FMT_SIZE;
+			info.flags |= gbFmt_Size;
 			break;
 
 		default: fmt--; break;
@@ -7825,7 +7970,7 @@ gb_no_inline isize gb_snprintf_va(char *text, isize max_len, char const *fmt, va
 
 		switch (*fmt) {
 		case 'u':
-			info.flags |= GB__FMT_UNSIGNED;
+			info.flags |= gbFmt_Unsigned;
 			// fallthrough
 		case 'd':
 		case 'i':
@@ -7838,12 +7983,12 @@ gb_no_inline isize gb_snprintf_va(char *text, isize max_len, char const *fmt, va
 
 		case 'x':
 			info.base = 16;
-			info.flags |= (GB__FMT_UNSIGNED | GB__FMT_LOWER);
+			info.flags |= (gbFmt_Unsigned | gbFmt_Lower);
 			break;
 
 		case 'X':
 			info.base = 16;
-			info.flags |= (GB__FMT_UNSIGNED | GB__FMT_UPPER);
+			info.flags |= (gbFmt_Unsigned | gbFmt_Upper);
 			break;
 
 		case 'f':
@@ -7868,7 +8013,7 @@ gb_no_inline isize gb_snprintf_va(char *text, isize max_len, char const *fmt, va
 
 		case 'p':
 			info.base = 16;
-			info.flags |= (GB__FMT_LOWER|GB__FMT_UNSIGNED|GB__FMT_ALT|GB__FMT_INTPTR);
+			info.flags |= (gbFmt_Lower|gbFmt_Unsigned|gbFmt_Alt|gbFmt_Intptr);
 			break;
 
 		default: fmt--; break;
@@ -7877,15 +8022,15 @@ gb_no_inline isize gb_snprintf_va(char *text, isize max_len, char const *fmt, va
 		fmt++;
 
 		if (info.base != 0) {
-			if (info.flags & GB__FMT_UNSIGNED) {
+			if (info.flags & gbFmt_Unsigned) {
 				u64 value = 0;
-				switch (info.flags & GB__FMT_INTS) {
-				case GB__FMT_CHAR:   value = cast(u64)cast(u8) va_arg(va, int);       break;
-				case GB__FMT_SHORT:  value = cast(u64)cast(u16)va_arg(va, int);       break;
-				case GB__FMT_LONG:   value = cast(u64)va_arg(va, unsigned long);      break;
-				case GB__FMT_LLONG:  value = cast(u64)va_arg(va, unsigned long long); break;
-				case GB__FMT_SIZE:   value = cast(u64)va_arg(va, usize);              break;
-				case GB__FMT_INTPTR: value = cast(u64)va_arg(va, uintptr);            break;
+				switch (info.flags & gbFmt_Ints) {
+				case gbFmt_Char:   value = cast(u64)cast(u8) va_arg(va, int);       break;
+				case gbFmt_Short:  value = cast(u64)cast(u16)va_arg(va, int);       break;
+				case gbFmt_Long:   value = cast(u64)va_arg(va, unsigned long);      break;
+				case gbFmt_Llong:  value = cast(u64)va_arg(va, unsigned long long); break;
+				case gbFmt_Size:   value = cast(u64)va_arg(va, usize);              break;
+				case gbFmt_Intptr: value = cast(u64)va_arg(va, uintptr);            break;
 				default:             value = cast(u64)va_arg(va, unsigned int);       break;
 				}
 
@@ -7893,13 +8038,13 @@ gb_no_inline isize gb_snprintf_va(char *text, isize max_len, char const *fmt, va
 
 			} else {
 				i64 value = 0;
-				switch (info.flags & GB__FMT_INTS) {
-				case GB__FMT_CHAR:   value = cast(i64)cast(i8) va_arg(va, int); break;
-				case GB__FMT_SHORT:  value = cast(i64)cast(i16)va_arg(va, int); break;
-				case GB__FMT_LONG:   value = cast(i64)va_arg(va, long);         break;
-				case GB__FMT_LLONG:  value = cast(i64)va_arg(va, long long);    break;
-				case GB__FMT_SIZE:   value = cast(i64)va_arg(va, usize);        break;
-				case GB__FMT_INTPTR: value = cast(i64)va_arg(va, uintptr);      break;
+				switch (info.flags & gbFmt_Ints) {
+				case gbFmt_Char:   value = cast(i64)cast(i8) va_arg(va, int); break;
+				case gbFmt_Short:  value = cast(i64)cast(i16)va_arg(va, int); break;
+				case gbFmt_Long:   value = cast(i64)va_arg(va, long);         break;
+				case gbFmt_Llong:  value = cast(i64)va_arg(va, long long);    break;
+				case gbFmt_Size:   value = cast(i64)va_arg(va, usize);        break;
+				case gbFmt_Intptr: value = cast(i64)va_arg(va, uintptr);      break;
 				default:             value = cast(i64)va_arg(va, int);          break;
 				}
 
@@ -8166,6 +8311,10 @@ u64 gb_random_gen_u64(gbRandom *r) {
 }
 
 
+isize gb_random_gen_isize(gbRandom *r) {
+	u64 u = gb_random_gen_u64(r);
+	return *cast(isize *)&u;
+}
 
 
 
@@ -8174,6 +8323,15 @@ i64 gb_random_range_i64(gbRandom *r, i64 lower_inc, i64 higher_inc) {
 	u64 u = gb_random_gen_u64(r);
 	i64 i = *cast(i64 *)&u;
 	i64 diff = higher_inc-lower_inc+1;
+	i %= diff;
+	i += lower_inc;
+	return i;
+}
+
+isize gb_random_range_isize(gbRandom *r, isize lower_inc, isize higher_inc) {
+	u64 u = gb_random_gen_u64(r);
+	isize i = *cast(isize *)&u;
+	isize diff = higher_inc-lower_inc+1;
 	i %= diff;
 	i += lower_inc;
 	return i;
@@ -8287,14 +8445,14 @@ gb_inline isize gb_count_set_bits(u64 mask) {
 //
 //
 
-#if !defined(GB_NO_PLATFORM)
+#if defined(GB_PLATFORM)
 
 gb_inline void gb_key_state_update(gbKeyState *s, b32 is_down) {
-	b32 was_down = (*s & GB_KEY_STATE_DOWN) != 0;
+	b32 was_down = (*s & gbKeyState_Down) != 0;
 	is_down = is_down != 0; // NOTE(bill): Make sure it's a boolean
-	GB_MASK_SET(*s, is_down,               GB_KEY_STATE_DOWN);
-	GB_MASK_SET(*s, !was_down &&  is_down, GB_KEY_STATE_PRESSED);
-	GB_MASK_SET(*s,  was_down && !is_down, GB_KEY_STATE_RELEASED);
+	GB_MASK_SET(*s, is_down,               gbKeyState_Down);
+	GB_MASK_SET(*s, !was_down &&  is_down, gbKeyState_Pressed);
+	GB_MASK_SET(*s,  was_down && !is_down, gbKeyState_Released);
 }
 
 #if defined(GB_SYSTEM_WINDOWS)
@@ -8325,7 +8483,7 @@ gb_internal gb_inline f32 gb__process_xinput_stick_value(i16 value, i16 dead_zon
 }
 
 gb_internal void gb__platform_resize_dib_section(gbPlatform *p, i32 width, i32 height) {
-	if ((p->renderer_type == GB_RENDERER_SOFTWARE) &&
+	if ((p->renderer_type == gbRenderer_Software) &&
 	    !(p->window_width == width && p->window_height == height)) {
 		BITMAPINFO bmi = {0};
 
@@ -8367,84 +8525,84 @@ gb_internal gbKeyType gb__win32_from_vk(unsigned int key) {
 	if (key >= 'A' && key < 'Z') return cast(gbKeyType)key;
 	if (key >= '0' && key < '9') return cast(gbKeyType)key;
 	switch (key) {
-	case VK_ESCAPE: return GB_KEY_ESCAPE;
+	case VK_ESCAPE: return gbKey_Escape;
 
-	case VK_LCONTROL: return GB_KEY_LCONTROL;
-	case VK_LSHIFT:   return GB_KEY_LSHIFT;
-	case VK_LMENU:    return GB_KEY_LALT;
-	case VK_LWIN:     return GB_KEY_LSYSTEM;
-	case VK_RCONTROL: return GB_KEY_RCONTROL;
-	case VK_RSHIFT:   return GB_KEY_RSHIFT;
-	case VK_RMENU:    return GB_KEY_RALT;
-	case VK_RWIN:     return GB_KEY_RSYSTEM;
-	case VK_MENU:     return GB_KEY_MENU;
+	case VK_LCONTROL: return gbKey_Lcontrol;
+	case VK_LSHIFT:   return gbKey_Lshift;
+	case VK_LMENU:    return gbKey_Lalt;
+	case VK_LWIN:     return gbKey_Lsystem;
+	case VK_RCONTROL: return gbKey_Rcontrol;
+	case VK_RSHIFT:   return gbKey_Rshift;
+	case VK_RMENU:    return gbKey_Ralt;
+	case VK_RWIN:     return gbKey_Rsystem;
+	case VK_MENU:     return gbKey_Menu;
 
-	case VK_OEM_4:      return GB_KEY_LBRACKET;
-	case VK_OEM_6:      return GB_KEY_RBRACKET;
-	case VK_OEM_1:      return GB_KEY_SEMICOLON;
-	case VK_OEM_COMMA:  return GB_KEY_COMMA;
-	case VK_OEM_PERIOD: return GB_KEY_PERIOD;
-	case VK_OEM_7:      return GB_KEY_QUOTE;
-	case VK_OEM_2:      return GB_KEY_SLASH;
-	case VK_OEM_5:      return GB_KEY_BACKSLASH;
-	case VK_OEM_3:      return GB_KEY_GRAVE;
-	case VK_OEM_PLUS:   return GB_KEY_EQUALS;
-	case VK_OEM_MINUS:  return GB_KEY_MINUS;
+	case VK_OEM_4:      return gbKey_Lbracket;
+	case VK_OEM_6:      return gbKey_Rbracket;
+	case VK_OEM_1:      return gbKey_Semicolon;
+	case VK_OEM_COMMA:  return gbKey_Comma;
+	case VK_OEM_PERIOD: return gbKey_Period;
+	case VK_OEM_7:      return gbKey_Quote;
+	case VK_OEM_2:      return gbKey_Slash;
+	case VK_OEM_5:      return gbKey_Backslash;
+	case VK_OEM_3:      return gbKey_Grave;
+	case VK_OEM_PLUS:   return gbKey_Equals;
+	case VK_OEM_MINUS:  return gbKey_Minus;
 
-	case VK_SPACE:  return GB_KEY_SPACE;
-	case VK_RETURN: return GB_KEY_RETURN;
-	case VK_BACK:   return GB_KEY_BACKSPACE;
-	case VK_TAB:    return GB_KEY_TAB;
+	case VK_SPACE:  return gbKey_Space;
+	case VK_RETURN: return gbKey_Return;
+	case VK_BACK:   return gbKey_Backspace;
+	case VK_TAB:    return gbKey_Tab;
 
-	case VK_PRIOR:  return GB_KEY_PAGEUP;
-	case VK_NEXT:   return GB_KEY_PAGEDOWN;
-	case VK_END:    return GB_KEY_END;
-	case VK_HOME:   return GB_KEY_HOME;
-	case VK_INSERT: return GB_KEY_INSERT;
-	case VK_DELETE: return GB_KEY_DELETE;
+	case VK_PRIOR:  return gbKey_Pageup;
+	case VK_NEXT:   return gbKey_Pagedown;
+	case VK_END:    return gbKey_End;
+	case VK_HOME:   return gbKey_Home;
+	case VK_INSERT: return gbKey_Insert;
+	case VK_DELETE: return gbKey_Delete;
 
-	case VK_ADD:      return GB_KEY_PLUS;
-	case VK_SUBTRACT: return GB_KEY_SUBTRACT;
-	case VK_MULTIPLY: return GB_KEY_MULTIPLY;
-	case VK_DIVIDE:   return GB_KEY_DIVIDE;
+	case VK_ADD:      return gbKey_Plus;
+	case VK_SUBTRACT: return gbKey_Subtract;
+	case VK_MULTIPLY: return gbKey_Multiply;
+	case VK_DIVIDE:   return gbKey_Divide;
 
-	case VK_LEFT:  return GB_KEY_LEFT;
-	case VK_RIGHT: return GB_KEY_RIGHT;
-	case VK_UP:    return GB_KEY_UP;
-	case VK_DOWN:  return GB_KEY_DOWN;
+	case VK_LEFT:  return gbKey_Left;
+	case VK_RIGHT: return gbKey_Right;
+	case VK_UP:    return gbKey_Up;
+	case VK_DOWN:  return gbKey_Down;
 
-	case VK_NUMPAD0:   return GB_KEY_NUMPAD0;
-	case VK_NUMPAD1:   return GB_KEY_NUMPAD1;
-	case VK_NUMPAD2:   return GB_KEY_NUMPAD2;
-	case VK_NUMPAD3:   return GB_KEY_NUMPAD3;
-	case VK_NUMPAD4:   return GB_KEY_NUMPAD4;
-	case VK_NUMPAD5:   return GB_KEY_NUMPAD5;
-	case VK_NUMPAD6:   return GB_KEY_NUMPAD6;
-	case VK_NUMPAD7:   return GB_KEY_NUMPAD7;
-	case VK_NUMPAD8:   return GB_KEY_NUMPAD8;
-	case VK_NUMPAD9:   return GB_KEY_NUMPAD9;
-	case VK_SEPARATOR: return GB_KEY_NUMPAD_ENTER;
-	case VK_DECIMAL:   return GB_KEY_NUMPAD_DOT;
+	case VK_NUMPAD0:   return gbKey_Numpad0;
+	case VK_NUMPAD1:   return gbKey_Numpad1;
+	case VK_NUMPAD2:   return gbKey_Numpad2;
+	case VK_NUMPAD3:   return gbKey_Numpad3;
+	case VK_NUMPAD4:   return gbKey_Numpad4;
+	case VK_NUMPAD5:   return gbKey_Numpad5;
+	case VK_NUMPAD6:   return gbKey_Numpad6;
+	case VK_NUMPAD7:   return gbKey_Numpad7;
+	case VK_NUMPAD8:   return gbKey_Numpad8;
+	case VK_NUMPAD9:   return gbKey_Numpad9;
+	case VK_SEPARATOR: return gbKey_NumpadEnter;
+	case VK_DECIMAL:   return gbKey_NumpadDot;
 
-	case VK_F1:  return GB_KEY_F1;
-	case VK_F2:  return GB_KEY_F2;
-	case VK_F3:  return GB_KEY_F3;
-	case VK_F4:  return GB_KEY_F4;
-	case VK_F5:  return GB_KEY_F5;
-	case VK_F6:  return GB_KEY_F6;
-	case VK_F7:  return GB_KEY_F7;
-	case VK_F8:  return GB_KEY_F8;
-	case VK_F9:  return GB_KEY_F9;
-	case VK_F10: return GB_KEY_F10;
-	case VK_F11: return GB_KEY_F11;
-	case VK_F12: return GB_KEY_F12;
-	case VK_F13: return GB_KEY_F13;
-	case VK_F14: return GB_KEY_F14;
-	case VK_F15: return GB_KEY_F15;
+	case VK_F1:  return gbKey_F1;
+	case VK_F2:  return gbKey_F2;
+	case VK_F3:  return gbKey_F3;
+	case VK_F4:  return gbKey_F4;
+	case VK_F5:  return gbKey_F5;
+	case VK_F6:  return gbKey_F6;
+	case VK_F7:  return gbKey_F7;
+	case VK_F8:  return gbKey_F8;
+	case VK_F9:  return gbKey_F9;
+	case VK_F10: return gbKey_F10;
+	case VK_F11: return gbKey_F11;
+	case VK_F12: return gbKey_F12;
+	case VK_F13: return gbKey_F13;
+	case VK_F14: return gbKey_F14;
+	case VK_F15: return gbKey_F15;
 
-	case VK_PAUSE: return GB_KEY_PAUSE;
+	case VK_PAUSE: return gbKey_Pause;
 	}
-	return GB_KEY_UNKNOWN;
+	return gbKey_Unknown;
 }
 LRESULT CALLBACK gb__win32_window_callback(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	// NOTE(bill): Silly callbacks
@@ -8611,7 +8769,7 @@ b32 gb__platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode,
 		return false;
 	}
 
-	if ((window_flags & GB_WINDOW_FULLSCREEN) && !(window_flags & GB_WINDOW_BORDERLESS)) {
+	if ((window_flags & gbWindow_Fullscreen) && !(window_flags & gbWindow_Borderless)) {
 		DEVMODEW screen_settings = {gb_size_of(DEVMODEW)};
 		screen_settings.dmPelsWidth	 = mode.width;
 		screen_settings.dmPelsHeight = mode.height;
@@ -8623,7 +8781,7 @@ b32 gb__platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode,
 			                L"your video card. Use windowed mode instead?",
 			                L"",
 			                MB_YESNO|MB_ICONEXCLAMATION) == IDYES) {
-				window_flags &= ~GB_WINDOW_FULLSCREEN;
+				window_flags &= ~gbWindow_Fullscreen;
 			} else {
 				mode = gb_video_mode_get_desktop();
 				screen_settings.dmPelsWidth	 = mode.width;
@@ -8640,17 +8798,17 @@ b32 gb__platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode,
 
 	style |= WS_VISIBLE;
 
-	if (window_flags & GB_WINDOW_HIDDEN)       style &= ~WS_VISIBLE;
-	if (window_flags & GB_WINDOW_RESIZABLE)    style |= WS_THICKFRAME | WS_MAXIMIZEBOX;
-	if (window_flags & GB_WINDOW_MAXIMIZED)    style |=  WS_MAXIMIZE;
-	if (window_flags & GB_WINDOW_MINIMIZED)    style |=  WS_MINIMIZE;
+	if (window_flags & gbWindow_Hidden)       style &= ~WS_VISIBLE;
+	if (window_flags & gbWindow_Resizable)    style |= WS_THICKFRAME | WS_MAXIMIZEBOX;
+	if (window_flags & gbWindow_Maximized)    style |=  WS_MAXIMIZE;
+	if (window_flags & gbWindow_Minimized)    style |=  WS_MINIMIZE;
 
 	// NOTE(bill): Completely ignore the given mode and just change it
-	if (window_flags & GB_WINDOW_FULLSCREEN_DESKTOP) {
+	if (window_flags & gbWindow_FullscreenDesktop) {
 		mode = gb_video_mode_get_desktop();
 	}
 
-	if ((window_flags & GB_WINDOW_FULLSCREEN) || (window_flags & GB_WINDOW_BORDERLESS)) {
+	if ((window_flags & gbWindow_Fullscreen) || (window_flags & gbWindow_Borderless)) {
 		style |= WS_POPUP;
 	} else {
 		style |= WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
@@ -8683,7 +8841,7 @@ b32 gb__platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode,
 
 	p->renderer_type = type;
 	switch (p->renderer_type) {
-	case GB_RENDERER_OPENGL: {
+	case gbRenderer_Opengl: {
 		wglCreateContextAttribsARB_Proc *wglCreateContextAttribsARB;
 		i32 attribs[8] = {0};
 		isize c = 0;
@@ -8734,7 +8892,7 @@ b32 gb__platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode,
 
 	} break;
 
-	case GB_RENDERER_SOFTWARE:
+	case gbRenderer_Software:
 		gb__platform_resize_dib_section(p, mode.width, mode.height);
 		break;
 
@@ -8750,7 +8908,7 @@ b32 gb__platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode,
 	p->window_width  = mode.width;
 	p->window_height = mode.height;
 
-	if (p->renderer_type == GB_RENDERER_OPENGL) {
+	if (p->renderer_type == gbRenderer_Opengl) {
 		p->opengl.dll_handle = gb_dll_load("opengl32.dll");
 	}
 
@@ -8784,7 +8942,7 @@ gb_inline b32 gb_platform_init_with_software(gbPlatform *p, char const *window_t
 	mode.width          = width;
 	mode.height         = height;
 	mode.bits_per_pixel = 32;
-	return gb__platform_init(p, window_title, mode, GB_RENDERER_SOFTWARE, window_flags);
+	return gb__platform_init(p, window_title, mode, gbRenderer_Software, window_flags);
 }
 
 gb_inline b32 gb_platform_init_with_opengl(gbPlatform *p, char const *window_title,
@@ -8797,7 +8955,7 @@ gb_inline b32 gb_platform_init_with_opengl(gbPlatform *p, char const *window_tit
 	p->opengl.minor      = minor;
 	p->opengl.core       = cast(b16)core;
 	p->opengl.compatible = cast(b16)compatible;
-	return gb__platform_init(p, window_title, mode, GB_RENDERER_OPENGL, window_flags);
+	return gb__platform_init(p, window_title, mode, gbRenderer_Opengl, window_flags);
 }
 
 #ifndef _XINPUT_H_
@@ -8859,7 +9017,7 @@ void gb_platform_update(gbPlatform *p) {
 		h = window_rect.bottom - window_rect.top;
 
 		if ((p->window_width != w) || (p->window_height != h)) {
-			if (p->renderer_type == GB_RENDERER_SOFTWARE)
+			if (p->renderer_type == gbRenderer_Software)
 				gb__platform_resize_dib_section(p, w, h);
 		}
 
@@ -8868,14 +9026,14 @@ void gb_platform_update(gbPlatform *p) {
 		p->window_y = y;
 		p->window_width = w;
 		p->window_height = h;
-		GB_MASK_SET(p->window_flags, IsIconic(cast(HWND)p->window_handle) != 0, GB_WINDOW_MINIMIZED);
+		GB_MASK_SET(p->window_flags, IsIconic(cast(HWND)p->window_handle) != 0, gbWindow_Minimized);
 
 		p->window_has_focus = GetFocus() == cast(HWND)p->window_handle;
 	}
 
 	{ // NOTE(bill): Set mouse position
 		POINT mouse_pos;
-		DWORD win_button_id[GB_MOUSE_BUTTON_COUNT] = {
+		DWORD win_button_id[gbMouseButton_Count] = {
 			VK_LBUTTON,
 			VK_MBUTTON,
 			VK_RBUTTON,
@@ -8885,7 +9043,7 @@ void gb_platform_update(gbPlatform *p) {
 
 		// NOTE(bill): This needs to be GetAsyncKeyState as RAWMOUSE doesn't aways work for some odd reason
 		// TODO(bill): Try and get RAWMOUSE to work for key presses
-		for (i = 0; i < GB_MOUSE_BUTTON_COUNT; i++)
+		for (i = 0; i < gbMouseButton_Count; i++)
 			gb_key_state_update(p->mouse_buttons+i, GetAsyncKeyState(win_button_id[i]) < 0);
 
 		GetCursorPos(&mouse_pos);
@@ -8932,14 +9090,14 @@ void gb_platform_update(gbPlatform *p) {
 		p->char_buffer_count = 0; // TODO(bill): Reset buffer count here or else where?
 
 		// NOTE(bill): Need to update as the keys only get updates on events
-		for (i = 0; i < GB_KEY_COUNT; i++) {
-			b32 is_down = (p->keys[i] & GB_KEY_STATE_DOWN) != 0;
+		for (i = 0; i < gbKey_Count; i++) {
+			b32 is_down = (p->keys[i] & gbKeyState_Down) != 0;
 			gb_key_state_update(&p->keys[i], is_down);
 		}
 
-		p->key_modifiers.control = p->keys[GB_KEY_LCONTROL] | p->keys[GB_KEY_RCONTROL];
-		p->key_modifiers.alt     = p->keys[GB_KEY_LALT]     | p->keys[GB_KEY_RALT];
-		p->key_modifiers.shift   = p->keys[GB_KEY_LSHIFT]   | p->keys[GB_KEY_RSHIFT];
+		p->key_modifiers.control = p->keys[gbKey_Lcontrol] | p->keys[gbKey_Rcontrol];
+		p->key_modifiers.alt     = p->keys[gbKey_Lalt]     | p->keys[gbKey_Ralt];
+		p->key_modifiers.shift   = p->keys[gbKey_Lshift]   | p->keys[gbKey_Rshift];
 
 	}
 
@@ -8962,37 +9120,37 @@ void gb_platform_update(gbPlatform *p) {
 				controller->is_connected = true;
 
 				// TODO(bill): This is a square deadzone, check XInput to verify that the deadzone is "round" and do round deadzone processing.
-				controller->axes[GB_CONTROLLER_AXIS_LEFT_X]  = gb__process_xinput_stick_value(pad->sThumbLX, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
-				controller->axes[GB_CONTROLLER_AXIS_LEFT_Y]  = gb__process_xinput_stick_value(pad->sThumbLY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
-				controller->axes[GB_CONTROLLER_AXIS_RIGHT_X] = gb__process_xinput_stick_value(pad->sThumbRX, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
-				controller->axes[GB_CONTROLLER_AXIS_RIGHT_Y] = gb__process_xinput_stick_value(pad->sThumbRY, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
+				controller->axes[gbControllerAxis_LeftX]  = gb__process_xinput_stick_value(pad->sThumbLX, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
+				controller->axes[gbControllerAxis_LeftY]  = gb__process_xinput_stick_value(pad->sThumbLY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
+				controller->axes[gbControllerAxis_RightX] = gb__process_xinput_stick_value(pad->sThumbRX, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
+				controller->axes[gbControllerAxis_RightY] = gb__process_xinput_stick_value(pad->sThumbRY, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
 
-				controller->axes[GB_CONTROLLER_AXIS_LEFT_TRIGGER]  = cast(f32)pad->bLeftTrigger / 255.0f;
-				controller->axes[GB_CONTROLLER_AXIS_RIGHT_TRIGGER] = cast(f32)pad->bRightTrigger / 255.0f;
+				controller->axes[gbControllerAxis_LeftTrigger]  = cast(f32)pad->bLeftTrigger / 255.0f;
+				controller->axes[gbControllerAxis_RightTrigger] = cast(f32)pad->bRightTrigger / 255.0f;
 
 
-				if ((controller->axes[GB_CONTROLLER_AXIS_LEFT_X] != 0.0f) ||
-					(controller->axes[GB_CONTROLLER_AXIS_LEFT_Y] != 0.0f)) {
+				if ((controller->axes[gbControllerAxis_LeftX] != 0.0f) ||
+					(controller->axes[gbControllerAxis_LeftY] != 0.0f)) {
 					controller->is_analog = true;
 				}
 
 			#define GB__PROCESS_DIGITAL_BUTTON(button_type, xinput_button) \
 				gb_key_state_update(&controller->buttons[button_type], (pad->wButtons & xinput_button) == xinput_button)
 
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_A,              XINPUT_GAMEPAD_A);
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_B,              XINPUT_GAMEPAD_B);
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_X,              XINPUT_GAMEPAD_X);
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_Y,              XINPUT_GAMEPAD_Y);
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_LEFT_SHOULDER,  XINPUT_GAMEPAD_LEFT_SHOULDER);
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_RIGHT_SHOULDER, XINPUT_GAMEPAD_RIGHT_SHOULDER);
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_START,          XINPUT_GAMEPAD_START);
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_BACK,           XINPUT_GAMEPAD_BACK);
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_LEFT,           XINPUT_GAMEPAD_DPAD_LEFT);
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_RIGHT,          XINPUT_GAMEPAD_DPAD_RIGHT);
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_DOWN,           XINPUT_GAMEPAD_DPAD_DOWN);
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_UP,             XINPUT_GAMEPAD_DPAD_UP);
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_LEFT_THUMB,     XINPUT_GAMEPAD_LEFT_THUMB);
-				GB__PROCESS_DIGITAL_BUTTON(GB_CONTROLLER_BUTTON_RIGHT_THUMB,    XINPUT_GAMEPAD_RIGHT_THUMB);
+				GB__PROCESS_DIGITAL_BUTTON(gbControllerButton_A,              XINPUT_GAMEPAD_A);
+				GB__PROCESS_DIGITAL_BUTTON(gbControllerButton_B,              XINPUT_GAMEPAD_B);
+				GB__PROCESS_DIGITAL_BUTTON(gbControllerButton_X,              XINPUT_GAMEPAD_X);
+				GB__PROCESS_DIGITAL_BUTTON(gbControllerButton_Y,              XINPUT_GAMEPAD_Y);
+				GB__PROCESS_DIGITAL_BUTTON(gbControllerButton_LeftShoulder,  XINPUT_GAMEPAD_LEFT_SHOULDER);
+				GB__PROCESS_DIGITAL_BUTTON(gbControllerButton_RightShoulder, XINPUT_GAMEPAD_RIGHT_SHOULDER);
+				GB__PROCESS_DIGITAL_BUTTON(gbControllerButton_Start,          XINPUT_GAMEPAD_START);
+				GB__PROCESS_DIGITAL_BUTTON(gbControllerButton_Back,           XINPUT_GAMEPAD_BACK);
+				GB__PROCESS_DIGITAL_BUTTON(gbControllerButton_Left,           XINPUT_GAMEPAD_DPAD_LEFT);
+				GB__PROCESS_DIGITAL_BUTTON(gbControllerButton_Right,          XINPUT_GAMEPAD_DPAD_RIGHT);
+				GB__PROCESS_DIGITAL_BUTTON(gbControllerButton_Down,           XINPUT_GAMEPAD_DPAD_DOWN);
+				GB__PROCESS_DIGITAL_BUTTON(gbControllerButton_Up,             XINPUT_GAMEPAD_DPAD_UP);
+				GB__PROCESS_DIGITAL_BUTTON(gbControllerButton_LeftThumb,     XINPUT_GAMEPAD_LEFT_THUMB);
+				GB__PROCESS_DIGITAL_BUTTON(gbControllerButton_RightThumb,    XINPUT_GAMEPAD_RIGHT_THUMB);
 			#undef GB__PROCESS_DIGITAL_BUTTON
 			}
 		}
@@ -9019,9 +9177,9 @@ void gb_platform_update(gbPlatform *p) {
 }
 
 void gb_platform_display(gbPlatform *p) {
-	if (p->renderer_type == GB_RENDERER_OPENGL) {
+	if (p->renderer_type == gbRenderer_Opengl) {
 		SwapBuffers(cast(HDC)p->win32_dc);
-	} else if (p->renderer_type == GB_RENDERER_SOFTWARE) {
+	} else if (p->renderer_type == gbRenderer_Software) {
 		StretchDIBits(cast(HDC)p->win32_dc,
 		              0, 0, p->window_width, p->window_height,
 		              0, 0, p->window_width, p->window_height,
@@ -9042,9 +9200,9 @@ void gb_platform_display(gbPlatform *p) {
 
 
 void gb_platform_destroy(gbPlatform *p) {
-	if (p->renderer_type == GB_RENDERER_OPENGL)
+	if (p->renderer_type == gbRenderer_Opengl)
 		wglDeleteContext(cast(HGLRC)p->opengl.context);
-	else if (p->renderer_type == GB_RENDERER_SOFTWARE)
+	else if (p->renderer_type == gbRenderer_Software)
 		gb_vm_free(gb_virtual_memory(p->sw_framebuffer.memory, p->sw_framebuffer.memory_size));
 
 	DestroyWindow(cast(HWND)p->window_handle);
@@ -9126,9 +9284,9 @@ void gb_platform_toggle_fullscreen(gbPlatform *p, b32 fullscreen_desktop) {
 			             SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
 
 			if (fullscreen_desktop)
-				p->window_flags |= GB_WINDOW_FULLSCREEN_DESKTOP;
+				p->window_flags |= gbWindow_FullscreenDesktop;
 			else
-				p->window_flags |= GB_WINDOW_FULLSCREEN;
+				p->window_flags |= gbWindow_Fullscreen;
 		}
 	} else {
 		style &= ~WS_POPUP;
@@ -9139,7 +9297,7 @@ void gb_platform_toggle_fullscreen(gbPlatform *p, b32 fullscreen_desktop) {
 		             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
 		             SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
 
-		p->window_flags &= ~GB_WINDOW_FULLSCREEN;
+		p->window_flags &= ~gbWindow_Fullscreen;
 	}
 }
 
@@ -9153,25 +9311,25 @@ void gb_platform_toggle_borderless(gbPlatform *p) {
 
 	SetWindowLongW(handle, GWL_STYLE, style);
 
-	GB_MASK_SET(p->window_flags, !is_borderless, GB_WINDOW_BORDERLESS);
+	GB_MASK_SET(p->window_flags, !is_borderless, gbWindow_Borderless);
 }
 
 
 
 gb_inline void gb_platform_make_opengl_context_current(gbPlatform *p) {
-	if (p->renderer_type == GB_RENDERER_OPENGL) {
+	if (p->renderer_type == gbRenderer_Opengl) {
 		wglMakeCurrent(cast(HDC)p->win32_dc, cast(HGLRC)p->opengl.context);
 	}
 }
 
 gb_inline void gb_platform_show_window(gbPlatform *p) {
 	ShowWindow(cast(HWND)p->window_handle, SW_SHOW);
-	p->window_flags &= ~GB_WINDOW_HIDDEN;
+	p->window_flags &= ~gbWindow_Hidden;
 }
 
 gb_inline void gb_platform_hide_window(gbPlatform *p) {
 	ShowWindow(cast(HWND)p->window_handle, SW_HIDE);
-	p->window_flags |= GB_WINDOW_HIDDEN;
+	p->window_flags |= gbWindow_Hidden;
 }
 
 gb_inline gbVideoMode gb_video_mode_get_desktop(void) {
@@ -9314,7 +9472,7 @@ GB_COMPARE_PROC(gb_video_mode_dsc_cmp) {
 	return gb_video_mode_cmp(b, a);
 }
 
-#endif // !defined(GB_NO_PLATFORM)
+#endif // defined(GB_PLATFORM)
 
 
 

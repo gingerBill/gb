@@ -55,6 +55,7 @@ Conventions used:
 
 
 Version History:
+	0.06  - Enum convention change
 	0.05  - gbglColour
 	0.04e - Change brace style because why not?
 	0.04d - Use new gb.h file handling system
@@ -186,18 +187,18 @@ GB_STATIC_ASSERT(gb_size_of(gbglColour) == gb_size_of(u32));
 
 GB_DEF gbglColour gbgl_colour(f32 r, f32 g, f32 b, f32 a);
 
-gb_global gbglColour const GBGL_COLOUR_WHITE   = {0xffffffff};
-gb_global gbglColour const GBGL_COLOUR_GREY    = {0xff808080};
-gb_global gbglColour const GBGL_COLOUR_BLACK   = {0xff000000};
+gb_global gbglColour const gbglColour_White   = {0xffffffff};
+gb_global gbglColour const gbglColour_Grey    = {0xff808080};
+gb_global gbglColour const gbglColour_Black   = {0xff000000};
 
-gb_global gbglColour const GBGL_COLOUR_RED     = {0xff0000ff};
-gb_global gbglColour const GBGL_COLOUR_ORANGE  = {0xff0099ff};
-gb_global gbglColour const GBGL_COLOUR_YELLOW  = {0xff00ffff};
-gb_global gbglColour const GBGL_COLOUR_GREEN   = {0xff00ff00};
-gb_global gbglColour const GBGL_COLOUR_CYAN    = {0xffffff00};
-gb_global gbglColour const GBGL_COLOUR_BLUE    = {0xffff0000};
-gb_global gbglColour const GBGL_COLOUR_VIOLET  = {0xffff007f};
-gb_global gbglColour const GBGL_COLOUR_MAGENTA = {0xffff00ff};
+gb_global gbglColour const gbglColour_Red     = {0xff0000ff};
+gb_global gbglColour const gbglColour_Orange  = {0xff0099ff};
+gb_global gbglColour const gbglColour_Yellow  = {0xff00ffff};
+gb_global gbglColour const gbglColour_Green   = {0xff00ff00};
+gb_global gbglColour const gbglColour_Cyan    = {0xffffff00};
+gb_global gbglColour const gbglColour_Blue    = {0xffff0000};
+gb_global gbglColour const gbglColour_Violet  = {0xffff007f};
+gb_global gbglColour const gbglColour_Magenta = {0xffff00ff};
 
 
 ////////////////////////////////////////////////////////////////
@@ -287,58 +288,58 @@ GBGL_DEF u32 gbgl_make_sampler(u32 min_filter, u32 max_filter, u32 s_wrap, u32 t
 
 
 typedef enum gbglBufferDataType {
-	GBGL_BDT_U8 = GL_UNSIGNED_BYTE,
-	GBGL_BDT_I8 = GL_BYTE,
+	gbglBufferData_u8 = GL_UNSIGNED_BYTE,
+	gbglBufferData_i8 = GL_BYTE,
 
-	GBGL_BDT_U16 = GL_UNSIGNED_SHORT,
-	GBGL_BDT_I16 = GL_SHORT,
-	GBGL_BDT_F16 = GL_HALF_FLOAT,
+	gbglBufferData_u16 = GL_UNSIGNED_SHORT,
+	gbglBufferData_i16 = GL_SHORT,
+	gbglBufferData_f16 = GL_HALF_FLOAT,
 
-	GBGL_BDT_U32 = GL_UNSIGNED_INT,
-	GBGL_BDT_I32 = GL_INT,
-	GBGL_BDT_F32 = GL_FLOAT,
+	gbglBufferData_u32 = GL_UNSIGNED_INT,
+	gbglBufferData_i32 = GL_INT,
+	gbglBufferData_f32 = GL_FLOAT,
 
-	GBGL_BDT_F8,	// NOTE(bill): This is not a "real" OpenGL type but it is needed for internal format enums
+	gbglBufferData_f8, // NOTE(bill): This is not a "real" OpenGL type but it is needed for internal format enums
 } gbglBufferDataType;
 
 
 // NOTE(bill) index+1 = channels count
 #if defined(GBGL_USE_SRGB_TEXTURE_FORMAT)
-i32 const GBGL_TEXTURE_FORMAT[4] = { GL_RED, GL_RG, GL_SRGB8, GL_SRGB8_ALPHA8 };
+i32 const gbglTextureFormat[4] = { GL_RED, GL_RG, GL_SRGB8, GL_SRGB8_ALPHA8 };
 #else
-i32 const GBGL_TEXTURE_FORMAT[4] = { GL_RED, GL_RG, GL_RGB, GL_RGBA };
+i32 const gbglTextureFormat[4] = { GL_RED, GL_RG, GL_RGB, GL_RGBA };
 #endif
 
-i32 const GBGL_INTERNAL_TEXTURE_FORMAT_8[4]  = { GL_R8,   GL_RG8,   GL_RGB8,	  GL_RGBA8   };
-i32 const GBGL_INTERNAL_TEXTURE_FORMAT_16[4] = { GL_R16,  GL_RG16,  GL_RGB16,  GL_RGBA16  };
-i32 const GBGL_INTERNAL_TEXTURE_FORMAT_32[4] = { GL_R32F, GL_RG32F, GL_RGB32F, GL_RGBA32F };
+i32 const gbglInternalTextureFormat_8[4]  = { GL_R8,   GL_RG8,   GL_RGB8,	  GL_RGBA8   };
+i32 const gbglInternalTextureFormat_16[4] = { GL_R16,  GL_RG16,  GL_RGB16,  GL_RGBA16  };
+i32 const gbglInternalTextureFormat_32[4] = { GL_R32F, GL_RG32F, GL_RGB32F, GL_RGBA32F };
 
-i32 const GBGL_INTERNAL_TEXTURE_FORMAT_U8[4] = { GL_R8UI, GL_RG8UI, GL_RGB8UI, GL_RGB8UI };
-i32 const GBGL_INTERNAL_TEXTURE_FORMAT_I8[4] = { GL_R8I,  GL_RG8I,  GL_RGB8I,  GL_RGB8I  };
-i32 const GBGL_INTERNAL_TEXTURE_FORMAT_F8[4] = { GL_R8,   GL_RG8,   GL_RGB8,   GL_RGB8   };
+i32 const gbglInternalTextureFormat_u8[4] = { GL_R8UI, GL_RG8UI, GL_RGB8UI, GL_RGB8UI };
+i32 const gbglInternalTextureFormat_i8[4] = { GL_R8I,  GL_RG8I,  GL_RGB8I,  GL_RGB8I  };
+i32 const gbglInternalTextureFormat_f8[4] = { GL_R8,   GL_RG8,   GL_RGB8,   GL_RGB8   };
 
-i32 const GBGL_INTERNAL_TEXTURE_FORMAT_U16[4] = { GL_R16UI, GL_RG16UI, GL_RGB16UI, GL_RGB16UI };
-i32 const GBGL_INTERNAL_TEXTURE_FORMAT_I16[4] = { GL_R16I,  GL_RG16I,  GL_RGB16I,  GL_RGB16I  };
-i32 const GBGL_INTERNAL_TEXTURE_FORMAT_F16[4] = { GL_R16F,  GL_RG16F,  GL_RGB16F,  GL_RGB16F  };
+i32 const gbglInternalTextureFormat_u16[4] = { GL_R16UI, GL_RG16UI, GL_RGB16UI, GL_RGB16UI };
+i32 const gbglInternalTextureFormat_i16[4] = { GL_R16I,  GL_RG16I,  GL_RGB16I,  GL_RGB16I  };
+i32 const gbglInternalTextureFormat_f16[4] = { GL_R16F,  GL_RG16F,  GL_RGB16F,  GL_RGB16F  };
 
-i32 const GBGL_INTERNAL_TEXTURE_FORMAT_U32[4] = { GL_R32UI, GL_RG32UI, GL_RGB32UI, GL_RGBA32UI };
-i32 const GBGL_INTERNAL_TEXTURE_FORMAT_I32[4] = { GL_R32I,  GL_RG32I,  GL_RGB32I,  GL_RGBA32I  };
-i32 const GBGL_INTERNAL_TEXTURE_FORMAT_F32[4] = { GL_R32F,  GL_RG32F,  GL_RGB32F,  GL_RGBA32F  };
+i32 const gbglInternalTextureFormat_u32[4] = { GL_R32UI, GL_RG32UI, GL_RGB32UI, GL_RGBA32UI };
+i32 const gbglInternalTextureFormat_i32[4] = { GL_R32I,  GL_RG32I,  GL_RGB32I,  GL_RGBA32I  };
+i32 const gbglInternalTextureFormat_f32[4] = { GL_R32F,  GL_RG32F,  GL_RGB32F,  GL_RGBA32F  };
 
-gb_inline i32 gbgl__get_texture_format(gbglBufferDataType data_type, i32 channel_count) {
+gb_inline i32 gbgl_texture_format(gbglBufferDataType data_type, i32 channel_count) {
 	GB_ASSERT(gb_is_between(channel_count, 1, 4));
 	switch (data_type) {
-	case GBGL_BDT_U8:  return GBGL_INTERNAL_TEXTURE_FORMAT_U8[channel_count-1];
-	case GBGL_BDT_I8:  return GBGL_INTERNAL_TEXTURE_FORMAT_I8[channel_count-1];
-	case GBGL_BDT_F8:  return GBGL_INTERNAL_TEXTURE_FORMAT_F8[channel_count-1];
-	case GBGL_BDT_U16: return GBGL_INTERNAL_TEXTURE_FORMAT_U16[channel_count-1];
-	case GBGL_BDT_I16: return GBGL_INTERNAL_TEXTURE_FORMAT_I16[channel_count-1];
-	case GBGL_BDT_F16: return GBGL_INTERNAL_TEXTURE_FORMAT_F16[channel_count-1];
-	case GBGL_BDT_U32: return GBGL_INTERNAL_TEXTURE_FORMAT_U32[channel_count-1];
-	case GBGL_BDT_I32: return GBGL_INTERNAL_TEXTURE_FORMAT_I32[channel_count-1];
-	case GBGL_BDT_F32: return GBGL_INTERNAL_TEXTURE_FORMAT_F32[channel_count-1];
+	case gbglBufferData_u8:  return gbglInternalTextureFormat_u8[channel_count-1];
+	case gbglBufferData_i8:  return gbglInternalTextureFormat_i8[channel_count-1];
+	case gbglBufferData_f8:  return gbglInternalTextureFormat_f8[channel_count-1];
+	case gbglBufferData_u16: return gbglInternalTextureFormat_u16[channel_count-1];
+	case gbglBufferData_i16: return gbglInternalTextureFormat_i16[channel_count-1];
+	case gbglBufferData_f16: return gbglInternalTextureFormat_f16[channel_count-1];
+	case gbglBufferData_u32: return gbglInternalTextureFormat_u32[channel_count-1];
+	case gbglBufferData_i32: return gbglInternalTextureFormat_i32[channel_count-1];
+	case gbglBufferData_f32: return gbglInternalTextureFormat_f32[channel_count-1];
 	}
-	return GBGL_INTERNAL_TEXTURE_FORMAT_F32[4-1];
+	return gbglInternalTextureFormat_f32[4-1];
 }
 
 typedef struct gbglTBO {
@@ -376,26 +377,26 @@ GBGL_DEF void gbgl_unmap_ebo(void);
 //
 
 typedef enum gbglShaderType {
-	GBGL_SHADER_TYPE_VERTEX,
-	GBGL_SHADER_TYPE_FRAGMENT,
-	GBGL_SHADER_TYPE_GEOMETRY,
+	gbglShader_Vertex,
+	gbglShader_Fragment,
+	gbglShader_Geometry,
 
-	GBGL_SHADER_TYPE_COUNT,
+	gbglShader_Count,
 } gbglShaderType;
 
-i32 const GBGL_SHADER_TYPE[GBGL_SHADER_TYPE_COUNT] = {
-	GL_VERTEX_SHADER,   /* GBGL_SHADER_TYPE_VERTEX   */
-	GL_FRAGMENT_SHADER, /* GBGL_SHADER_TYPE_FRAGMENT */
-	GL_GEOMETRY_SHADER, /* GBGL_SHADER_TYPE_GEOMETRY */
+i32 const gbglShaderMap[gbglShader_Count] = {
+	GL_VERTEX_SHADER,   /* gbglShader_Vertex   */
+	GL_FRAGMENT_SHADER, /* gbglShader_Fragment */
+	GL_GEOMETRY_SHADER, /* gbglShader_Geometry */
 };
 
 typedef enum gbglShaderError {
-	GBGL_SHADER_ERROR_NONE,
-	GBGL_SHADER_ERROR_SHADER_COMPILE,
-	GBGL_SHADER_ERROR_LINKING,
-	GBGL_SHADER_ERROR_UNABLE_TO_READ_FILE,
+	gbglShaderError_None,
+	gbglShaderError_ShaderCompile,
+	gbglShaderError_Linking,
+	gbglShaderError_UnableToReadFile,
 
-	GBGL_SHADER_ERROR_COUNT,
+	gbglShaderError_Count,
 } gbglShaderError;
 
 #ifndef GBGL_MAX_UNIFORM_COUNT
@@ -403,7 +404,7 @@ typedef enum gbglShaderError {
 #endif
 
 typedef struct gbglShader {
-	u32 shaders[GBGL_SHADER_TYPE_COUNT];
+	u32 shaders[gbglShader_Count];
 	u32 program;
 
 	i32   uniform_locs[GBGL_MAX_UNIFORM_COUNT];
@@ -412,7 +413,7 @@ typedef struct gbglShader {
 
 	u32   type_flags;
 
-	gbFile files[GBGL_SHADER_TYPE_COUNT];
+	gbFile files[gbglShader_Count];
 
 	char base_name[64];
 } gbglShader;
@@ -421,7 +422,7 @@ typedef struct gbglShader {
 
 #ifndef GBGL_SHADER_FILE_EXTENSIONS_DEFINED
 #define GBGL_SHADER_FILE_EXTENSIONS_DEFINED
-gb_global char const *GBGL_SHADER_FILE_EXTENSIONS[GBGL_SHADER_TYPE_COUNT] = {".vs", ".fs", ".gs"};
+gb_global char const *gbglShaderFileExtensions[gbglShader_Count] = {".vs", ".fs", ".gs"};
 #endif
 
 
@@ -454,15 +455,15 @@ GBGL_DEF void gbgl_set_uniform_colour    (gbglShader *s, char const *name, gbglC
 //
 
 typedef enum gbglTextureType {
-	GBGL_TEXTURE_TYPE_2D,
-	GBGL_TEXTURE_TYPE_CUBE_MAP,
+	gbglgTexture_2D,
+	gbglgTexture_CubeMap,
 
-	GBGL_TEXTURE_TYPE_COUNT,
+	gbglgTexture_Count,
 } gbglTextureType;
 
-gb_global i32 const GBGL_TEXTURE_TYPE[GBGL_TEXTURE_TYPE_COUNT] = {
-	GL_TEXTURE_2D,       /* GBGL_TEXTURE_TYPE_2D */
-	GL_TEXTURE_CUBE_MAP, /* GBGL_TEXTURE_TYPE_CUBE_MAP */
+gb_global i32 const GBGL_TEXTURE_TYPE[gbglgTexture_Count] = {
+	GL_TEXTURE_2D,       /* gbglgTexture_2D */
+	GL_TEXTURE_CUBE_MAP, /* gbglgTexture_CubeMap */
 };
 
 
@@ -501,7 +502,7 @@ typedef struct gbglRenderBuffer {
 } gbglRenderBuffer;
 
 #define GBGL_MAX_RENDER_COLOUR_BUFFERS 16
-gb_global u32 const GBGL_COLOUR_BUFFER_ATTACHMENTS[GBGL_MAX_RENDER_COLOUR_BUFFERS] = {
+gb_global u32 const gbglColourBufferAttachments[GBGL_MAX_RENDER_COLOUR_BUFFERS] = {
 	GL_COLOR_ATTACHMENT0,
 	GL_COLOR_ATTACHMENT1,
 	GL_COLOR_ATTACHMENT2,
@@ -555,18 +556,18 @@ typedef struct gbglKernPair {
 } gbglKernPair;
 
 typedef enum gbglJustifyType {
-	GBGL_JUSTIFY_LEFT,
-	GBGL_JUSTIFY_CENTRE,
-	GBGL_JUSTIFY_RIGHT,
+	gbglJustify_Left,
+	gbglJustify_Centre,
+	gbglJustify_Right,
 } gbglJustifyType;
 
 typedef enum gbglTextParamType {
-	GBGL_TEXT_PARAM_INVALID,
-	GBGL_TEXT_PARAM_MAX_WIDTH,
-	GBGL_TEXT_PARAM_JUSTIFY,
-	GBGL_TEXT_PARAM_TEXTURE_FILTER,
+	gbglTextParam_Invalid,
+	gbglTextParam_MaxWidth,
+	gbglTextParam_Justify,
+	gbglTextParam_TextureFilter,
 
-	GBGL_TEXT_PARAM_COUNT,
+	gbglTextParam_Count,
 } gbglTextParamType;
 
 typedef struct gbglTextParam {
@@ -660,8 +661,8 @@ GBGL_DEF f32            gbgl_get_string_width                   (gbglFont *font,
 #define GBGL_MAX_RENDER_STRING_LENGTH 4096
 #endif
 
-#ifndef GBGL_TEXT_PARAM_STACK_SIZE
-#define GBGL_TEXT_PARAM_STACK_SIZE 128
+#ifndef gbglTextParam_Stack_size
+#define gbglTextParam_Stack_size 128
 #endif
 
 #ifndef GBGL_FONT_CHAR_LIST
@@ -710,9 +711,9 @@ typedef struct gbglBasicState {
 	char            font_text_buffer[GBGL_MAX_RENDER_STRING_LENGTH * 4]; // NOTE(bill): Maximum of 4 bytes per char for utf-8
 	u32             font_samplers[2];
 
-	gbglTextParam text_param_stack[GBGL_TEXT_PARAM_STACK_SIZE];
+	gbglTextParam text_param_stack[gbglTextParam_Stack_size];
 	isize         text_param_stack_count;
-	gbglTextParam text_params[GBGL_TEXT_PARAM_COUNT];
+	gbglTextParam text_params[gbglTextParam_Count];
 #endif
 } gbglBasicState;
 
@@ -883,7 +884,7 @@ gb_inline gbglTBO gbgl_make_tbo(gbglBufferDataType data_type, i32 channel_count,
 
 	glGenTextures(1, &tbo.buffer_handle);
 	glBindTexture(GL_TEXTURE_BUFFER, tbo.buffer_handle);
-	internal_format = gbgl__get_texture_format(data_type, channel_count);
+	internal_format = gbgl_texture_format(data_type, channel_count);
 	glTexBuffer(GL_TEXTURE_BUFFER, internal_format, tbo.buffer_obj_handle);
 	return tbo;
 }
@@ -933,14 +934,14 @@ gb_inline void gbgl_unmap_ebo(void) { glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER); }
 
 
 gbglShaderError gbgl__load_single_shader_from_file(gbglShader *shader, gbglShaderType type, char const *name) {
-	gbglShaderError err = GBGL_SHADER_ERROR_NONE;
+	gbglShaderError err = gbglShaderError_None;
 	gbFileError ferr;
 	gb_local_persist char filepath[1024];
-	gb_snprintf(filepath, gb_count_of(filepath), "%s%s", name, GBGL_SHADER_FILE_EXTENSIONS[type]);
+	gb_snprintf(filepath, gb_count_of(filepath), "%s%s", name, gbglShaderFileExtensions[type]);
 	ferr = gb_file_open(&shader->files[type], filepath);
 
-	if (ferr != GB_FILE_ERR_NONE) {
-		err = GBGL_SHADER_ERROR_UNABLE_TO_READ_FILE;
+	if (ferr != gbFileError_None) {
+		err = gbglShaderError_UnableToReadFile;
 	} else {
 		gb_local_persist char info_log[4096];
 		i64 file_size = gb_file_size(&shader->files[type]);
@@ -953,7 +954,7 @@ gbglShaderError gbgl__load_single_shader_from_file(gbglShader *shader, gbglShade
 			gb_file_read_at(&shader->files[type], file_source, file_size, 0);
 			file_source[file_size] = '\0';
 
-			shader->shaders[type] = glCreateShader(GBGL_SHADER_TYPE[type]);
+			shader->shaders[type] = glCreateShader(gbglShaderMap[type]);
 			glShaderSource(shader->shaders[type], 1, &file_source, NULL);
 			glCompileShader(shader->shaders[type]);
 			glGetShaderiv(shader->shaders[type], GL_COMPILE_STATUS, &params);
@@ -962,7 +963,7 @@ gbglShaderError gbgl__load_single_shader_from_file(gbglShader *shader, gbglShade
 				glGetShaderInfoLog(shader->shaders[type], gb_size_of(info_log), NULL, info_log);
 				gb_printf_err("Shader compilation failed:\n %s\n", info_log);
 
-				err = GBGL_SHADER_ERROR_SHADER_COMPILE;
+				err = gbglShaderError_ShaderCompile;
 			}
 
 			gbgl_free(file_source);
@@ -974,10 +975,10 @@ gbglShaderError gbgl__load_single_shader_from_file(gbglShader *shader, gbglShade
 }
 
 gbglShaderError gbgl__load_single_shader_from_memory(gbglShader *s, gbglShaderType type, char const *text) {
-	gbglShaderError err = GBGL_SHADER_ERROR_NONE;
+	gbglShaderError err = gbglShaderError_None;
 	i32 status;
 
-	s->shaders[type] = glCreateShader(GBGL_SHADER_TYPE[type]);
+	s->shaders[type] = glCreateShader(gbglShaderMap[type]);
 	glShaderSource(s->shaders[type], 1, &text, 0);
 	glCompileShader(s->shaders[type]);
 
@@ -992,17 +993,17 @@ gbglShaderError gbgl__load_single_shader_from_memory(gbglShader *s, gbglShaderTy
 
 		glGetShaderInfoLog(s->shaders[type], 4095, &log_len, log_info);
 		gb_printf_err(log_info);
-		err = GBGL_SHADER_ERROR_SHADER_COMPILE;
+		err = gbglShaderError_ShaderCompile;
 	}
 
 	return err;
 }
 
 gbglShaderError gbgl__link_shader(gbglShader *shader) {
-	gbglShaderError err = GBGL_SHADER_ERROR_NONE;
+	gbglShaderError err = gbglShaderError_None;
 	i32 i, status;
 	shader->program = glCreateProgram();
-	for (i = 0; i < GBGL_SHADER_TYPE_COUNT; i++) {
+	for (i = 0; i < gbglShader_Count; i++) {
 		if (shader->type_flags & GB_BIT(i))
 			glAttachShader(shader->program, shader->shaders[i]);
 	}
@@ -1014,10 +1015,10 @@ gbglShaderError gbgl__link_shader(gbglShader *shader) {
 		gb_local_persist char log_info[4096];
 		glGetProgramInfoLog(shader->program, gb_size_of(log_info), NULL, log_info);
 		gb_printf_err("Shader linking failed:\n %s \n", log_info);
-		err = GBGL_SHADER_ERROR_LINKING;
+		err = gbglShaderError_Linking;
 	}
 
-	for (i = 0; i < GBGL_SHADER_TYPE_COUNT; i++) {
+	for (i = 0; i < gbglShader_Count; i++) {
 		if (shader->type_flags & GB_BIT(i))
 			glDetachShader(shader->program, shader->shaders[i]);
 	}
@@ -1028,18 +1029,18 @@ gbglShaderError gbgl__link_shader(gbglShader *shader) {
 
 
 gbglShaderError gbgl_load_shader_from_file(gbglShader *shader, u32 type_bits, char const *filename) {
-	gbglShaderError err = GBGL_SHADER_ERROR_NONE;
-	b32 loaded_shader[GBGL_SHADER_TYPE_COUNT] = {0};
+	gbglShaderError err = gbglShaderError_None;
+	b32 loaded_shader[gbglShader_Count] = {0};
 	i32 i;
 
 	gb_zero_item(shader);
 	shader->type_flags = type_bits;
 	gb_strncpy(shader->base_name, filename, gb_size_of(shader->base_name));
 
-	for (i = 0; i < GBGL_SHADER_TYPE_COUNT; i++) {
+	for (i = 0; i < gbglShader_Count; i++) {
 		if (type_bits & GB_BIT(i)) {
 			err = gbgl__load_single_shader_from_file(shader, cast(gbglShaderType)i, filename);
-			if (err != GBGL_SHADER_ERROR_NONE)
+			if (err != gbglShaderError_None)
 				return err;
 			loaded_shader[i] = true;
 		}
@@ -1053,15 +1054,15 @@ gbglShaderError gbgl_load_shader_from_file(gbglShader *shader, u32 type_bits, ch
 
 
 gbglShaderError gbgl_load_shader_from_memory_vf(gbglShader *s, char const *vert_source, char const *frag_source) {
-	gbglShaderError err = GBGL_SHADER_ERROR_NONE;
+	gbglShaderError err = gbglShaderError_None;
 
 	gb_zero_item(s);
-	s->type_flags = GB_BIT(GBGL_SHADER_TYPE_VERTEX) | GB_BIT(GBGL_SHADER_TYPE_FRAGMENT);
+	s->type_flags = GB_BIT(gbglShader_Vertex) | GB_BIT(gbglShader_Fragment);
 
-	err = gbgl__load_single_shader_from_memory(s, GBGL_SHADER_TYPE_VERTEX, vert_source);
-	if (err != GBGL_SHADER_ERROR_NONE) return err;
-	err = gbgl__load_single_shader_from_memory(s, GBGL_SHADER_TYPE_FRAGMENT, frag_source);
-	if (err != GBGL_SHADER_ERROR_NONE) return err;
+	err = gbgl__load_single_shader_from_memory(s, gbglShader_Vertex, vert_source);
+	if (err != gbglShaderError_None) return err;
+	err = gbgl__load_single_shader_from_memory(s, gbglShader_Fragment, frag_source);
+	if (err != gbglShaderError_None) return err;
 
 	err = gbgl__link_shader(s);
 
@@ -1069,17 +1070,17 @@ gbglShaderError gbgl_load_shader_from_memory_vf(gbglShader *s, char const *vert_
 }
 
 gbglShaderError gbgl_load_shader_from_memory_vfg(gbglShader *s, char const *vert_source, char const *frag_source, char const *geom_source) {
-	gbglShaderError err = GBGL_SHADER_ERROR_NONE;
+	gbglShaderError err = gbglShaderError_None;
 
 	gb_zero_item(s);
-	s->type_flags = GB_BIT(GBGL_SHADER_TYPE_VERTEX) | GB_BIT(GBGL_SHADER_TYPE_FRAGMENT) | GB_BIT(GBGL_SHADER_TYPE_GEOMETRY);
+	s->type_flags = GB_BIT(gbglShader_Vertex) | GB_BIT(gbglShader_Fragment) | GB_BIT(gbglShader_Geometry);
 
-	err = gbgl__load_single_shader_from_memory(s, GBGL_SHADER_TYPE_VERTEX, vert_source);
-	if (err != GBGL_SHADER_ERROR_NONE) return err;
-	err = gbgl__load_single_shader_from_memory(s, GBGL_SHADER_TYPE_FRAGMENT, frag_source);
-	if (err != GBGL_SHADER_ERROR_NONE) return err;
-	err = gbgl__load_single_shader_from_memory(s, GBGL_SHADER_TYPE_GEOMETRY, geom_source);
-	if (err != GBGL_SHADER_ERROR_NONE) return err;
+	err = gbgl__load_single_shader_from_memory(s, gbglShader_Vertex, vert_source);
+	if (err != gbglShaderError_None) return err;
+	err = gbgl__load_single_shader_from_memory(s, gbglShader_Fragment, frag_source);
+	if (err != gbglShaderError_None) return err;
+	err = gbgl__load_single_shader_from_memory(s, gbglShader_Geometry, geom_source);
+	if (err != gbglShaderError_None) return err;
 
 	err = gbgl__link_shader(s);
 
@@ -1088,7 +1089,7 @@ gbglShaderError gbgl_load_shader_from_memory_vfg(gbglShader *s, char const *vert
 
 gb_inline void gbgl_destroy_shader(gbglShader *shader) {
 	i32 i;
-	for (i = 0; i < GBGL_SHADER_TYPE_COUNT; i++) {
+	for (i = 0; i < gbglShader_Count; i++) {
 		if (shader->type_flags & GB_BIT(i)) {
 			gb_file_close(&shader->files[i]);
 			glDeleteShader(shader->shaders[i]);
@@ -1105,7 +1106,7 @@ gb_inline void gbgl_destroy_shader(gbglShader *shader) {
 
 gb_inline b32 gbgl_has_shader_changed(gbglShader *shader) {
 	i32 i;
-	for (i = 0; i < GBGL_SHADER_TYPE_COUNT; i++) {
+	for (i = 0; i < gbglShader_Count; i++) {
 		if (shader->type_flags & GB_BIT(i)) {
 			if (gb_file_has_changed(&shader->files[i])) {
 				return true;
@@ -1118,14 +1119,14 @@ gb_inline b32 gbgl_has_shader_changed(gbglShader *shader) {
 
 b32 gbgl_reload_shader(gbglShader *shader) {
 	i32 i;
-	for (i = 0; i < GBGL_SHADER_TYPE_COUNT; i++) {
+	for (i = 0; i < gbglShader_Count; i++) {
 		if (shader->type_flags & GB_BIT(i)) {
-			if (gbgl__load_single_shader_from_file(shader, cast(gbglShaderType)i, shader->base_name) != GBGL_SHADER_ERROR_NONE)
+			if (gbgl__load_single_shader_from_file(shader, cast(gbglShaderType)i, shader->base_name) != gbglShaderError_None)
 				return false;
 		}
 	}
 
-	if (gbgl__link_shader(shader) != GBGL_SHADER_ERROR_NONE)
+	if (gbgl__link_shader(shader) != gbglShaderError_None)
 		return false;
 
 	for (i = 0; i < shader->uniform_count; i++)
@@ -1285,17 +1286,17 @@ b32 gbgl_load_texture2d_from_memory(gbglTexture *tex, void const *data, i32 widt
 	tex->width = width;
 	tex->height = height;
 	tex->channel_count = channel_count;
-	tex->data_type = GBGL_BDT_U8;
-	tex->type = GBGL_TEXTURE_TYPE_2D;
+	tex->data_type = gbglBufferData_u8;
+	tex->type = gbglgTexture_2D;
 
 	glGenTextures(1, &tex->handle);
 	glBindTexture(GL_TEXTURE_2D, tex->handle);
 
 
 	glTexImage2D(GL_TEXTURE_2D, 0,
-	             GBGL_INTERNAL_TEXTURE_FORMAT_8[channel_count-1],
+	             gbglInternalTextureFormat_8[channel_count-1],
 	             width, height, 0,
-	             GBGL_TEXTURE_FORMAT[channel_count-1],
+	             gbglTextureFormat[channel_count-1],
 	             GL_UNSIGNED_BYTE, data);
 
 	glBindTexture(GL_TEXTURE_2D, 0);
@@ -1335,7 +1336,7 @@ gb_inline b32 gbgl_make_texture2d_coloured(gbglTexture *t, gbglColour colour) {
 
 
 gb_inline void gbgl_bind_texture2d(gbglTexture const *t, u32 position, u32 sampler) {
-	GB_ASSERT(t->type == GBGL_TEXTURE_TYPE_2D);
+	GB_ASSERT(t->type == gbglgTexture_2D);
 
 	if (position > 31) {
 		position = 31;
@@ -1596,7 +1597,7 @@ gbglFont * gbgl_cache_font(gbglFontCache *fc, char const *ttf_filename, f32 font
 			gb_strncpy((*ttf_cache)->name, ttf_filename, name_len);
 			(*ttf_cache)->name[name_len] = '\0';
 
-			if (gb_file_open(&file, ttf_filename) == GB_FILE_ERR_NONE) {
+			if (gb_file_open(&file, ttf_filename) == gbFileError_None) {
 				i64 len = gb_file_size(&file);
 				(*ttf_cache)->ttf = cast(u8 *)gbgl_malloc(len);
 				GB_ASSERT_NOT_NULL((*ttf_cache)->ttf);
@@ -1988,9 +1989,9 @@ void gbgl_bs_init(gbglBasicState *bs, i32 window_width, i32 window_height) {
 	bs->font_samplers[0] = gbgl_make_sampler(GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 	bs->font_samplers[1] = gbgl_make_sampler(GL_LINEAR,  GL_LINEAR,  GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 
-	bs->text_params[GBGL_TEXT_PARAM_MAX_WIDTH]     .val_i32 = 0;
-	bs->text_params[GBGL_TEXT_PARAM_JUSTIFY]       .val_i32 = GBGL_JUSTIFY_LEFT;
-	bs->text_params[GBGL_TEXT_PARAM_TEXTURE_FILTER].val_i32 = 0;
+	bs->text_params[gbglTextParam_MaxWidth]     .val_i32 = 0;
+	bs->text_params[gbglTextParam_Justify]       .val_i32 = gbglJustify_Left;
+	bs->text_params[gbglTextParam_TextureFilter].val_i32 = 0;
 #endif
 }
 
@@ -2422,14 +2423,14 @@ isize gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, f32 x, f32 y, g
 
 		isize glyph_count = 0, i;
 		f32 font_height = font->size;
-		i32 max_width = bs->text_params[GBGL_TEXT_PARAM_MAX_WIDTH].val_i32;
+		i32 max_width = bs->text_params[gbglTextParam_MaxWidth].val_i32;
 
-		gbglJustifyType justify = cast(gbglJustifyType)bs->text_params[GBGL_TEXT_PARAM_JUSTIFY].val_i32;
-		if (justify == GBGL_JUSTIFY_CENTRE) {
+		gbglJustifyType justify = cast(gbglJustifyType)bs->text_params[gbglTextParam_Justify].val_i32;
+		if (justify == gbglJustify_Centre) {
 			f32 width;
 			gbgl_get_string_dimensions(font, ptr, &width, NULL);
 			x = gbgl_round(x - width*0.5f);
-		} else if (justify == GBGL_JUSTIFY_RIGHT) {
+		} else if (justify == gbglJustify_Right) {
 			f32 width;
 			gbgl_get_string_dimensions(font, ptr, &width, NULL);
 			x = gbgl_round(x - width);
@@ -2540,9 +2541,9 @@ isize gbgl_bs_draw_substring(gbglBasicState *bs, gbglFont *font, f32 x, f32 y, g
 			gbgl_use_shader(&bs->font_shader);
 			gbgl_set_uniform_mat4(&bs->font_shader, "u_ortho_mat", bs->ortho_mat);
 			gbgl_set_uniform_colour(&bs->font_shader, "u_colour", col);
-			GB_ASSERT(bs->text_params[GBGL_TEXT_PARAM_TEXTURE_FILTER].val_i32 < gb_count_of(bs->font_samplers));
-			if (bs->text_params[GBGL_TEXT_PARAM_TEXTURE_FILTER].val_i32 < gb_count_of(bs->font_samplers))
-				sampler_index = bs->text_params[GBGL_TEXT_PARAM_TEXTURE_FILTER].val_i32;
+			GB_ASSERT(bs->text_params[gbglTextParam_TextureFilter].val_i32 < gb_count_of(bs->font_samplers));
+			if (bs->text_params[gbglTextParam_TextureFilter].val_i32 < gb_count_of(bs->font_samplers))
+				sampler_index = bs->text_params[gbglTextParam_TextureFilter].val_i32;
 
 			gbgl_bind_texture2d(&font->texture, 0, bs->font_samplers[sampler_index]);
 			gbgl_vbo_copy(bs->font_vbo, bs->font_vertices, gb_size_of(bs->font_vertices[0]) * glyph_count * 4, 0);
