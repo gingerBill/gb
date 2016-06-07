@@ -1,4 +1,4 @@
-/* gb.h - v0.23  - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.24a - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -58,6 +58,7 @@ TODOS
 	- More date & time functions
 
 VERSION HISTORY
+	0.24a - Minor additions
 	0.24  - Enum convention change
 	0.23  - Optional Windows.h removal (because I'm crazy)
 	0.22a - Remove gbVideoMode from gb_platform_init_*
@@ -889,7 +890,8 @@ typedef struct gbSemaphore { sem_t unix_handle; }      gbSemaphore;
 
 GB_DEF void gb_semaphore_init   (gbSemaphore *s);
 GB_DEF void gb_semaphore_destroy(gbSemaphore *s);
-GB_DEF void gb_semaphore_post   (gbSemaphore *s, i32 count); // NOTE(bill): Default count = 1
+GB_DEF void gb_semaphore_post   (gbSemaphore *s, i32 count);
+GB_DEF void gb_semaphore_release(gbSemaphore *s); // NOTE(bill): gb_semaphore_post(s, 1)
 GB_DEF void gb_semaphore_wait   (gbSemaphore *s);
 
 
@@ -1394,6 +1396,7 @@ GB_DEF void gb_str_concat(char *dest, isize dest_len,
                           char const *src_a, isize src_a_len,
                           char const *src_b, isize src_b_len);
 
+GB_DEF u64   gb_str_to_u64(char const *str, char **end_ptr, i32 base); // TODO(bill): Support more than just decimal and hexadecimal
 GB_DEF i64   gb_str_to_i64(char const *str, char **end_ptr, i32 base); // TODO(bill): Support more than just decimal and hexadecimal
 GB_DEF f32   gb_str_to_f32(char const *str, char **end_ptr);
 GB_DEF f64   gb_str_to_f64(char const *str, char **end_ptr);
@@ -1891,8 +1894,8 @@ gb_internal gb_inline isize GB_JOIN2(FUNC,_add_entry)(NAME *h, u64 key) { \
 	return i; \
 } \
 gb_internal gb_inline isize GB_JOIN2(FUNC,_is_full)(NAME *h) { \
-	f64 const MAXIMUM_LOAD_COEFFICIENT = 0.85; \
-	return gb_array_count(h->entries) >= MAXIMUM_LOAD_COEFFICIENT * gb_array_count(h->hashes); \
+	f64 const maximum_load_coefficient = 0.85; \
+	return gb_array_count(h->entries) >= maximum_load_coefficient * gb_array_count(h->hashes); \
 } \
 gb_internal gb_inline void GB_JOIN2(FUNC,_table_grow)(NAME *h); \
 gb_inline void GB_JOIN2(FUNC,multi_insert)(NAME *h, u64 key, VALUE value) { \
@@ -2174,11 +2177,12 @@ GB_DEF b32        gb_file_move           (char const *existing_filename, char co
 	#endif
 #endif
 
-GB_DEF b32         gb_path_is_absolute(char const *path);
-GB_DEF b32         gb_path_is_relative(char const *path);
-GB_DEF b32         gb_path_is_root    (char const *path);
-GB_DEF char const *gb_path_base_name  (char const *path);
-GB_DEF char const *gb_path_extension  (char const *path);
+GB_DEF b32         gb_path_is_absolute  (char const *path);
+GB_DEF b32         gb_path_is_relative  (char const *path);
+GB_DEF b32         gb_path_is_root      (char const *path);
+GB_DEF char const *gb_path_base_name    (char const *path);
+GB_DEF char const *gb_path_extension    (char const *path);
+GB_DEF char *      gb_path_get_full_name(gbAllocator a, char const *path);
 
 
 ////////////////////////////////////////////////////////////////
@@ -4465,6 +4469,7 @@ gb_inline void gb_lfence(void) {
 }
 
 
+gb_inline void gb_semaphore_release(gbSemaphore *s) { gb_semaphore_post(s, 1); }
 
 #if defined(GB_SYSTEM_WINDOWS)
 	gb_inline void gb_semaphore_init   (gbSemaphore *s)            { s->win32_handle = CreateSemaphoreA(NULL, 0, I32_MAX, NULL); }
@@ -4539,7 +4544,7 @@ gb_inline void gb_mutex_unlock(gbMutex *m) {
 
 	if (gb_atomic32_fetch_add(&m->counter, -1) > 1) {
 		if (recursion == 0)
-			gb_semaphore_post(&m->semaphore, 1);
+			gb_semaphore_release(&m->semaphore);
 	}
 }
 
@@ -4566,7 +4571,7 @@ void gb_thread_destory(gbThread *t) {
 
 
 gb_inline void gb__thread_run(gbThread *t) {
-	gb_semaphore_post(&t->semaphore, 1);
+	gb_semaphore_release(&t->semaphore);
 	t->proc(t->data);
 }
 
@@ -4711,7 +4716,7 @@ void gb_sync_set_target(gbSync *s, i32 count) {
 
 void gb_sync_release(gbSync *s) {
 	if (s->waiting) {
-		gb_semaphore_post(&s->release, 1);
+		gb_semaphore_release(&s->release);
 	} else {
 		s->target = 0;
 		gb_mutex_unlock(&s->start);
@@ -6122,6 +6127,52 @@ gb_internal isize gb__scan_i64(char const *text, i32 base, i64 *value) {
 	return (text - text_begin);
 }
 
+gb_internal isize gb__scan_u64(char const *text, i32 base, u64 *value) {
+	char const *text_begin = text;
+	u64 result = 0;
+
+	if (base == 16 && gb_strncmp(text, "0x", 2) == 0)
+		text += 2;
+
+	for (;;) {
+		u64 v;
+		if (gb_char_is_digit(*text))
+			v = *text - '0';
+		else if (base == 16 && gb_char_is_hex_digit(*text))
+			v = gb_hex_digit_to_int(*text);
+		else {
+			break;
+		}
+
+		result *= base;
+		result += v;
+		text++;
+	}
+
+	if (value)
+		*value = result;
+
+	return (text - text_begin);
+}
+
+
+// TODO(bill): Make better
+u64 gb_str_to_u64(char const *str, char **end_ptr, i32 base) {
+	isize len;
+	u64 value;
+
+	if (!base) {
+		if ((gb_strlen(str) > 2) && (gb_strncmp(str, "0x", 2) == 0))
+			base = 16;
+		else
+			base = 10;
+	}
+
+	len = gb__scan_u64(str, base, &value);
+	if (end_ptr)
+		*end_ptr = (char *)str + len;
+	return value;
+}
 
 i64 gb_str_to_i64(char const *str, char **end_ptr, i32 base) {
 	isize len;
@@ -6200,8 +6251,8 @@ gb_inline f32 gb_str_to_f32(char const *str, char **end_ptr) {
 		}
 	}
 
-	if (gb_char_to_upper(c) == 'E') {
-		isize sign = +1, i = 0;
+	if (c == 'e' || c == 'E') {
+		i64 sign = +1, i = 0;
 		c = *str++;
 		if (c == '+') {
 			c = *str++;
@@ -6247,8 +6298,8 @@ gb_inline f64 gb_str_to_f64(char const *str, char **end_ptr) {
 		}
 	}
 
-	if (gb_char_to_upper(c) == 'E') {
-		isize sign = +1, i = 0;
+	if (c == 'e' || c == 'E') {
+		i64 sign = +1, i = 0;
 		c = *str++;
 		if (c == '+') {
 			c = *str++;
@@ -6319,8 +6370,8 @@ gb_inline void gb_string_free(gbString str) {
 		gbStringHeader *header = GB_STRING_HEADER(str);
 		gb_free(header->allocator, header);
 	}
-}
 
+}
 
 gb_inline gbString gb_string_duplicate(gbAllocator a, gbString const str) { return gb_string_make_length(a, str, gb_string_length(str)); }
 
@@ -7619,6 +7670,26 @@ gb_inline char const *gb_path_extension(char const *path) {
 	ld = gb_char_last_occurence(path, '.');
 	return (ld == NULL) ? NULL : ld+1;
 }
+
+
+#if !defined(_WINDOWS_)
+GB_DLL_IMPORT DWORD WINAPI GetFullPathNameA(char const *lpFileName, DWORD nBufferLength, char *lpBuffer, char **lpFilePart);
+#endif
+
+char *gb_path_get_full_name(gbAllocator a, char const *path) {
+#if defined(GB_SYSTEM_WINDOWS)
+// TODO(bill): Make UTF-8
+	char buf[300];
+	isize len = GetFullPathNameA(path, gb_count_of(buf), buf, NULL);
+	return gb_alloc_str_len(a, buf, len+1);
+#else
+// TODO(bill): Make work on *nix, etc.
+	return gb_alloc_str_len(a, path, gb_strlen(path));
+#endif
+}
+
+
+
 
 
 ////////////////////////////////////////////////////////////////
