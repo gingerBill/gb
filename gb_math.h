@@ -1,8 +1,9 @@
-/* gb_math.h - v0.06g - public domain C math library - no warranty implied; use at your own risk
+/* gb_math.h - v0.06h - public domain C math library - no warranty implied; use at your own risk
    A C math library geared towards game development
    use '#define GB_MATH_IMPLEMENTATION' before including to create the implementation in _ONE_ file
 
 Version History:
+	0.06h - Ignore silly warnings
 	0.06g - Remove memzero
 	0.06f - Remove warning on MSVC
 	0.06e - Change brace style and fix some warnings
@@ -748,10 +749,20 @@ inline gbVec3 operator*(gbQuat q, gbVec3 v) { gbVec3 r; gb_quat_rotate_vec3(&r, 
  *
  *
  *
-/****************************************************************/
+ ****************************************************************/
 
 #if defined(GB_MATH_IMPLEMENTATION) && !defined(GB_MATH_IMPLEMENTATION_DONE)
 #define GB_MATH_IMPLEMENTATION_DONE
+
+ #if (defined(__GCC__) || defined(__GNUC__)) && !defined(__clang__)
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wattributes"
+ #pragma GCC diagnostic ignored "-Wmissing-braces"
+ #elif __clang__
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wattributes"
+ #pragma clang diagnostic ignored "-Wmissing-braces"
+ #endif
 
 
 /* NOTE(bill): To remove the need for memcpy */
@@ -2056,6 +2067,13 @@ int gb_random_range_int(int min_inc, int max_inc) {
 
 	return result;
 }
+
+#if defined(__GCC__) || defined(__GNUC__)
+#pragma GCC diagnostic pop
+#elif defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+
 
 
 #endif /* GB_MATH_IMPLEMENTATION */
