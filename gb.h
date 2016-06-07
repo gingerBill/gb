@@ -1,4 +1,4 @@
-/* gb.h - v0.24a - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.24b - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -58,6 +58,7 @@ TODOS
 	- More date & time functions
 
 VERSION HISTORY
+	0.24b - Compile on OSX (excluding platform part)
 	0.24a - Minor additions
 	0.24  - Enum convention change
 	0.23  - Optional Windows.h removal (because I'm crazy)
@@ -295,7 +296,9 @@ extern "C" {
 	#include <pthread.h>
 	#include <stdlib.h> // NOTE(bill): malloc on linux
 	#include <sys/mman.h>
-	#include <sys/sendfile.h>
+	#if !defined(GB_SYSTEM_OSX)
+		#include <sys/sendfile.h>
+	#endif
 	#include <sys/stat.h>
 	#include <sys/time.h>
 	#include <sys/types.h>
@@ -310,6 +313,8 @@ extern "C" {
 #include <mach/thread_act.h>
 #include <mach/thread_policy.h>
 #include <sys/sysctl.h>
+#include <copyfile.h>
+#include <mach/clock.h>
 #endif
 
 #if defined(GB_SYSTEM_UNIX)
@@ -399,8 +404,8 @@ GB_STATIC_ASSERT(sizeof(f32) == 4);
 GB_STATIC_ASSERT(sizeof(f64) == 8);
 
 typedef char char8;  // NOTE(bill): Probably redundant but oh well!
-typedef i16  char16;
-typedef i32  char32;
+typedef u16  char16; // NOTE(bill): Must be unsigned
+typedef i32  char32; // NOTE(bill): Must be signed
 
 // NOTE(bill): I think C99 and C++ `bool` is stupid for numerous reasons but there are too many
 // to write in this small comment.
@@ -3709,6 +3714,7 @@ extern "C" {
 #if defined(__GCC__) || defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wattributes"
+#pragma GCC diagnostic ignored "-Wmissing-braces"
 #endif
 
 
@@ -4430,6 +4436,8 @@ gb_inline b32 gb_atomic_ptr_try_acquire_lock(gbAtomicPtr volatile *a) {
 gb_inline void gb_yield_thread(void) {
 #if defined(GB_SYSTEM_WINDOWS)
 	_mm_pause();
+#elif defined(GB_SYSTEM_OSX)
+	__asm__ volatile ("" : : : "memory");
 #elif defined(GB_CPU_X86)
 	_mm_pause();
 #else
@@ -4438,9 +4446,10 @@ gb_inline void gb_yield_thread(void) {
 }
 
 gb_inline void gb_mfence(void) {
-	_mm_mfence();
 #if defined(GB_SYSTEM_WINDOWS)
 	_ReadWriteBarrier();
+#elif defined(GB_SYSTEM_OSX)
+	__sync_synchronize();
 #elif defined(GB_CPU_X86)
 	_mm_mfence();
 #else
@@ -4451,6 +4460,8 @@ gb_inline void gb_mfence(void) {
 gb_inline void gb_sfence(void) {
 #if defined(GB_SYSTEM_WINDOWS)
 	_WriteBarrier();
+#elif defined(GB_SYSTEM_OSX)
+	__asm__ volatile ("" : : : "memory");
 #elif defined(GB_CPU_X86)
 	_mm_sfence();
 #else
@@ -4461,6 +4472,8 @@ gb_inline void gb_sfence(void) {
 gb_inline void gb_lfence(void) {
 #if defined(GB_SYSTEM_WINDOWS)
 	_ReadBarrier();
+#elif defined(GB_SYSTEM_OSX)
+	__asm__ volatile ("" : : : "memory");
 #elif defined(GB_CPU_X86)
 	_mm_lfence();
 #else
@@ -4479,7 +4492,7 @@ gb_inline void gb_semaphore_release(gbSemaphore *s) { gb_semaphore_post(s, 1); }
 
 #elif defined(GB_SYSTEM_OSX)
 	gb_inline void gb_semaphore_init   (gbSemaphore *s)            { semaphore_create(mach_task_self(), &s->osx_handle, SYNC_POLICY_FIFO, 0); }
-	gb_inline void gb_semaphore_destroy(gbSemaphore *s)            { semaphore_destroy(mach_task_self(), &s->osx_handle); }
+	gb_inline void gb_semaphore_destroy(gbSemaphore *s)            { semaphore_destroy(mach_task_self(), s->osx_handle); }
 	gb_inline void gb_semaphore_post   (gbSemaphore *s, i32 count) { while (count --> 0) semaphore_signal(s->osx_handle); }
 	gb_inline void gb_semaphore_wait   (gbSemaphore *s)            { semaphore_wait(s->osx_handle); }
 
@@ -4885,7 +4898,7 @@ isize gb_affinity_thread_count_for_core(gbAffinity *a, isize core) {
 
 #elif defined(GB_SYSTEM_OSX)
 void gb_affinity_init(gbAffinity *a) {
-	isize count, count_size = gb_size_of(count);
+	usize count, count_size = gb_size_of(count);
 
 	a->is_accurate               = false;
 	a->thread_count     = 1;
@@ -4926,14 +4939,14 @@ b32 gb_affinity_set(gbAffinity *a, isize core, isize thread_index) {
 
 	index = core * a->threads_per_core + thread_index;
 	thread = mach_thread_self();
-	info = {cast(integer_t)index};
+	info.affinity_tag = cast(integer_t)index;
 	result = thread_policy_set(thread, THREAD_AFFINITY_POLICY, cast(thread_policy_t)&info, THREAD_AFFINITY_POLICY_COUNT);
 	return result == KERN_SUCCESS;
 }
 
 isize gb_affinity_thread_count_for_core(gbAffinity *a, isize core) {
 	GB_ASSERT(core >= 0 && core < a->core_count);
-	return gb_count_set_bits(a->core_masks[core]);
+	return a->threads_per_core;
 }
 
 #elif defined(GB_SYSTEM_LINUX)
@@ -7246,7 +7259,11 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 
 #else // POSIX
 	gb_internal GB_FILE_SEEK_PROC(gb__posix_file_seek) {
+		#if defined(GB_SYSTEM_OSX)
+		i64 res = lseek(fd.i, offset, whence);
+		#else
 		i64 res = lseek64(fd.i, offset, whence);
+		#endif
 		if (res < 0) return false;
 		if (new_offset) *new_offset = res;
 		return true;
@@ -7260,7 +7277,15 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 	}
 
 	gb_internal GB_FILE_WRITE_AT_PROC(gb__posix_file_write) {
-		isize res = pwrite(fd.i, buffer, size, offset);
+		isize res;
+		i64 curr_offset = 0;
+		gb__posix_file_seek(fd, 0, gbSeekWhence_Current, &curr_offset);
+		if (curr_offset == offset) {
+			// NOTE(bill): Writing to stdout et al. doesn't like pwrite for numerous reasons
+			res = write(cast(int)fd.i, buffer, size);
+		} else {
+			res = pwrite(cast(int)fd.i, buffer, size, offset);
+		}
 		if (res < 0) return false;
 		if (bytes_written) *bytes_written = res;
 		return true;
@@ -7349,8 +7374,13 @@ gbFileError gb_file_close(gbFile *f) {
 
 	if (f->filename) gb_free(gb_heap_allocator(), cast(char *)f->filename);
 
+#if defined(GB_SYSTEM_WINDOWS)
 	if (f->fd.p == INVALID_HANDLE_VALUE)
 		return gbFileError_Invalid;
+#else
+	if (f->fd.i < 0)
+		return gbFileError_Invalid;
+#endif
 
 	if (!f->ops) f->ops = &gbDefaultFileOperations;
 	f->ops->close(f->fd);
@@ -7433,7 +7463,7 @@ gb_inline b32 gb_file_has_changed(gbFile *f) {
 
 // TODO(bill): Is this a bad idea?
 gb_global b32    gb__std_file_set = false;
-gb_global gbFile gb__std_files[gbFileStandard_Count] = {0};
+gb_global gbFile gb__std_files[gbFileStandard_Count] = {{0}};
 
 
 #if defined(GB_SYSTEM_WINDOWS)
@@ -7550,24 +7580,21 @@ gb_inline b32 gb_file_move(char const *existing_filename, char const *new_filena
 
 #else
 
-gbFileTime gb_file_last_write_time(char const *filepath, ...) {
+gbFileTime gb_file_last_write_time(char const *filepath) {
 	time_t result = 0;
-	char path[1024] = {0};
-
 	struct stat file_stat;
-	va_list va;
-	va_start(va, filepath);
-	if (stat(gb_snprintf_va(path, gb_count_of(path), filepath, va), &file_stat)) {
-		result = file_stat.st_mtime;
-	}
 
-	va_end(va);
+	if (stat(filepath, &file_stat))
+		result = file_stat.st_mtime;
 
 	return cast(gbFileTime)result;
 }
 
 
 gb_inline b32 gb_file_copy(char const *existing_filename, char const *new_filename, b32 fail_if_exists) {
+#if defined(GB_SYSTEM_OSX)
+	return copyfile(existing_filename, new_filename, NULL, COPYFILE_DATA) == 0;
+#else
 	isize size;
 	int existing_fd = open(existing_filename, O_RDONLY, 0);
 	int new_fd      = open(new_filename, O_WRONLY|O_CREAT, 0666);
@@ -7581,11 +7608,12 @@ gb_inline b32 gb_file_copy(char const *existing_filename, char const *new_filena
 	close(existing_fd);
 
 	return size == stat_existing.st_size;
+#endif
 }
 
 gb_inline b32 gb_file_move(char const *existing_filename, char const *new_filename) {
 	if (link(existing_filename, new_filename) == 0) {
-		if (unlink(existing_filename) != EOF)
+		if (unlink(existing_filename) != -1)
 			return true;
 	}
 	return false;
@@ -7672,7 +7700,7 @@ gb_inline char const *gb_path_extension(char const *path) {
 }
 
 
-#if !defined(_WINDOWS_)
+#if !defined(_WINDOWS_) && defined(GB_SYSTEM_WINDOWS)
 GB_DLL_IMPORT DWORD WINAPI GetFullPathNameA(char const *lpFileName, DWORD nBufferLength, char *lpBuffer, char **lpFilePart);
 #endif
 
@@ -8267,8 +8295,18 @@ gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) 
 
 	gb_inline u64 gb_utc_time_now(void) {
 		struct timespec t;
+#if defined(GB_SYSTEM_OSX)
+		clock_serv_t cclock;
+		mach_timespec_t mts;
+		host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
+		clock_get_time(cclock, &mts);
+		mach_port_deallocate(mach_task_self(), cclock);
+		t.tv_sec = mts.tv_sec;
+		t.tv_nsec = mts.tv_nsec;
+#else
 		// IMPORTANT TODO(bill): THIS IS A HACK
 		clock_gettime(0 /*CLOCK_REALTIME*/, &t);
+#endif
 		return cast(u64)t.tv_sec * 1000000ull + t.tv_nsec/1000 + 11644473600000000ull;
 	}
 
