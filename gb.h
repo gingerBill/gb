@@ -1,4 +1,4 @@
-/* gb.h - v0.24b - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.25  - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -58,6 +58,7 @@ TODOS
 	- More date & time functions
 
 VERSION HISTORY
+	0.25  - OS X gbPlatform Support (missing some things)
 	0.24b - Compile on OSX (excluding platform part)
 	0.24a - Minor additions
 	0.24  - Enum convention change
@@ -126,14 +127,13 @@ extern "C" {
 	#define GB_EXTERN extern
 #endif
 
-#ifndef GB_DLL_EXPORT
-#define GB_DLL_EXPORT GB_EXTERN __declspec(dllexport)
+#if defined(_WIN32)
+	#define GB_DLL_EXPORT GB_EXTERN __declspec(dllexport)
+	#define GB_DLL_IMPORT GB_EXTERN __declspec(dllimport)
+#else
+	#define GB_DLL_EXPORT GB_EXTERN __attribute__((visibility("default")))
+	#define GB_DLL_IMPORT GB_EXTERN
 #endif
-
-#ifndef GB_DLL_IMPORT
-#define GB_DLL_IMPORT GB_EXTERN __declspec(dllimport)
-#endif
-
 
 // NOTE(bill): Redefine for DLL, etc.
 #ifndef GB_DEF
@@ -2284,6 +2284,18 @@ GB_DEF isize gb_count_set_bits(u64 mask);
 
 // TODO(bill): Proper documentation for this with code examples
 
+// Window Support - Complete
+// OS X Support - Missing:
+//     * Sofware framebuffer
+//     * (show|hide) window
+//     * show_cursor
+//     * toggle (fullscreen|borderless)
+//     * set window position
+//     * Clipboard
+//     * GameControllers
+// Linux Support - None
+// Other OS Support - None
+
 #ifndef GB_MAX_GAME_CONTROLLER_COUNT
 #define GB_MAX_GAME_CONTROLLER_COUNT 4
 #endif
@@ -2349,11 +2361,11 @@ typedef enum gbKeyType {
 	gbKey_Lcontrol,     // Left Control
 	gbKey_Lshift,       // Left Shift
 	gbKey_Lalt,         // Left Alt
-	gbKey_Lsystem,      // Left OS specific: window (Windows and Linux), apple (MacOS X), ...
+	gbKey_Lsystem,      // Left OS specific: window (Windows and Linux), apple/cmd (MacOS X), ...
 	gbKey_Rcontrol,     // Right Control
 	gbKey_Rshift,       // Right Shift
 	gbKey_Ralt,         // Right Alt
-	gbKey_Rsystem,      // Right OS specific: window (Windows and Linux), apple (MacOS X), ...
+	gbKey_Rsystem,      // Right OS specific: window (Windows and Linux), apple/cmd (MacOS X), ...
 	gbKey_Menu,         // Menu
 	gbKey_Return,       // Return
 	gbKey_Backspace,    // Backspace
@@ -2382,8 +2394,8 @@ typedef enum gbKeyType {
 	gbKey_Numpad7,      // Numpad 7
 	gbKey_Numpad8,      // Numpad 8
 	gbKey_Numpad9,      // Numpad 9
-	gbKey_NumpadDot,   // Numpad .
-	gbKey_NumpadEnter, // Numpad Enter
+	gbKey_NumpadDot,    // Numpad .
+	gbKey_NumpadEnter,  // Numpad Enter
 	gbKey_F1,           // F1
 	gbKey_F2,           // F2
 	gbKey_F3,           // F3
@@ -2492,12 +2504,8 @@ typedef enum gbRendererType {
 } gbRendererType;
 
 
-#if defined(_MSC_VER)
-#pragma warning(push)
-#pragma warning(disable:4201)
-#endif
 
-#if !defined(_WINDOWS_)
+#if defined(GB_SYSTEM_WINDOWS) && !defined(_WINDOWS_)
 typedef struct tagBITMAPINFOHEADER {
 	unsigned long biSize;
 	long          biWidth;
@@ -2534,6 +2542,8 @@ typedef struct gbPlatform {
 
 #if defined(GB_SYSTEM_WINDOWS)
 	void *win32_dc;
+#elif defined(GB_SYSTEM_OSX)
+	void *osx_autorelease_pool; // TODO(bill): Is this really needed?
 #endif
 
 	gbRendererType renderer_type;
@@ -2572,7 +2582,7 @@ typedef struct gbPlatform {
 	i32 mouse_x, mouse_y;
 	i32 mouse_dx, mouse_dy; // NOTE(bill): Not raw mouse movement
 	i32 mouse_raw_dx, mouse_raw_dy; // NOTE(bill): Raw mouse movement
-	i32 mouse_wheel_delta;
+	f32 mouse_wheel_delta;
 	gbKeyState mouse_buttons[gbMouseButton_Count];
 
 	gbGameController game_controllers[GB_MAX_GAME_CONTROLLER_COUNT];
@@ -2589,9 +2599,6 @@ typedef struct gbPlatform {
 #endif
 } gbPlatform;
 
-#if defined(_MSC_VER)
-#pragma warning(pop)
-#endif
 
 typedef struct gbVideoMode {
 	i32 width, height;
@@ -2613,7 +2620,7 @@ GB_DEF b32   gb_platform_init_with_opengl           (gbPlatform *p, char const *
 GB_DEF void  gb_platform_update                     (gbPlatform *p);
 GB_DEF void  gb_platform_display                    (gbPlatform *p);
 GB_DEF void  gb_platform_destroy                    (gbPlatform *p);
-GB_DEF void  gb_platform_show_cursor                (gbPlatform *p, i32 show);
+GB_DEF void  gb_platform_show_cursor                (gbPlatform *p, b32 show);
 GB_DEF void  gb_platform_set_mouse_position         (gbPlatform *p, i32 x, i32 y);
 GB_DEF void  gb_platform_set_controller_vibration   (gbPlatform *p, isize index, f32 left_motor, f32 right_motor);
 GB_DEF b32   gb_platform_has_clipboard_text         (gbPlatform *p);
@@ -2696,7 +2703,7 @@ extern "C" {
 #endif
 
 
-#if defined(_MSC_VER) && !defined(_WINDOWS_)
+#if defined(GB_COMPILER_MSVC) && !defined(_WINDOWS_)
 	////////////////////////////////////////////////////////////////
 	//
 	// Bill's Mini Windows.h
@@ -3717,9 +3724,9 @@ extern "C" {
 #pragma GCC diagnostic ignored "-Wmissing-braces"
 #endif
 
-
 #if defined(_MSC_VER)
 #pragma warning(push)
+#pragma warning(disable:4201)
 #pragma warning(disable:4127) // Conditional expression is constant
 #endif
 
@@ -8280,7 +8287,8 @@ gb_inline gbDllProc gb_dll_proc_address(gbDllHandle dll, char const *proc_name) 
 			gb__timestart = mach_absolute_time();
 		}
 
-		result = (mach_absolute_time() - gb__timestart) *gb__timebase;
+		// NOTE(bill): mach_absolute_time() returns things in nanoseconds
+		result = 1.0e-9 * (mach_absolute_time() - gb__timestart) * gb__timebase;
 		return result;
 #else
 		struct timespec t;
@@ -9317,7 +9325,7 @@ void gb_platform_destroy(gbPlatform *p) {
 	DestroyWindow(cast(HWND)p->window_handle);
 }
 
-void gb_platform_show_cursor(gbPlatform *p, i32 show) {
+void gb_platform_show_cursor(gbPlatform *p, b32 show) {
 	gb_unused(p);
 	ShowCursor(show);
 }
@@ -9531,6 +9539,726 @@ char *gb_platform_get_clipboard_text(gbPlatform *p, gbAllocator a) {
 	}
 
 	return text;
+}
+
+#elif defined(GB_SYSTEM_OSX)
+
+#include <CoreGraphics/CoreGraphics.h>
+#include <objc/objc.h>
+#include <objc/message.h>
+#include <objc/NSObjCRuntime.h>
+
+#if __LP64__ || (TARGET_OS_EMBEDDED && !TARGET_OS_IPHONE) || TARGET_OS_WIN32 || NS_BUILD_32_LIKE_64
+	#define NSIntegerEncoding  "q"
+	#define NSUIntegerEncoding "L"
+#else
+	#define NSIntegerEncoding  "i"
+	#define NSUIntegerEncoding "I"
+#endif
+
+#ifdef __OBJC__
+	#import <Cocoa/Cocoa.h>
+#else
+	typedef CGPoint NSPoint;
+	typedef CGSize  NSSize;
+	typedef CGRect  NSRect;
+
+	extern id NSApp;
+	extern id const NSDefaultRunLoopMode;
+#endif
+
+#if defined(__OBJC__) && __has_feature(objc_arc)
+#error TODO(bill): Cannot compile as objective-c code just yet!
+#endif
+
+// ABI is a bit different between platforms
+#ifdef __arm64__
+#define abi_objc_msgSend_stret objc_msgSend
+#else
+#define abi_objc_msgSend_stret objc_msgSend_stret
+#endif
+#ifdef __i386__
+#define abi_objc_msgSend_fpret objc_msgSend_fpret
+#else
+#define abi_objc_msgSend_fpret objc_msgSend
+#endif
+
+#define objc_msgSend_id				((id (*)(id, SEL))objc_msgSend)
+#define objc_msgSend_void			((void (*)(id, SEL))objc_msgSend)
+#define objc_msgSend_void_id		((void (*)(id, SEL, id))objc_msgSend)
+#define objc_msgSend_void_bool		((void (*)(id, SEL, BOOL))objc_msgSend)
+#define objc_msgSend_id_char_const	((id (*)(id, SEL, char const *))objc_msgSend)
+
+gb_internal NSUInteger gb__osx_application_should_terminate(id self, SEL _sel, id sender) {
+	// NOTE(bill): Do nothing
+	return 0;
+}
+
+gb_internal void gb__osx_window_will_close(id self, SEL _sel, id notification) {
+	NSUInteger value = true;
+	object_setInstanceVariable(self, "closed", cast(void *)value);
+}
+
+gb_internal void gb__osx_window_did_become_key(id self, SEL _sel, id notification) {
+	gbPlatform *p = NULL;
+	object_getInstanceVariable(self, "gbPlatform", cast(void **)&p);
+	if (p) {
+		// TODO(bill):
+	}
+}
+
+b32 gb__platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode, gbRendererType type, u32 window_flags) {
+	if (p->is_initialized)
+		return true;
+	// Init Platform
+	{ // Initial OSX State
+		Class appDelegateClass;
+		b32 resultAddProtoc, resultAddMethod;
+		id dgAlloc, dg, menubarAlloc, menubar;
+		id appMenuItemAlloc, appMenuItem;
+		id appMenuAlloc, appMenu;
+
+		#if defined(ARC_AVAILABLE)
+		#error TODO(bill): This code should be compiled as C for now
+		#else
+		id poolAlloc = objc_msgSend_id(cast(id)objc_getClass("NSAutoreleasePool"), sel_registerName("alloc"));
+		p->osx_autorelease_pool = objc_msgSend_id(poolAlloc, sel_registerName("init"));
+		#endif
+
+		objc_msgSend_id(cast(id)objc_getClass("NSApplication"), sel_registerName("sharedApplication"));
+		((void (*)(id, SEL, NSInteger))objc_msgSend)(NSApp, sel_registerName("setActivationPolicy:"), 0);
+
+		appDelegateClass = objc_allocateClassPair((Class)objc_getClass("NSObject"), "AppDelegate", 0);
+		resultAddProtoc = class_addProtocol(appDelegateClass, objc_getProtocol("NSApplicationDelegate"));
+		assert(resultAddProtoc);
+		resultAddMethod = class_addMethod(appDelegateClass, sel_registerName("applicationShouldTerminate:"), cast(IMP)gb__osx_application_should_terminate, NSUIntegerEncoding "@:@");
+		assert(resultAddMethod);
+		dgAlloc = objc_msgSend_id(cast(id)appDelegateClass, sel_registerName("alloc"));
+		dg = objc_msgSend_id(dgAlloc, sel_registerName("init"));
+		#ifndef ARC_AVAILABLE
+		objc_msgSend_void(dg, sel_registerName("autorelease"));
+		#endif
+
+		objc_msgSend_void_id(NSApp, sel_registerName("setDelegate:"), dg);
+		objc_msgSend_void(NSApp, sel_registerName("finishLaunching"));
+
+		menubarAlloc = objc_msgSend_id(cast(id)objc_getClass("NSMenu"), sel_registerName("alloc"));
+		menubar = objc_msgSend_id(menubarAlloc, sel_registerName("init"));
+		#ifndef ARC_AVAILABLE
+		objc_msgSend_void(menubar, sel_registerName("autorelease"));
+		#endif
+
+		appMenuItemAlloc = objc_msgSend_id(cast(id)objc_getClass("NSMenuItem"), sel_registerName("alloc"));
+		appMenuItem = objc_msgSend_id(appMenuItemAlloc, sel_registerName("init"));
+		#ifndef ARC_AVAILABLE
+		objc_msgSend_void(appMenuItem, sel_registerName("autorelease"));
+		#endif
+
+		objc_msgSend_void_id(menubar, sel_registerName("addItem:"), appMenuItem);
+		((id (*)(id, SEL, id))objc_msgSend)(NSApp, sel_registerName("setMainMenu:"), menubar);
+
+		appMenuAlloc = objc_msgSend_id(cast(id)objc_getClass("NSMenu"), sel_registerName("alloc"));
+		appMenu = objc_msgSend_id(appMenuAlloc, sel_registerName("init"));
+		#ifndef ARC_AVAILABLE
+		objc_msgSend_void(appMenu, sel_registerName("autorelease"));
+		#endif
+
+		{
+			id processInfo = objc_msgSend_id(cast(id)objc_getClass("NSProcessInfo"), sel_registerName("processInfo"));
+			id appName = objc_msgSend_id(processInfo, sel_registerName("processName"));
+
+			id quitTitlePrefixString = objc_msgSend_id_char_const(cast(id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), "Quit ");
+			id quitTitle = ((id (*)(id, SEL, id))objc_msgSend)(quitTitlePrefixString, sel_registerName("stringByAppendingString:"), appName);
+
+			id quitMenuItemKey = objc_msgSend_id_char_const(cast(id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), "q");
+			id quitMenuItemAlloc = objc_msgSend_id(cast(id)objc_getClass("NSMenuItem"), sel_registerName("alloc"));
+			id quitMenuItem = ((id (*)(id, SEL, id, SEL, id))objc_msgSend)(quitMenuItemAlloc, sel_registerName("initWithTitle:action:keyEquivalent:"), quitTitle, sel_registerName("terminate:"), quitMenuItemKey);
+			#ifndef ARC_AVAILABLE
+			objc_msgSend_void(quitMenuItem, sel_registerName("autorelease"));
+			#endif
+
+			objc_msgSend_void_id(appMenu, sel_registerName("addItem:"), quitMenuItem);
+			objc_msgSend_void_id(appMenuItem, sel_registerName("setSubmenu:"), appMenu);
+		}
+	}
+
+	{ // Init Window
+		NSRect rect = {{0, 0}, {cast(CGFloat)mode.width, cast(CGFloat)mode.height}};
+		id windowAlloc, window, wdgAlloc, wdg, contentView, titleString;
+		Class WindowDelegateClass;
+		b32 resultAddProtoc, resultAddIvar, resultAddMethod;
+
+		windowAlloc = objc_msgSend_id(cast(id)objc_getClass("NSWindow"), sel_registerName("alloc"));
+		window = ((id (*)(id, SEL, NSRect, NSUInteger, NSUInteger, BOOL))objc_msgSend)(windowAlloc, sel_registerName("initWithContentRect:styleMask:backing:defer:"), rect, 15, 2, NO);
+		#ifndef ARC_AVAILABLE
+		objc_msgSend_void(window, sel_registerName("autorelease"));
+		#endif
+
+		// when we are not using ARC, than window will be added to autorelease pool
+		// so if we close it by hand (pressing red button), we don't want it to be released for us
+		// so it will be released by autorelease pool later
+		objc_msgSend_void_bool(window, sel_registerName("setReleasedWhenClosed:"), NO);
+
+		WindowDelegateClass = objc_allocateClassPair((Class)objc_getClass("NSObject"), "WindowDelegate", 0);
+		resultAddProtoc = class_addProtocol(WindowDelegateClass, objc_getProtocol("NSWindowDelegate"));
+		GB_ASSERT(resultAddProtoc);
+		resultAddIvar = class_addIvar(WindowDelegateClass, "closed", gb_size_of(NSUInteger), rint(log2(gb_size_of(NSUInteger))), NSUIntegerEncoding);
+		GB_ASSERT(resultAddIvar);
+		resultAddIvar = class_addIvar(WindowDelegateClass, "gbPlatform", gb_size_of(void *), rint(log2(gb_size_of(void *))), "ˆv");
+		GB_ASSERT(resultAddIvar);
+		resultAddMethod = class_addMethod(WindowDelegateClass, sel_registerName("windowWillClose:"), cast(IMP)gb__osx_window_will_close,  "v@:@");
+		GB_ASSERT(resultAddMethod);
+		resultAddMethod = class_addMethod(WindowDelegateClass, sel_registerName("windowDidBecomeKey:"), cast(IMP)gb__osx_window_did_become_key,  "v@:@");
+		GB_ASSERT(resultAddMethod);
+		wdgAlloc = objc_msgSend_id(cast(id)WindowDelegateClass, sel_registerName("alloc"));
+		wdg = objc_msgSend_id(wdgAlloc, sel_registerName("init"));
+		#ifndef ARC_AVAILABLE
+		objc_msgSend_void(wdg, sel_registerName("autorelease"));
+		#endif
+
+		objc_msgSend_void_id(window, sel_registerName("setDelegate:"), wdg);
+
+		contentView = objc_msgSend_id(window, sel_registerName("contentView"));
+
+		{
+			NSPoint point = {20, 20};
+			((void (*)(id, SEL, NSPoint))objc_msgSend)(window, sel_registerName("cascadeTopLeftFromPoint:"), point);
+		}
+
+		titleString = objc_msgSend_id_char_const(cast(id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), window_title);
+		objc_msgSend_void_id(window, sel_registerName("setTitle:"), titleString);
+
+		if (type == gbRenderer_Opengl) {
+			// TODO(bill): Make sure this works correctly
+			u32 opengl_hex_version = (p->opengl.major << 12) | (p->opengl.minor << 8);
+			u32 gl_attribs[] = {
+				8, 24,                  // NSOpenGLPFAColorSize, 24,
+				11, 8,                  // NSOpenGLPFAAlphaSize, 8,
+				5,                      // NSOpenGLPFADoubleBuffer,
+				73,                     // NSOpenGLPFAAccelerated,
+				//72,                   // NSOpenGLPFANoRecovery,
+				//55, 1,                // NSOpenGLPFASampleBuffers, 1,
+				//56, 4,                // NSOpenGLPFASamples, 4,
+				99, opengl_hex_version, // NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion3_2Core,
+				0
+			};
+
+			id pixel_format_alloc, pixel_format;
+			id opengl_context_alloc, opengl_context;
+
+			pixel_format_alloc = objc_msgSend_id(cast(id)objc_getClass("NSOpenGLPixelFormat"), sel_registerName("alloc"));
+			pixel_format = ((id (*)(id, SEL, const uint32_t*))objc_msgSend)(pixel_format_alloc, sel_registerName("initWithAttributes:"), gl_attribs);
+			#ifndef ARC_AVAILABLE
+			objc_msgSend_void(pixel_format, sel_registerName("autorelease"));
+			#endif
+
+			opengl_context_alloc = objc_msgSend_id(cast(id)objc_getClass("NSOpenGLContext"), sel_registerName("alloc"));
+			opengl_context = ((id (*)(id, SEL, id, id))objc_msgSend)(opengl_context_alloc, sel_registerName("initWithFormat:shareContext:"), pixel_format, nil);
+			#ifndef ARC_AVAILABLE
+			objc_msgSend_void(opengl_context, sel_registerName("autorelease"));
+			#endif
+
+			objc_msgSend_void_id(opengl_context, sel_registerName("setView:"), contentView);
+			objc_msgSend_void_id(window, sel_registerName("makeKeyAndOrderFront:"), window);
+			objc_msgSend_void_bool(window, sel_registerName("setAcceptsMouseMovedEvents:"), YES);
+
+
+			p->window_handle = cast(void *)window;
+			p->opengl.context = cast(void *)opengl_context;
+		} else {
+			GB_PANIC("TODO(bill): Software rendering");
+		}
+
+		{
+			id blackColor = objc_msgSend_id(cast(id)objc_getClass("NSColor"), sel_registerName("blackColor"));
+			objc_msgSend_void_id(window, sel_registerName("setBackgroundColor:"), blackColor);
+			objc_msgSend_void_bool(NSApp, sel_registerName("activateIgnoringOtherApps:"), YES);
+		}
+		object_setInstanceVariable(wdg, "gbPlatform", cast(void *)p);
+
+		p->is_initialized = true;
+	}
+
+	return true;
+}
+
+// NOTE(bill): Software rendering
+b32 gb_platform_init_with_software(gbPlatform *p, char const *window_title, i32 width, i32 height, u32 window_flags) {
+	GB_PANIC("TODO(bill): Software rendering in not yet implemented on OS X\n");
+	return gb__platform_init(p, window_title, gb_video_mode(width, height, 32), gbRenderer_Software, window_flags);
+}
+// NOTE(bill): OpenGL Rendering
+b32 gb_platform_init_with_opengl(gbPlatform *p, char const *window_title, i32 width, i32 height, u32 window_flags,
+                                 i32 major, i32 minor, b32 core, b32 compatible) {
+
+	p->opengl.major = major;
+	p->opengl.minor = minor;
+	p->opengl.core  = core;
+	p->opengl.compatible = compatible;
+	return gb__platform_init(p, window_title, gb_video_mode(width, height, 32), gbRenderer_Opengl, window_flags);
+}
+
+// NOTE(bill): Reverse engineering can be fun!!!
+gb_internal gbKeyType gb__osx_from_key_code(u16 key_code) {
+	switch (key_code) {
+	default: return gbKey_Unknown;
+	// NOTE(bill): WHO THE FUCK DESIGNED THIS VIRTUAL KEY CODE SYSTEM?!
+	// THEY ARE FUCKING IDIOTS!
+	case 0x1d: return gbKey_0;
+	case 0x12: return gbKey_1;
+	case 0x13: return gbKey_2;
+	case 0x14: return gbKey_3;
+	case 0x15: return gbKey_4;
+	case 0x17: return gbKey_5;
+	case 0x16: return gbKey_6;
+	case 0x1a: return gbKey_7;
+	case 0x1c: return gbKey_8;
+	case 0x19: return gbKey_9;
+
+	case 0x00: return gbKey_A;
+	case 0x0b: return gbKey_B;
+	case 0x08: return gbKey_C;
+	case 0x02: return gbKey_D;
+	case 0x0e: return gbKey_E;
+	case 0x03: return gbKey_F;
+	case 0x05: return gbKey_G;
+	case 0x04: return gbKey_H;
+	case 0x22: return gbKey_I;
+	case 0x26: return gbKey_J;
+	case 0x28: return gbKey_K;
+	case 0x25: return gbKey_L;
+	case 0x2e: return gbKey_M;
+	case 0x2d: return gbKey_N;
+	case 0x1f: return gbKey_O;
+	case 0x23: return gbKey_P;
+	case 0x0c: return gbKey_Q;
+	case 0x0f: return gbKey_R;
+	case 0x01: return gbKey_S;
+	case 0x11: return gbKey_T;
+	case 0x20: return gbKey_U;
+	case 0x09: return gbKey_V;
+	case 0x0d: return gbKey_W;
+	case 0x07: return gbKey_X;
+	case 0x10: return gbKey_Y;
+	case 0x06: return gbKey_Z;
+
+	case 0x21: return gbKey_Lbracket;
+	case 0x1e: return gbKey_Rbracket;
+	case 0x29: return gbKey_Semicolon;
+	case 0x2b: return gbKey_Comma;
+	case 0x2f: return gbKey_Period;
+	case 0x27: return gbKey_Quote;
+	case 0x2c: return gbKey_Slash;
+	case 0x2a: return gbKey_Backslash;
+	case 0x32: return gbKey_Grave;
+	case 0x18: return gbKey_Equals;
+	case 0x1b: return gbKey_Minus;
+	case 0x31: return gbKey_Space;
+
+	case 0x35: return gbKey_Escape;       // Escape
+	case 0x3b: return gbKey_Lcontrol;     // Left Control
+	case 0x38: return gbKey_Lshift;       // Left Shift
+	case 0x3a: return gbKey_Lalt;         // Left Alt
+	case 0x37: return gbKey_Lsystem;      // Left OS specific: window (Windows and Linux), apple/cmd (MacOS X), ...
+	case 0x3e: return gbKey_Rcontrol;     // Right Control
+	case 0x3c: return gbKey_Rshift;       // Right Shift
+	case 0x3d: return gbKey_Ralt;         // Right Alt
+	// case 0x37: return gbKey_Rsystem;      // Right OS specific: window (Windows and Linux), apple/cmd (MacOS X), ...
+	case 0x6e: return gbKey_Menu;         // Menu
+	case 0x24: return gbKey_Return;       // Return
+	case 0x33: return gbKey_Backspace;    // Backspace
+	case 0x30: return gbKey_Tab;          // Tabulation
+	case 0x74: return gbKey_Pageup;       // Page up
+	case 0x79: return gbKey_Pagedown;     // Page down
+	case 0x77: return gbKey_End;          // End
+	case 0x73: return gbKey_Home;         // Home
+	case 0x72: return gbKey_Insert;       // Insert
+	case 0x75: return gbKey_Delete;       // Delete
+	case 0x45: return gbKey_Plus;         // +
+	case 0x4e: return gbKey_Subtract;     // -
+	case 0x43: return gbKey_Multiply;     // *
+	case 0x4b: return gbKey_Divide;       // /
+	case 0x7b: return gbKey_Left;         // Left arrow
+	case 0x7c: return gbKey_Right;        // Right arrow
+	case 0x7e: return gbKey_Up;           // Up arrow
+	case 0x7d: return gbKey_Down;         // Down arrow
+	case 0x52: return gbKey_Numpad0;      // Numpad 0
+	case 0x53: return gbKey_Numpad1;      // Numpad 1
+	case 0x54: return gbKey_Numpad2;      // Numpad 2
+	case 0x55: return gbKey_Numpad3;      // Numpad 3
+	case 0x56: return gbKey_Numpad4;      // Numpad 4
+	case 0x57: return gbKey_Numpad5;      // Numpad 5
+	case 0x58: return gbKey_Numpad6;      // Numpad 6
+	case 0x59: return gbKey_Numpad7;      // Numpad 7
+	case 0x5b: return gbKey_Numpad8;      // Numpad 8
+	case 0x5c: return gbKey_Numpad9;      // Numpad 9
+	case 0x41: return gbKey_NumpadDot;    // Numpad .
+	case 0x4c: return gbKey_NumpadEnter;  // Numpad Enter
+	case 0x7a: return gbKey_F1;           // F1
+	case 0x78: return gbKey_F2;           // F2
+	case 0x63: return gbKey_F3;           // F3
+	case 0x76: return gbKey_F4;           // F4
+	case 0x60: return gbKey_F5;           // F5
+	case 0x61: return gbKey_F6;           // F6
+	case 0x62: return gbKey_F7;           // F7
+	case 0x64: return gbKey_F8;           // F8
+	case 0x65: return gbKey_F9;           // F8
+	case 0x6d: return gbKey_F10;          // F10
+	case 0x67: return gbKey_F11;          // F11
+	case 0x6f: return gbKey_F12;          // F12
+	case 0x69: return gbKey_F13;          // F13
+	case 0x6b: return gbKey_F14;          // F14
+	case 0x71: return gbKey_F15;          // F15
+	// case : return gbKey_Pause;        // Pause // NOTE(bill): Not possible on OS X
+	}
+}
+
+gb_internal void gb__osx_on_cocoa_event(gbPlatform *p, id event, id window) {
+	if (!event) {
+		return;
+	} else if (objc_msgSend_id(window, sel_registerName("delegate"))) {
+		NSUInteger event_type = ((NSUInteger (*)(id, SEL))objc_msgSend)(event, sel_registerName("type"));
+		switch (event_type) {
+		case 1: gb_key_state_update(&p->mouse_buttons[gbMouseButton_Left],  true);  break; // NSLeftMouseDown
+		case 2: gb_key_state_update(&p->mouse_buttons[gbMouseButton_Left],  false); break; // NSLeftMouseUp
+		case 3: gb_key_state_update(&p->mouse_buttons[gbMouseButton_Right], true);  break; // NSRightMouseDown
+		case 4: gb_key_state_update(&p->mouse_buttons[gbMouseButton_Right], false); break; // NSRightMouseUp
+		case 25: { // NSOtherMouseDown
+			// TODO(bill): Test thoroughly
+			NSInteger number = ((NSInteger (*)(id, SEL))objc_msgSend)(event, sel_registerName("buttonNumber"));
+			if (number == 2) gb_key_state_update(&p->mouse_buttons[gbMouseButton_Middle], true);
+			if (number == 3) gb_key_state_update(&p->mouse_buttons[gbMouseButton_X1],     true);
+			if (number == 4) gb_key_state_update(&p->mouse_buttons[gbMouseButton_X2],     true);
+		} break;
+		case 26: { // NSOtherMouseUp
+			NSInteger number = ((NSInteger (*)(id, SEL))objc_msgSend)(event, sel_registerName("buttonNumber"));
+			if (number == 2) gb_key_state_update(&p->mouse_buttons[gbMouseButton_Middle], false);
+			if (number == 3) gb_key_state_update(&p->mouse_buttons[gbMouseButton_X1],     false);
+			if (number == 4) gb_key_state_update(&p->mouse_buttons[gbMouseButton_X2],     false);
+
+		} break;
+
+		// TODO(bill): Scroll wheel
+		case 22: { // NSScrollWheel
+			CGFloat dx = ((CGFloat (*)(id, SEL))abi_objc_msgSend_fpret)(event, sel_registerName("scrollingDeltaX"));
+			CGFloat dy = ((CGFloat (*)(id, SEL))abi_objc_msgSend_fpret)(event, sel_registerName("scrollingDeltaY"));
+			BOOL precision_scrolling = ((BOOL (*)(id, SEL))objc_msgSend)(event, sel_registerName("hasPreciseScrollingDeltas"));
+			if (precision_scrolling) {
+				dx *= 0.1f;
+				dy *= 0.1f;
+			}
+			// TODO(bill): Handle sideways
+			p->mouse_wheel_delta = dy;
+			// p->mouse_wheel_dy = dy;
+			// gb_printf("%f %f\n", dx, dy);
+		} break;
+
+		case 12: { // NSFlagsChanged
+		#if 0
+			// TODO(bill): Reverse engineer this properly
+			NSUInteger modifiers = ((NSUInteger (*)(id, SEL))objc_msgSend)(event, sel_registerName("modifierFlags"));
+			u32 upper_mask = (modifiers & 0xffff0000ul) >> 16;
+			b32 shift   = (upper_mask & 0x02) != 0;
+			b32 control = (upper_mask & 0x04) != 0;
+			b32 alt     = (upper_mask & 0x08) != 0;
+			b32 command = (upper_mask & 0x10) != 0;
+		#endif
+
+			// gb_printf("%u\n", keys.mask);
+			// gb_printf("%x\n", cast(u32)modifiers);
+		} break;
+
+		case 10: { // NSKeyDown
+			u16 key_code;
+
+			id input_text = objc_msgSend_id(event, sel_registerName("characters"));
+			char const *input_text_utf8 = ((char const *(*)(id, SEL))objc_msgSend)(input_text, sel_registerName("UTF8String"));
+			p->char_buffer_count = gb_strnlen(input_text_utf8, gb_size_of(p->char_buffer));
+			gb_memcopy(p->char_buffer, input_text_utf8, p->char_buffer_count);
+
+			key_code = ((unsigned short (*)(id, SEL))objc_msgSend)(event, sel_registerName("keyCode"));
+			gb_key_state_update(&p->keys[gb__osx_from_key_code(key_code)], true);
+		} break;
+
+		case 11: { // NSKeyUp
+			u16 key_code = ((unsigned short (*)(id, SEL))objc_msgSend)(event, sel_registerName("keyCode"));
+			gb_key_state_update(&p->keys[gb__osx_from_key_code(key_code)], false);
+		} break;
+
+		default: break;
+		}
+
+		objc_msgSend_void_id(NSApp, sel_registerName("sendEvent:"), event);
+	}
+}
+
+
+void gb_platform_update(gbPlatform *p) {
+	id window, key_window, content_view;
+	NSRect original_frame;
+
+	window = cast(id)p->window_handle;
+	key_window = objc_msgSend_id(NSApp, sel_registerName("keyWindow"));
+	p->window_has_focus = key_window == window; // TODO(bill): Is this right
+
+
+	if (p->window_has_focus) {
+		isize i;
+		p->char_buffer_count = 0; // TODO(bill): Reset buffer count here or else where?
+
+		// NOTE(bill): Need to update as the keys only get updates on events
+		for (i = 0; i < gbKey_Count; i++) {
+			b32 is_down = (p->keys[i] & gbKeyState_Down) != 0;
+			gb_key_state_update(&p->keys[i], is_down);
+		}
+
+		for (i = 0; i < gbMouseButton_Count; i++) {
+			b32 is_down = (p->mouse_buttons[i] & gbKeyState_Down) != 0;
+			gb_key_state_update(&p->mouse_buttons[i], is_down);
+		}
+
+	}
+
+	{ // Handle Events
+		id distant_past = objc_msgSend_id(cast(id)objc_getClass("NSDate"), sel_registerName("distantPast"));
+		id event = ((id (*)(id, SEL, NSUInteger, id, id, BOOL))objc_msgSend)(NSApp, sel_registerName("nextEventMatchingMask:untilDate:inMode:dequeue:"), NSUIntegerMax, distant_past, NSDefaultRunLoopMode, YES);
+		gb__osx_on_cocoa_event(p, event, window);
+	}
+
+	if (p->window_has_focus) {
+		p->key_modifiers.control = p->keys[gbKey_Lcontrol] | p->keys[gbKey_Rcontrol];
+		p->key_modifiers.alt     = p->keys[gbKey_Lalt]     | p->keys[gbKey_Ralt];
+		p->key_modifiers.shift   = p->keys[gbKey_Lshift]   | p->keys[gbKey_Rshift];
+	}
+
+	{ // Check if window is closed
+		id wdg = objc_msgSend_id(window, sel_registerName("delegate"));
+		if (!wdg) {
+			p->window_is_closed = false;
+		} else {
+			NSUInteger value = 0;
+			object_getInstanceVariable(wdg, "closed", cast(void **)&value);
+			p->window_is_closed = (value != 0);
+		}
+	}
+
+
+
+	content_view = objc_msgSend_id(window, sel_registerName("contentView"));
+	original_frame = ((NSRect (*)(id, SEL))abi_objc_msgSend_stret)(content_view, sel_registerName("frame"));
+
+	{ // Window
+		NSRect frame = original_frame;
+		frame = ((NSRect (*)(id, SEL, NSRect))abi_objc_msgSend_stret)(content_view, sel_registerName("convertRectToBacking:"), frame);
+		p->window_width  = frame.size.width;
+		p->window_height = frame.size.height;
+		frame = ((NSRect (*)(id, SEL, NSRect))abi_objc_msgSend_stret)(window, sel_registerName("convertRectToScreen:"), frame);
+		p->window_x = frame.origin.x;
+		p->window_y = frame.origin.y;
+	}
+
+	{ // Mouse
+		NSRect frame = original_frame;
+		NSPoint mouse_pos = ((NSPoint (*)(id, SEL))objc_msgSend)(window, sel_registerName("mouseLocationOutsideOfEventStream"));
+		mouse_pos.x = gb_clamp(mouse_pos.x, 0, frame.size.width-1);
+		mouse_pos.y = gb_clamp(mouse_pos.y, 0, frame.size.height-1);
+
+		{
+			i32 x = mouse_pos.x;
+			i32 y = mouse_pos.y;
+			p->mouse_dx = x - p->mouse_x;
+			p->mouse_dy = y - p->mouse_y;
+			p->mouse_x = x;
+			p->mouse_y = y;
+		}
+
+		if (p->mouse_clip) {
+			b32 update = false;
+			i32 x = p->mouse_x;
+			i32 y = p->mouse_y;
+			if (p->mouse_x < 0) {
+				x = 0;
+				update = true;
+			} else if (p->mouse_y > p->window_height-1) {
+				y = p->window_height-1;
+				update = true;
+			}
+
+			if (p->mouse_y < 0) {
+				y = 0;
+				update = true;
+			} else if (p->mouse_x > p->window_width-1) {
+				x = p->window_width-1;
+				update = true;
+			}
+
+			if (update)
+				gb_platform_set_mouse_position(p, x, y);
+		}
+	}
+
+	{ // TODO(bill): Controllers
+
+	}
+
+	// TODO(bill): Is this in the correct place?
+	objc_msgSend_void(NSApp, sel_registerName("updateWindows"));
+	if (p->renderer_type == gbRenderer_Opengl) {
+		objc_msgSend_void(cast(id)p->opengl.context, sel_registerName("update"));
+		gb_platform_make_opengl_context_current(p);
+	}
+}
+
+void gb_platform_display(gbPlatform *p) {
+	// TODO(bill): Do more
+	if (p->renderer_type == gbRenderer_Opengl) {
+		gb_platform_make_opengl_context_current(p);
+		objc_msgSend_void(cast(id)p->opengl.context, sel_registerName("flushBuffer"));
+	} else if (p->renderer_type == gbRenderer_Software) {
+		// TODO(bill):
+	} else {
+		GB_PANIC("Invalid window rendering type");
+	}
+
+	{
+		f64 prev_time = p->curr_time;
+		f64 curr_time = gb_time_now();
+		p->dt_for_frame = curr_time - prev_time;
+		p->curr_time = curr_time;
+	}
+}
+
+void gb_platform_destroy(gbPlatform *p) {
+	gb_platform_make_opengl_context_current(p);
+
+	objc_msgSend_void(cast(id)p->window_handle, sel_registerName("close"));
+
+	#if defined(ARC_AVAILABLE)
+	// TODO(bill): autorelease pool
+	#else
+	objc_msgSend_void(cast(id)p->osx_autorelease_pool, sel_registerName("drain"));
+	#endif
+}
+
+void gb_platform_show_cursor(gbPlatform *p, b32 show) {
+	if (show ) {
+		// objc_msgSend_void(class_registerName("NSCursor"), sel_registerName("unhide"));
+	} else {
+		// objc_msgSend_void(class_registerName("NSCursor"), sel_registerName("hide"));
+	}
+}
+
+void gb_platform_set_mouse_position(gbPlatform *p, i32 x, i32 y) {
+	// TODO(bill):
+	CGPoint pos = {cast(CGFloat)x, cast(CGFloat)y};
+	pos.x += p->window_x;
+	pos.y += p->window_y;
+	CGWarpMouseCursorPosition(pos);
+}
+
+void gb_platform_set_controller_vibration(gbPlatform *p, isize index, f32 left_motor, f32 right_motor) {
+	// TODO(bill):
+}
+
+b32 gb_platform_has_clipboard_text(gbPlatform *p) {
+	// TODO(bill):
+	return false;
+}
+
+void gb_platform_set_clipboard_text(gbPlatform *p, char const *str) {
+	// TODO(bill):
+}
+
+char *gb_platform_get_clipboard_text(gbPlatform *p, gbAllocator a) {
+	// TODO(bill):
+	return NULL;
+}
+
+void gb_platform_set_window_position(gbPlatform *p, i32 x, i32 y) {
+	// TODO(bill):
+}
+
+void gb_platform_set_window_title(gbPlatform *p, char const *title, ...) {
+	id title_string;
+	char buf[256] = {0};
+	va_list va;
+	va_start(va, title);
+	gb_snprintf_va(buf, gb_count_of(buf), title, va);
+	va_end(va);
+
+	title_string = objc_msgSend_id_char_const(cast(id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), buf);
+	objc_msgSend_void_id(cast(id)p->window_handle, sel_registerName("setTitle:"), title_string);
+}
+
+void gb_platform_toggle_fullscreen(gbPlatform *p, b32 fullscreen_desktop) {
+	// TODO(bill):
+}
+
+void gb_platform_toggle_borderless(gbPlatform *p) {
+	// TODO(bill):
+}
+
+void gb_platform_make_opengl_context_current(gbPlatform *p) {
+	objc_msgSend_void(cast(id)p->opengl.context, sel_registerName("makeCurrentContext"));
+}
+
+void gb_platform_show_window(gbPlatform *p) {
+	// TODO(bill):
+}
+
+void gb_platform_hide_window(gbPlatform *p) {
+	// TODO(bill):
+}
+
+i32 gb__osx_mode_bits_per_pixel(CGDisplayModeRef mode) {
+	i32 bits_per_pixel = 0;
+	CFStringRef pixel_encoding = CGDisplayModeCopyPixelEncoding(mode);
+	if(CFStringCompare(pixel_encoding, CFSTR(IO32BitDirectPixels), kCFCompareCaseInsensitive) == kCFCompareEqualTo) {
+		bits_per_pixel = 32;
+	} else if(CFStringCompare(pixel_encoding, CFSTR(IO16BitDirectPixels), kCFCompareCaseInsensitive) == kCFCompareEqualTo) {
+		bits_per_pixel = 16;
+	} else if(CFStringCompare(pixel_encoding, CFSTR(IO8BitIndexedPixels), kCFCompareCaseInsensitive) == kCFCompareEqualTo) {
+		bits_per_pixel = 8;
+	}
+    CFRelease(pixel_encoding);
+
+	return bits_per_pixel;
+}
+
+i32 gb__osx_display_bits_per_pixel(CGDirectDisplayID display) {
+	CGDisplayModeRef mode = CGDisplayCopyDisplayMode(display);
+	i32 bits_per_pixel = gb__osx_mode_bits_per_pixel(mode);
+	CGDisplayModeRelease(mode);
+	return bits_per_pixel;
+}
+
+gbVideoMode gb_video_mode_get_desktop(void) {
+	CGDirectDisplayID display = CGMainDisplayID();
+	return gb_video_mode(CGDisplayPixelsWide(display),
+	                     CGDisplayPixelsHigh(display),
+	                     gb__osx_display_bits_per_pixel(display));
+}
+
+
+isize gb_video_mode_get_fullscreen_modes(gbVideoMode *modes, isize max_mode_count) {
+	CFArrayRef cg_modes = CGDisplayCopyAllDisplayModes(CGMainDisplayID(), NULL);
+	CFIndex i, count;
+	if (cg_modes == NULL) {
+		return 0;
+	}
+
+	count = gb_min(CFArrayGetCount(cg_modes), max_mode_count);
+	for (i = 0; i < count; i++) {
+		CGDisplayModeRef cg_mode = cast(CGDisplayModeRef)CFArrayGetValueAtIndex(cg_modes, i);
+		modes[i] = gb_video_mode(CGDisplayModeGetWidth(cg_mode),
+		                         CGDisplayModeGetHeight(cg_mode),
+		                         gb__osx_mode_bits_per_pixel(cg_mode));
+	}
+
+	CFRelease(cg_modes);
+
+	gb_sort_array(modes, count, gb_video_mode_dsc_cmp);
+	return cast(isize)count;
 }
 
 #endif
