@@ -1,4 +1,4 @@
-/* gb.h - v0.25  - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.25a - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -58,6 +58,7 @@ TODOS
 	- More date & time functions
 
 VERSION HISTORY
+	0.25a - Fix UTF-8 stuff
 	0.25  - OS X gbPlatform Support (missing some things)
 	0.24b - Compile on OSX (excluding platform part)
 	0.24a - Minor additions
@@ -270,10 +271,6 @@ extern "C" {
 #include <stdarg.h>
 #include <stddef.h>
 
-#if !defined(GB_NO_STDLIB)
-#include <string.h> // NOTE(bill): memcpy. memmove, etc.
-#endif
-
 #if defined(GB_SYSTEM_WINDOWS)
 	#if !defined(GB_NO_WINDOWS_H)
 		#define NOMINMAX            1
@@ -403,9 +400,12 @@ typedef double f64;
 GB_STATIC_ASSERT(sizeof(f32) == 4);
 GB_STATIC_ASSERT(sizeof(f64) == 8);
 
-typedef char char8;  // NOTE(bill): Probably redundant but oh well!
-typedef u16  char16; // NOTE(bill): Must be unsigned
-typedef i32  char32; // NOTE(bill): Must be signed
+typedef i32 Rune; // NOTE(bill): Unicode codepoint
+#define GB_RUNE_INVALID cast(Rune)(0xfffd)
+#define GB_RUNE_MAX     cast(Rune)(0x0010ffff)
+#define GB_RUNE_BOM     cast(Rune)(0xfeff)
+#define GB_RUNE_EOF     cast(Rune)(-1)
+
 
 // NOTE(bill): I think C99 and C++ `bool` is stupid for numerous reasons but there are too many
 // to write in this small comment.
@@ -789,11 +789,13 @@ GB_DEF void gb_zero_size(void *ptr, isize size);
 #define     gb_zero_array(a, count) gb_zero_size((a), gb_size_of(*(a))*count)
 #endif
 
-GB_DEF void *gb_memcopy   (void *dest, void const *source, isize size);
-GB_DEF void *gb_memmove   (void *dest, void const *source, isize size);
-GB_DEF void *gb_memset    (void *data, u8 byte_value, isize size);
-GB_DEF i32   gb_memcompare(void const *s1, void const *s2, isize size);
-GB_DEF void  gb_memswap   (void *i, void *j, isize size);
+GB_DEF void *      gb_memcopy   (void *dest, void const *source, isize size);
+GB_DEF void *      gb_memmove   (void *dest, void const *source, isize size);
+GB_DEF void *      gb_memset    (void *data, u8 byte_value, isize size);
+GB_DEF i32         gb_memcompare(void const *s1, void const *s2, isize size);
+GB_DEF void        gb_memswap   (void *i, void *j, isize size);
+GB_DEF void const *gb_memchr    (void const *data, u8 byte_value, isize size);
+GB_DEF void const *gb_memrchr   (void const *data, u8 byte_value, isize size);
 
 
 // NOTE(bill): Very similar to doing `*cast(T *)(&u)`
@@ -1099,73 +1101,6 @@ GB_DEF GB_ALLOCATOR_PROC(gb_heap_allocator_proc);
 #define gb_mfree(ptr) gb_free(gb_heap_allocator(), ptr)
 #endif
 
-#if 0
-////////////////////////////////////////////////////////////////
-//
-// DLMalloc Clone
-// Doug Lea's malloc: ftp://g.oswego.edu/pub/misc/malloc-2.8.6.c
-//
-
-typedef struct gbMallocChunk {
-	isize prev_foot, head;
-	struct gbMallocChunk *fd, *bk;
-} gbMallocChunk;
-
-typedef struct gbDLHeapStats {
-	isize peak_system_bytes;
-	isize system_bytes;
-	isize in_use_bytes;
-} gbDLHeapStats;
-
-#define GB_DL_SMALL_BIN_COUNT 32u
-#define GB_DL_TREE_BIN_COUNT  32u
-
-typedef struct gbMallocSegment {
-	u8 *base;
-	isize size;
-	struct gbMallocSegment *next;
-	u32 flags;
-} gbMallocSegment;
-
-typedef struct gbMallocState {
-	u32 small_map, tree_map;
-	isize dv_size, top_size;
-	u8 *least_addr;
-	gbMallocChunk *dv, *top;
-	isize trim_check;
-	isize release_checks;
-	isize magic;
-	gbMallocChunk *small_bins[(GB_DL_SMALL_BIN_COUNT+1) * 2];
-	gbMallocChunk *tree_bins [GB_DL_TREE_BIN_COUNT];
-	isize footprint;
-	isize max_footprint;
-	isize footprint_limit;
-	u32 flags;
-	gbMallocSegment segment;
-	void *extension; // NOTE(bill): Unused;
-	isize extension_size;
-} gbMallocState;
-
-GB_DEF void *gb_dl_alloc_align(gbMallocState *state, isize size, isize alignment);
-GB_DEF void *gb_dl_free       (gbMallocState *state, void *ptr);
-GB_DEF void *gb_dl_realloc    (gbMallocState *state, void *ptr, isize new_size);
-
-
-typedef struct gbDLHeap {
-	gbMallocState state;
-	gbMutex mutex;
-} gbDLHeap;
-
-GB_DEF void          gb_heap_init     (gbDLHeap *heap);
-GB_DEF gbDLHeapStats gb_heap_get_stats(gbDLHeap *heap);
-GB_DEF isize         gb_heap_get_size (gbDLHeap *heap, void *ptr);
-
-// Allocation Types: alloc, free, resize
-GB_DEF gbAllocator gb_dlheap_allocator(gbDLHeap *heap);
-GB_DEF GB_ALLOCATOR_PROC(gb_dlheap_allocator_proc);
-
-#endif
-
 
 
 //
@@ -1415,19 +1350,19 @@ GB_DEF void  gb_u64_to_str(u64 value, char *string, i32 base);
 //
 //
 
-GB_DEF isize gb_utf8_strlen (char const *str);
-GB_DEF isize gb_utf8_strnlen(char const *str, isize max_len);
+// NOTE(bill): Does not check if utf-8 string is valid
+GB_DEF isize gb_utf8_strlen (u8 const *str);
+GB_DEF isize gb_utf8_strnlen(u8 const *str, isize max_len);
 
 // NOTE(bill): Windows doesn't handle 8 bit filenames well ('cause Micro$hit)
-GB_DEF char16 *gb_utf8_to_ucs2    (char16 *buffer, isize len, char const *str);
-GB_DEF char *  gb_ucs2_to_utf8    (char *buffer, isize len, char16 const *str);
-GB_DEF char16 *gb_utf8_to_ucs2_buf(char const *str);   // NOTE(bill): Uses locally persisting buffer
-GB_DEF char *  gb_ucs2_to_utf8_buf(char16 const *str); // NOTE(bill): Uses locally persisting buffer
+GB_DEF u16 *gb_utf8_to_ucs2    (u16 *buffer, isize len, u8 const *str);
+GB_DEF u8 * gb_ucs2_to_utf8    (u8 *buffer, isize len, u16 const *str);
+GB_DEF u16 *gb_utf8_to_ucs2_buf(u8 const *str);   // NOTE(bill): Uses locally persisting buffer
+GB_DEF u8 * gb_ucs2_to_utf8_buf(u16 const *str); // NOTE(bill): Uses locally persisting buffer
 
 // NOTE(bill): Returns size of codepoint in bytes
-GB_DEF isize gb_utf8_decode        (char const *str, char32 *codepoint);
-GB_DEF isize gb_utf8_decode_len    (char const *str, isize str_len, char32 *codepoint);
-GB_DEF isize gb_utf8_codepoint_size(char const *str, isize str_len);
+GB_DEF isize gb_utf8_decode        (u8 const *str, isize str_len, Rune *codepoint);
+GB_DEF isize gb_utf8_codepoint_size(u8 const *str, isize str_len);
 
 ////////////////////////////////////////////////////////////////
 //
@@ -2575,8 +2510,8 @@ typedef struct gbPlatform {
 		gbKeyState shift;
 	} key_modifiers;
 
-	char32 char_buffer[256];
-	isize  char_buffer_count;
+	Rune  char_buffer[256];
+	isize char_buffer_count;
 
 	b32 mouse_clip;
 	i32 mouse_x, mouse_y;
@@ -3771,135 +3706,264 @@ gb_inline isize       gb_pointer_diff     (void const *begin, void const *end) {
 
 gb_inline void gb_zero_size(void *ptr, isize size) { gb_memset(ptr, 0, size); }
 
-#if !defined(GB_NO_STDLIB)
-	gb_inline void *gb_memcopy(void *dest, void const *source, isize size) {
-		return memcpy(dest, source, size);
-	}
 
-	gb_inline void *gb_memmove(void *dest, void const *source, isize size) {
-		return memmove(dest, source, size);
-	}
-
-	gb_inline void *gb_memset(void *data, u8 c, isize size) {
-		return memset(data, c, size);
-	}
-
-	gb_inline i32 gb_memcompare(void const *s1, void const *s2, isize size) {
-		return memcmp(s1, s2, size);
-	}
-
-#else
-	#if defined(_MSC_VER)
-	#pragma intrinsic(__movsb)
-	#endif
-
-	gb_inline void *gb_memcopy(void *dest, void const *source, isize size) {
-	#if defined(_MSC_VER)
-		__movsb(cast(u8 *gb_restrict)dest, cast(u8 *gb_restrict)source, size);
-	#elif defined(GB_CPU_X86)
-		__asm__ __volatile__("rep movsb" : "+D"(cast(u8 *gb_restrict)dest), "+S"(cast(u8 *gb_restrict)source), "+c"(size) : : "memory");
-	#else
-		// TODO(bill): Heavily optimize
-		if ((cast(intptr)dest & 0x3) || (cast(intptr)source & 0x3)) {
-			// NOTE(bill): Do an unaligned byte copy
-			u8 *dp8 = cast(u8 *)dest;
-			u8 *sp8 = cast(u8 *)source;
-
-			while (size--)
-				*dp8++ = *sp8++;
-
-		} else {
-			isize left = (size % 4);
-			u32 *sp32;
-			u32 *dp32;
-			u8  *sp8;
-			u8  *dp8;
-
-			sp32 = cast(u32 *)source;
-			dp32 = cast(u32 *)dest;
-			size /= 4;
-			while (size--)
-				*dp32++ = *sp32++;
-
-			sp8 = cast(u8 *)sp32;
-			dp8 = cast(u8 *)dp32;
-			switch (left) {
-			case 3: *dp8++ = *sp8++;
-			case 2: *dp8++ = *sp8++;
-			case 1: *dp8++ = *sp8++;
-			}
-		}
-
-		// TODO(bill): More betterer memcpys!!!!
-	#endif
-		return dest;
-	}
-
-	gb_inline void *gb_memmove(void *dest, void const *source, isize size) {
-		// TODO(bill): Heavily optimize
-		u8 *dp8 = cast(u8 *)dest;
-		u8 *sp8 = cast(u8 *)source;
-
-		if (sp8 < dp8) {
-			dp8 += size-1;
-			sp8 += size-1;
-			while (size--)
-				*dp8-- = *sp8--;
-		} else {
-			gb_memcopy(dest, source, size);
-		}
-
-		return dest;
-	}
-
-	gb_inline void *gb_memset(void *data, u8 c, isize size) {
-		// TODO(bill): Heavily optimize
-		isize left;
-		u32 *dp32;
-		u8 *dp8 = cast(u8 *)data;
-		u32 c32 = (c | (c << 8) | (c << 16) | (c << 24));
-
-		// NOTE(bill): The destination pointer needs to be aligned on a 4-byte
-		// boundary to execute a 32-bit set. Set first bytes manually if needed
-		// until it is aligned.
-		while (cast(intptr)dp8 & 0x3) {
-			if (size--)
-				*dp8++ = c;
-			else
-				return data;
-		}
-
-		dp32 = cast(u32 *)dp8;
-		left = (size % 4);
-		size /= 4;
-		while (size--)
-			*dp32++ = c32;
-
-		dp8 = cast(u8 *)dp32;
-		switch (left) {
-		case 3: *dp8++ = c;
-		case 2: *dp8++ = c;
-		case 1: *dp8++ = c;
-		}
-
-		return data;
-	}
-
-	gb_inline i32 gb_memcompare(void const *s1, void const *s2, isize size) {
-		// TODO(bill): Heavily optimize
-
-		u8 const *s1p8 = cast(u8 const *)s1;
-		u8 const *s2p8 = cast(u8 const *)s2;
-		while (size--) {
-			if (*s1p8 != *s2p8)
-				return (*s1p8 - *s2p8);
-			s1p8++, s2p8++;
-		}
-		return 0;
-	}
+#if defined(_MSC_VER)
+#pragma intrinsic(__movsb)
 #endif
 
+gb_inline void *gb_memcopy(void *dest, void const *source, isize n) {
+#if defined(_MSC_VER)
+	// TODO(bill): Is this good enough?
+	__movsb(cast(u8 *gb_restrict)dest, cast(u8 *gb_restrict)source, n);
+#elif defined(GB_CPU_X86)
+	__asm__ __volatile__("rep movsb" : "+D"(cast(u8 *gb_restrict)dest), "+S"(cast(u8 *gb_restrict)source), "+c"(n) : : "memory");
+#else
+	u8 *d = cast(u8 *)dest;
+	u8 const *s = cast(u8 const *)source;
+	u32 w, x;
 
+	for (; cast(uintptr)s % 4 && n; n--)
+		*d++ = *s++;
+
+	if (cast(uintptr)d % 4 == 0) {
+		for (; n >= 16;
+		     s += 16, d += 16, n -= 16) {
+			*cast(u32 *)(d+ 0) = *cast(u32 *)(s+ 0);
+			*cast(u32 *)(d+ 4) = *cast(u32 *)(s+ 4);
+			*cast(u32 *)(d+ 8) = *cast(u32 *)(s+ 8);
+			*cast(u32 *)(d+12) = *cast(u32 *)(s+12);
+		}
+		if (n & 8) {
+			*cast(u32 *)(d+0) = *cast(u32 *)(s+0);
+			*cast(u32 *)(d+4) = *cast(u32 *)(s+4);
+			d += 8;
+			s += 8;
+		}
+		if (n&4) {
+			*cast(u32 *)(d+0) = *cast(u32 *)(s+0);
+			d += 4;
+			s += 4;
+		}
+		if (n&2) {
+			*d++ = *s++; *d++ = *s++;
+		}
+		if (n&1) {
+			*d = *s;
+		}
+		return dest;
+	}
+
+	if (n >= 32) {
+	#if __BYTE_ORDER == __BIG_ENDIAN
+	#define LS <<
+	#define RS >>
+	#else
+	#define LS >>
+	#define RS <<
+	#endif
+		switch (cast(uintptr)d % 4) {
+		case 1: {
+			w = *cast(u32 *)s;
+			*d++ = *s++;
+			*d++ = *s++;
+			*d++ = *s++;
+			n -= 3;
+			while (n > 16) {
+				x = *cast(u32 *)(s+1);
+				*cast(u32 *)(d+0)  = (w LS 24) | (x RS 8);
+				w = *cast(u32 *)(s+5);
+				*cast(u32 *)(d+4)  = (x LS 24) | (w RS 8);
+				x = *cast(u32 *)(s+9);
+				*cast(u32 *)(d+8)  = (w LS 24) | (x RS 8);
+				w = *cast(u32 *)(s+13);
+				*cast(u32 *)(d+12) = (x LS 24) | (w RS 8);
+
+				s += 16;
+				d += 16;
+				n -= 16;
+			}
+		} break;
+		case 2: {
+			w = *cast(u32 *)s;
+			*d++ = *s++;
+			*d++ = *s++;
+			n -= 2;
+			while (n > 17) {
+				x = *cast(u32 *)(s+2);
+				*cast(u32 *)(d+0)  = (w LS 16) | (x RS 16);
+				w = *cast(u32 *)(s+6);
+				*cast(u32 *)(d+4)  = (x LS 16) | (w RS 16);
+				x = *cast(u32 *)(s+10);
+				*cast(u32 *)(d+8)  = (w LS 16) | (x RS 16);
+				w = *cast(u32 *)(s+14);
+				*cast(u32 *)(d+12) = (x LS 16) | (w RS 16);
+
+				s += 16;
+				d += 16;
+				n -= 16;
+			}
+		} break;
+		case 3: {
+			w = *cast(u32 *)s;
+			*d++ = *s++;
+			n -= 1;
+			while (n > 18) {
+				x = *cast(u32 *)(s+3);
+				*cast(u32 *)(d+0)  = (w LS 8) | (x RS 24);
+				w = *cast(u32 *)(s+7);
+				*cast(u32 *)(d+4)  = (x LS 8) | (w RS 24);
+				x = *cast(u32 *)(s+11);
+				*cast(u32 *)(d+8)  = (w LS 8) | (x RS 24);
+				w = *cast(u32 *)(s+15);
+				*cast(u32 *)(d+12) = (x LS 8) | (w RS 24);
+
+				s += 16;
+				d += 16;
+				n -= 16;
+			}
+		} break;
+		default: break; // NOTE(bill): Do nowt!
+		}
+	#undef LS
+	#undef RS
+		if (n & 16) {
+			*d++ = *s++; *d++ = *s++; *d++ = *s++; *d++ = *s++;
+			*d++ = *s++; *d++ = *s++; *d++ = *s++; *d++ = *s++;
+			*d++ = *s++; *d++ = *s++; *d++ = *s++; *d++ = *s++;
+			*d++ = *s++; *d++ = *s++; *d++ = *s++; *d++ = *s++;
+		}
+		if (n & 8) {
+			*d++ = *s++; *d++ = *s++; *d++ = *s++; *d++ = *s++;
+			*d++ = *s++; *d++ = *s++; *d++ = *s++; *d++ = *s++;
+		}
+		if (n & 4)
+			*d++ = *s++; *d++ = *s++; *d++ = *s++; *d++ = *s++;
+		if (n & 2)
+			*d++ = *s++; *d++ = *s++;
+		if (n & 1)
+			*d = *s;
+	}
+
+#endif
+	return dest;
+}
+
+gb_inline void *gb_memmove(void *dest, void const *source, isize n) {
+	u8 *d = cast(u8 *)dest;
+	u8 const *s = cast(u8 const *)source;
+
+	if (d == s)
+		return d;
+	if (s+n <= d || d+n <= s) // NOTE(bill): Non-overlapping
+		return gb_memcopy(d, s, n);
+
+	if (d < s) {
+		if (cast(uintptr)s % gb_size_of(isize) == cast(uintptr)d % gb_size_of(isize)) {
+			while (cast(uintptr)d % gb_size_of(isize)) {
+				if (!n--) return dest;
+				*d++ = *s++;
+			}
+			while (n>=gb_size_of(isize)) {
+				*cast(isize *)d = *cast(isize *)s;
+				n -= gb_size_of(isize);
+				d += gb_size_of(isize);
+				s += gb_size_of(isize);
+			}
+		}
+		for (; n; n--) *d++ = *s++;
+	} else {
+		if ((cast(uintptr)s % gb_size_of(isize)) == (cast(uintptr)d % gb_size_of(isize))) {
+			while (cast(uintptr)(d+n) % gb_size_of(isize)) {
+				if (!n--)
+					return dest;
+				d[n] = s[n];
+			}
+			while (n >= gb_size_of(isize)) {
+				n -= gb_size_of(isize);
+				*cast(isize *)(d+n) = *cast(isize *)(s+n);
+			}
+		}
+		while (n) n--, d[n] = s[n];
+	}
+
+	return dest;
+}
+
+gb_inline void *gb_memset(void *dest, u8 c, isize n) {
+	u8 *s = cast(u8 *)dest;
+	isize k;
+	u32 c32 = ((u32)-1)/255 * c;
+
+	if (n == 0)
+		return dest;
+	s[0] = s[n-1] = c;
+	if (n < 3)
+		return dest;
+	s[1] = s[n-2] = c;
+	s[2] = s[n-3] = c;
+	if (n < 7)
+		return dest;
+	s[3] = s[n-4] = c;
+	if (n < 9)
+		return dest;
+
+	k = -cast(intptr)s & 3;
+	s += k;
+	n -= k;
+	n &= -4;
+
+	*cast(u32 *)(s+0) = c32;
+	*cast(u32 *)(s+n-4) = c32;
+	if (n < 9)
+		return dest;
+	*cast(u32 *)(s +  4)    = c32;
+	*cast(u32 *)(s +  8)    = c32;
+	*cast(u32 *)(s+n-12) = c32;
+	*cast(u32 *)(s+n- 8) = c32;
+	if (n < 25)
+		return dest;
+	*cast(u32 *)(s + 12) = c32;
+	*cast(u32 *)(s + 16) = c32;
+	*cast(u32 *)(s + 20) = c32;
+	*cast(u32 *)(s + 24) = c32;
+	*cast(u32 *)(s+n-28) = c32;
+	*cast(u32 *)(s+n-24) = c32;
+	*cast(u32 *)(s+n-20) = c32;
+	*cast(u32 *)(s+n-16) = c32;
+
+	k = 24 + (cast(uintptr)s & 4);
+	s += k;
+	n -= k;
+
+
+	{
+		u64 c64 = (cast(u64)c32 << 32) | c32;
+		while (n > 31) {
+			*cast(u64 *)(s+0) = c64;
+			*cast(u64 *)(s+8) = c64;
+			*cast(u64 *)(s+16) = c64;
+			*cast(u64 *)(s+24) = c64;
+
+			n -= 32;
+			s += 32;
+		}
+	}
+
+	return dest;
+}
+
+gb_inline i32 gb_memcompare(void const *s1, void const *s2, isize size) {
+	// TODO(bill): Heavily optimize
+
+	u8 const *s1p8 = cast(u8 const *)s1;
+	u8 const *s2p8 = cast(u8 const *)s2;
+	while (size--) {
+		if (*s1p8 != *s2p8)
+			return (*s1p8 - *s2p8);
+		s1p8++, s2p8++;
+	}
+	return 0;
+}
 
 void gb_memswap(void *i, void *j, isize size) {
 	if (i == j) return;
@@ -3932,6 +3996,46 @@ void gb_memswap(void *i, void *j, isize size) {
 		gb_memcopy(i,      j,      size);
 		gb_memcopy(j,      buffer, size);
 	}
+}
+
+#define GB__ONES        (cast(usize)-1/U8_MAX)
+#define GB__HIGHS       (GB__ONES * (U8_MAX/2+1))
+#define GB__HAS_ZERO(x) ((x)-GB__ONES & ~(x) & GB__HIGHS)
+
+
+void const *gb_memchr(void const *data, u8 c, isize n) {
+	u8 const *s = cast(u8 const *)data;
+	while ((cast(uintptr)s & (sizeof(usize)-1)) &&
+	       n && *s != c) {
+		s++;
+		n--;
+	}
+	if (n && *s != c) {
+		isize const *w;
+		isize k = GB__ONES * c;
+		w = cast(isize const *)s;
+		while (n >= gb_size_of(isize) && !GB__HAS_ZERO(*w ^ k)) {
+			w++;
+			n -= gb_size_of(isize);
+		}
+		s = cast(u8 const *)w;
+		while (n && *s != c) {
+			s++;
+			n--;
+		}
+	}
+
+	return n ? cast(void const *)s : NULL;
+}
+
+
+void const *gb_memrchr(void const *data, u8 c, isize n) {
+	u8 const *s = cast(u8 const *)data;
+	while (n--) {
+		if (s[n] == c)
+			return cast(void const *)(s + n);
+	}
+	return NULL;
 }
 
 
@@ -5099,70 +5203,6 @@ isize gb_virtual_memory_page_size(isize *alignment_out) {
 //
 
 
-#if 0
-////////////////////////////////////////////////////////////////
-//
-// DLMalloc
-//
-//
-
-typedef struct gbMallocTreeChunk {
-	isize prev_foot, head;
-	struct gbMallocTreeChunk *fd, *bk;
-
-	struct gbMallocTreeChunk *child[2];
-	struct gbMallocTreeChunk *parent;
-	u32 index;
-} gbMallocTreeChunk;
-
-#define gb__leftmost_child(t) ((t)->child[0] != 0 ? (t)->child[0] : (t)->child[1])
-
-typedef struct gbMallocParams {
-	isize magic;
-	isize page_size;
-	isize granularity;
-	isize mmap_threshold;
-	isize trim_threshold;
-	u32  default_flags;
-} gbMallocParams;
-
-gb_global gbMallocParams gb__params = {0};
-#define gb__ensure_initialization() (void)(gb__params.magic != 0 || gb__init_malloc_params())
-#define gb__is_initialized(M) ((M)->top != 0)
-
-#endif
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 //
 // Arena Allocator
 //
@@ -5932,27 +5972,32 @@ gb_inline void gb_str_to_upper(char *str) {
 	}
 }
 
+
 gb_inline isize gb_strlen(char const *str) {
-	isize result = 0;
-	if (str) {
-		char const *end = str;
-		while (*end) end++;
-		result = end - str;
+	char const *begin = str;
+	isize const *w;
+	while (cast(uintptr)str % sizeof(usize)) {
+		if (!*str)
+			return str - begin;
+		str++;
 	}
-	return result;
+	w = cast(isize const *)str;
+	while (!GB__HAS_ZERO(*w))
+		w++;
+	str = cast(char const *)w;
+	while (*str)
+		str++;
+	return str - begin;
 }
 
 gb_inline isize gb_strnlen(char const *str, isize max_len) {
-	isize result = 0;
-	if (str) {
-		char const *end = str;
-		while (*end && result < max_len) end++;
-		result = end - str;
-	}
-	return result;
+	char const *end = cast(char const *)gb_memchr(str, 0, max_len);
+	if (end)
+		return end - str;
+	return max_len;
 }
 
-gb_inline isize gb_utf8_strlen(char const *str) {
+gb_inline isize gb_utf8_strlen(u8 const *str) {
 	isize result = 0;
 	for (; *str; str++) {
 		if ((*str & 0xc0) != 0x80)
@@ -5961,7 +6006,7 @@ gb_inline isize gb_utf8_strlen(char const *str) {
 	return result;
 }
 
-gb_inline isize gb_utf8_strnlen(char const *str, isize max_len) {
+gb_inline isize gb_utf8_strnlen(u8 const *str, isize max_len) {
 	isize result = 0;
 	for (; *str && result < max_len; str++) {
 		if ((*str & 0xc0) != 0x80)
@@ -6179,7 +6224,7 @@ gb_internal isize gb__scan_u64(char const *text, i32 base, u64 *value) {
 // TODO(bill): Make better
 u64 gb_str_to_u64(char const *str, char **end_ptr, i32 base) {
 	isize len;
-	u64 value;
+	u64 value = 0;
 
 	if (!base) {
 		if ((gb_strlen(str) > 2) && (gb_strncmp(str, "0x", 2) == 0))
@@ -6528,9 +6573,8 @@ gb_inline gbString gb_string_trim_space(gbString str) { return gb_string_trim(st
 //
 
 
-char16 *gb_utf8_to_ucs2(char16 *buffer, isize len, char const *s) {
-	u8 *str = cast(u8 *)s;
-	char32 c;
+u16 *gb_utf8_to_ucs2(u16 *buffer, isize len, u8 const *str) {
+	Rune c;
 	isize i = 0;
 	len--;
 	while (*str) {
@@ -6544,7 +6588,7 @@ char16 *gb_utf8_to_ucs2(char16 *buffer, isize len, char const *s) {
 			c = (*str++ & 0x1f) << 6;
 			if ((*str & 0xc0) != 0x80)
 				return NULL;
-			buffer[i++] = cast(char16)(c + (*str++ & 0x3f));
+			buffer[i++] = cast(u16)(c + (*str++ & 0x3f));
 		} else if ((*str & 0xf0) == 0xe0) {
 			if (*str == 0xe0 &&
 			    (str[1] < 0xa0 || str[1] > 0xbf))
@@ -6557,7 +6601,7 @@ char16 *gb_utf8_to_ucs2(char16 *buffer, isize len, char const *s) {
 			c += (*str++ & 0x3f) << 6;
 			if ((*str & 0xc0) != 0x80)
 				return NULL;
-			buffer[i++] = cast(char16)(c + (*str++ & 0x3f));
+			buffer[i++] = cast(u16)(c + (*str++ & 0x3f));
 		} else if ((*str & 0xf8) == 0xf0) {
 			if (*str > 0xf4)
 				return NULL;
@@ -6593,7 +6637,7 @@ char16 *gb_utf8_to_ucs2(char16 *buffer, isize len, char const *s) {
 	return buffer;
 }
 
-char *gb_ucs2_to_utf8(char *buffer, isize len, char16 const *str) {
+u8 *gb_ucs2_to_utf8(u8 *buffer, isize len, u16 const *str) {
 	isize i = 0;
 	len--;
 	while (*str) {
@@ -6608,7 +6652,7 @@ char *gb_ucs2_to_utf8(char *buffer, isize len, char16 const *str) {
 			buffer[i++] = cast(char)(0x80 + (*str & 0x3f));
 			str += 1;
 		} else if (*str >= 0xd800 && *str < 0xdc00) {
-			char32 c;
+			Rune c;
 			if (i+4 > len)
 				return NULL;
 			c = ((str[0] - 0xd800) << 10) + ((str[1]) - 0xdc00) + 0x10000;
@@ -6632,79 +6676,111 @@ char *gb_ucs2_to_utf8(char *buffer, isize len, char16 const *str) {
 	return buffer;
 }
 
-char16 *gb_utf8_to_ucs2_buf(char const *str) { // NOTE(bill): Uses locally persisting buffer
-	gb_local_persist char16 buf[4096];
+u16 *gb_utf8_to_ucs2_buf(u8 const *str) { // NOTE(bill): Uses locally persisting buffer
+	gb_local_persist u16 buf[4096];
 	return gb_utf8_to_ucs2(buf, gb_count_of(buf), str);
 }
 
-char *gb_ucs2_to_utf8_buf(char16 const *str) { // NOTE(bill): Uses locally persisting buffer
-	gb_local_persist char buf[4096];
+u8 *gb_ucs2_to_utf8_buf(u16 const *str) { // NOTE(bill): Uses locally persisting buffer
+	gb_local_persist u8 buf[4096];
 	return gb_ucs2_to_utf8(buf, gb_count_of(buf), str);
 }
 
 
 
-// TODO(bill): Is this good enough for UTF-8?
-#define GB__UTF_SIZE 4
-#define GB__UTF_INVALID 0xfffd
+gb_global u8 const gb__utf8_first[256] = {
+	0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, // 0x00-0x0F
+	0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, // 0x10-0x1F
+	0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, // 0x20-0x2F
+	0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, // 0x30-0x3F
+	0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, // 0x40-0x4F
+	0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, // 0x50-0x5F
+	0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, // 0x60-0x6F
+	0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, 0xf0, // 0x70-0x7F
+	0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, // 0x80-0x8F
+	0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, // 0x90-0x9F
+	0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, // 0xA0-0xAF
+	0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, // 0xB0-0xBF
+	0xf1, 0xf1, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, // 0xC0-0xCF
+	0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, // 0xD0-0xDF
+	0x13, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x03, 0x23, 0x03, 0x03, // 0xE0-0xEF
+	0x34, 0x04, 0x04, 0x04, 0x44, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, 0xf1, // 0xF0-0xFF
+};
 
-gb_global u8     const gb__utf_byte[GB__UTF_SIZE+1] = {0x80, 0, 0xc0, 0xe0, 0xf0};
-gb_global u8     const gb__utf_mask[GB__UTF_SIZE+1] = {0xc0, 0x80, 0xe0, 0xf0, 0xf8};
-gb_global char32 const gb__utf_min [GB__UTF_SIZE+1] = {0, 0, 0x80, 0x800, 0x10000};
-gb_global char32 const gb__utf_max [GB__UTF_SIZE+1] = {0x10ffff, 0x7f, 0x7ff, 0xffff, 0x10ffff};
 
-gb_internal isize gb__utf_validate(char32 *c, isize i) {
-	GB_ASSERT_NOT_NULL(c);
-	if (!c) return 0;
-	if (!gb_is_between(*c, gb__utf_min[i], gb__utf_max[i]) ||
-	     gb_is_between(*c, 0xd800, 0xdfff)) {
-		*c = GB__UTF_INVALID;
+typedef struct gbUtf8AcceptRange {
+	u8 lo, hi;
+} gbUtf8AcceptRange;
+
+gb_global gbUtf8AcceptRange const gb__utf8_accept_ranges[] = {
+	{0x80, 0xbf},
+	{0xa0, 0xbf},
+	{0x80, 0x9f},
+	{0x90, 0xbf},
+	{0x80, 0x8f},
+};
+
+
+isize gb_utf8_decode(u8 const *str, isize str_len, Rune *codepoint_out) {
+	isize width = 0;
+	Rune codepoint = GB_RUNE_INVALID;
+
+	if (str_len > 0) {
+		u8 s0 = str[0];
+		u8 x = gb__utf8_first[s0], sz;
+		u8 b1, b2, b3;
+		gbUtf8AcceptRange accept;
+		if (x > 0xf0) {
+			Rune mask = (cast(Rune)x >> 31) << 31;
+			codepoint = (cast(Rune)s0 & (~mask)) | (GB_RUNE_INVALID & mask);
+			width = 1;
+			goto end;
+		}
+
+		sz = x&7;
+		accept = gb__utf8_accept_ranges[x>>4];
+		if (str_len < gb_size_of(sz))
+			goto invalid_codepoint;
+
+		b1 = str[1];
+		if (b1 < accept.lo || accept.hi < b1)
+			goto invalid_codepoint;
+
+		if (sz == 2) {
+			codepoint = (cast(Rune)s0&0x1f)<<6 | (cast(Rune)b1&0x3f);
+			width = 2;
+			goto end;
+		}
+
+		b2 = str[2];
+		if (!gb_is_between(b2, 0x80, 0xbf))
+			goto invalid_codepoint;
+
+		if (sz == 3) {
+			codepoint = (cast(Rune)s0&0x1f)<<12 | (cast(Rune)b1&0x3f)<<6 | (cast(Rune)b2&0x3f);
+			width = 3;
+			goto end;
+		}
+
+		b3 = str[3];
+		if (!gb_is_between(b3, 0x80, 0xbf))
+			goto invalid_codepoint;
+
+		codepoint = (cast(Rune)s0&0x07)<<18 | (cast(Rune)b1&0x3f)<<12 | (cast(Rune)b2&0x3f)<<6 | (cast(Rune)b3&0x3f);
+		width = 4;
+		goto end;
+
+	invalid_codepoint:
+		codepoint = GB_RUNE_INVALID;
+		width = 1;
 	}
-	i = 1;
-	while (*c > gb__utf_max[i])
-		i++;
-	return i;
+
+end:
+	if (codepoint_out) *codepoint_out = codepoint;
+	return width;
 }
 
-gb_internal char32 gb__utf_decode_byte(char c, isize *i) {
-	GB_ASSERT_NOT_NULL(i);
-	if (!i) return 0;
-	for (*i = 0; *i < gb_count_of(gb__utf_mask); (*i)++) {
-		if ((cast(u8)c & gb__utf_mask[*i]) == gb__utf_byte[*i])
-			return cast(u8)(c & ~gb__utf_mask[*i]);
-	}
-	return 0;
-}
-
-gb_inline isize gb_utf8_decode(char const *str, char32 *codepoint) { return gb_utf8_decode_len(str, gb_strlen(str), codepoint); }
-
-isize gb_utf8_decode_len(char const *s, isize str_len, char32 *c) {
-	isize i, j, len, type = 0;
-	char32 cp;
-
-	GB_ASSERT_NOT_NULL(s);
-
-	if (!s) return 0;
-	if (!str_len) return 0;
-	if (c) *c = GB__UTF_INVALID;
-
-	cp = gb__utf_decode_byte(s[0], &len);
-	if (!gb_is_between(len, 1, GB__UTF_SIZE))
-		return 1;
-
-	for (i = 1, j = 1; i < str_len && j < len; i++, j++) {
-		cp = (cp << 6) | gb__utf_decode_byte(s[i], &type);
-		if (type != 0)
-			return j;
-	}
-	if (j < len)
-		return 0;
-	gb__utf_validate(&cp, len);
-	if (c) *c = cp;
-	return len;
-}
-
-isize gb_utf8_codepoint_size(char const *str, isize str_len) {
+isize gb_utf8_codepoint_size(u8 const *str, isize str_len) {
 	isize i = 0;
 	for (; i < str_len && str[i]; i++) {
 		if ((str[i] & 0xc0) != 0x80)
@@ -7203,7 +7279,7 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 		DWORD desired_access;
 		DWORD creation_disposition;
 		void *handle;
-		char16 path[1024] = {0}; // TODO(bill): Is this really enough or should I heap allocate this if it's too large?
+		u16 path[1024] = {0}; // TODO(bill): Is this really enough or should I heap allocate this if it's too large?
 
 		switch (mode & gbFileMode_Modes) {
 		case gbFileMode_Read:
@@ -7235,7 +7311,7 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 			return gbFileError_Invalid;
 		}
 
-		handle = CreateFileW(cast(wchar_t const *)gb_utf8_to_ucs2(path, gb_count_of(path), filename),
+		handle = CreateFileW(cast(wchar_t const *)gb_utf8_to_ucs2(path, gb_count_of(path), cast(u8 *)filename),
 		                     desired_access,
 		                     FILE_SHARE_READ|FILE_SHARE_DELETE, NULL,
 		                     creation_disposition, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -7506,7 +7582,7 @@ gbFileError gb_file_truncate(gbFile *f, i64 size) {
 
 b32 gb_file_exists(char const *name) {
 	WIN32_FIND_DATAW data;
-	void *handle = FindFirstFileW(cast(wchar_t const *)gb_utf8_to_ucs2_buf(name), &data);
+	void *handle = FindFirstFileW(cast(wchar_t const *)gb_utf8_to_ucs2_buf(cast(u8 *)name), &data);
 	b32 found = handle != INVALID_HANDLE_VALUE;
 	if (found) FindClose(handle);
 	return found;
@@ -7551,12 +7627,12 @@ gb_inline b32 gb_file_exists(char const *name) {
 
 #if defined(GB_SYSTEM_WINDOWS)
 gbFileTime gb_file_last_write_time(char const *filepath) {
-	char16 path[1024] = {0};
+	u16 path[1024] = {0};
 	ULARGE_INTEGER li = {0};
 	FILETIME last_write_time = {0};
 	WIN32_FILE_ATTRIBUTE_DATA data = {0};
 
-	if (GetFileAttributesExW(cast(wchar_t const *)gb_utf8_to_ucs2(path, gb_count_of(path), filepath),
+	if (GetFileAttributesExW(cast(wchar_t const *)gb_utf8_to_ucs2(path, gb_count_of(path), cast(u8 *)filepath),
 	                         GetFileExInfoStandard, &data))
 		last_write_time = data.ftLastWriteTime;
 
@@ -7567,20 +7643,20 @@ gbFileTime gb_file_last_write_time(char const *filepath) {
 
 
 gb_inline b32 gb_file_copy(char const *existing_filename, char const *new_filename, b32 fail_if_exists) {
-	char16 old_f[300] = {0};
-	char16 new_f[300] = {0};
+	u16 old_f[300] = {0};
+	u16 new_f[300] = {0};
 
-	return CopyFileW(cast(wchar_t const *)gb_utf8_to_ucs2(old_f, gb_count_of(old_f), existing_filename),
-	                 cast(wchar_t const *)gb_utf8_to_ucs2(new_f, gb_count_of(new_f), new_filename),
+	return CopyFileW(cast(wchar_t const *)gb_utf8_to_ucs2(old_f, gb_count_of(old_f), cast(u8 *)existing_filename),
+	                 cast(wchar_t const *)gb_utf8_to_ucs2(new_f, gb_count_of(new_f), cast(u8 *)new_filename),
 	                 fail_if_exists);
 }
 
 gb_inline b32 gb_file_move(char const *existing_filename, char const *new_filename) {
-	char16 old_f[300] = {0};
-	char16 new_f[300] = {0};
+	u16 old_f[300] = {0};
+	u16 new_f[300] = {0};
 
-	return MoveFileW(cast(wchar_t const *)gb_utf8_to_ucs2(old_f, gb_count_of(old_f), existing_filename),
-	                 cast(wchar_t const *)gb_utf8_to_ucs2(new_f, gb_count_of(new_f), new_filename));
+	return MoveFileW(cast(wchar_t const *)gb_utf8_to_ucs2(old_f, gb_count_of(old_f), cast(u8 *)existing_filename),
+	                 cast(wchar_t const *)gb_utf8_to_ucs2(new_f, gb_count_of(new_f), cast(u8 *)new_filename));
 }
 
 
@@ -8767,7 +8843,7 @@ LRESULT CALLBACK gb__win32_window_callback(HWND hWnd, UINT msg, WPARAM wParam, L
 			if (wParam == '\r')
 				wParam = '\n';
 			// TODO(bill): Does this need to be thread-safe?
-			platform->char_buffer[platform->char_buffer_count++] = cast(char32)wParam;
+			platform->char_buffer[platform->char_buffer_count++] = cast(Rune)wParam;
 		}
 	} break;
 
@@ -8872,7 +8948,7 @@ b32 gb__platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode,
 	WNDCLASSEXW wc = {gb_size_of(WNDCLASSEXW)};
 	DWORD ex_style = 0, style = 0;
 	RECT wr;
-	char16 title_buffer[256] = {0}; // TODO(bill): gb_local_persist this?
+	u16 title_buffer[256] = {0}; // TODO(bill): gb_local_persist this?
 
 	wc.style = CS_HREDRAW | CS_VREDRAW; // | CS_OWNDC
 	wc.lpfnWndProc   = gb__win32_window_callback;
@@ -9367,7 +9443,7 @@ void gb_platform_set_window_position(gbPlatform *p, i32 x, i32 y) {
 }
 
 void gb_platform_set_window_title(gbPlatform *p, char const *title, ...) {
-	char16 buffer[256] = {0};
+	u16 buffer[256] = {0};
 	char str[512] = {0};
 	va_list va;
 	va_start(va, title);
