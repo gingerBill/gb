@@ -80,7 +80,7 @@ typedef union gbVec3 {
 	struct { float r, g, b; };
 
 	gbVec2 xy;
-	float e[2];
+	float e[3];
 } gbVec3;
 
 typedef union gbVec4 {
