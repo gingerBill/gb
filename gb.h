@@ -610,10 +610,8 @@ extern "C++" {
 //
 // NOTE: C++11 (and above) only!
 //
-#if defined(__cplusplus) && __cplusplus >= 201103L
-#if 1
+#if defined(__cplusplus) && ((defined(_MSC_VER) && _MSC_VER >= 1400) || (__cplusplus >= 201103L))
 extern "C++" {
-#endif
 	// NOTE(bill): Stupid fucking templates
 	template <typename T> struct gbRemoveReference       { typedef T Type; };
 	template <typename T> struct gbRemoveReference<T &>  { typedef T Type; };
@@ -631,15 +629,11 @@ extern "C++" {
 	};
 	template <typename F> gbprivDefer<F> gb__defer_func(F &&f) { return gbprivDefer<F>(gb_forward<F>(f)); }
 
-	#ifndef defer
 	#define GB_DEFER_1(x, y) x##y
 	#define GB_DEFER_2(x, y) GB_DEFER_1(x, y)
 	#define GB_DEFER_3(x)    GB_DEFER_2(x, __COUNTER__)
 	#define defer(code)      auto GB_DEFER_3(_defer_) = gb__defer_func([&](){code;})
-	#endif
-#if 1
 }
-#endif
 
 // Example
 #if 0
@@ -1799,8 +1793,8 @@ gb_inline void GB_JOIN2(FUNC,init)(NAME *h, gbAllocator a) { \
 	gb_array_init(h->entries, a); \
 } \
 gb_inline void GB_JOIN2(FUNC,free)(NAME *h) { \
-	gb_array_free(&h->hashes); \
-	gb_array_free(&h->entries); \
+	gb_array_free(h->hashes); \
+	gb_array_free(h->entries); \
 } \
 gbHashTableFindResult GB_JOIN2(FUNC,_find_result_from_key)(NAME const *h, u64 key)  { \
 	gbHashTableFindResult fr = GB__INVALID_FIND_RESULT; \
@@ -1892,7 +1886,7 @@ void GB_JOIN2(FUNC,_erase_find_result)(NAME *h, gbHashTableFindResult fr) { \
 		h->hashes[fr.hash_index] = h->entries[fr.entry_index].next; \
 	else \
 		h->entries[fr.data_prev].next = h->entries[fr.entry_index].next; \
-	gb_array_pop(&h->entries); \
+	gb_array_pop(h->entries); \
 	if (fr.entry_index != gb_array_count(h->entries)) { \
 		gbHashTableFindResult last; \
 		h->entries[fr.entry_index] = h->entries[gb_array_count(h->entries)]; \
@@ -1934,10 +1928,8 @@ void GB_JOIN2(FUNC,_rehash)(NAME *h, isize new_capacity) { \
 		GB_JOIN2(NAME,Entry) *e = &h->entries[i]; \
 		GB_JOIN2(FUNC,multi_insert)(&nh, e->key, e->value); \
 	} \
-	GB_JOIN2(FUNC,init)(&empty, gb_array_allocator(h->hashes)); \
 	GB_JOIN2(FUNC,free)(h); \
-	gb_memcopy(&nh, &h, gb_size_of(NAME)); \
-	gb_memcopy(&empty, &nh, gb_size_of(NAME)); \
+	gb_memcopy(h, &nh, gb_size_of(NAME)); \
 } \
 gb_internal gb_inline void GB_JOIN2(FUNC,_table_grow)(NAME *h) { \
 	isize new_capacity = GB_ARRAY_GROW_FORMULA(gb_array_count(h->entries)); \
@@ -1955,12 +1947,12 @@ isize GB_JOIN2(FUNC,_find_or_make_entry)(NAME *h, u64 key) { \
 		h->entries[fr.data_prev].next = index; \
 	return index; \
 } \
-gb_inline void GB_JOIN2(FUNC,set)(NAME *h, u64 key, isize value) { \
+gb_inline void GB_JOIN2(FUNC,set)(NAME *h, u64 key, VALUE value_) { \
 	isize i; \
 	if (gb_array_count(h->hashes) == 0) \
 		GB_JOIN2(FUNC,_table_grow)(h); \
 	i = GB_JOIN2(FUNC,_find_or_make_entry)(h, key); \
-	h->entries[i].value = value; \
+	h->entries[i].value = value_; \
 	if (GB_JOIN2(FUNC,_is_full)(h)) \
 		GB_JOIN2(FUNC,_table_grow)(h); \
 } \
@@ -1973,8 +1965,8 @@ gb_inline void GB_JOIN2(FUNC,reserve)(NAME *h, isize capacity) { \
 	GB_JOIN2(FUNC,_rehash)(h, capacity); \
 } \
 gb_inline void GB_JOIN2(FUNC,clear)(NAME *h) { \
-	gb_array_clear(&h->hashes); \
-	gb_array_clear(&h->entries); \
+	gb_array_clear(h->hashes); \
+	gb_array_clear(h->entries); \
 } \
 
 
@@ -5280,11 +5272,14 @@ GB_ALLOCATOR_PROC(gb_arena_allocator_proc) {
 		isize total_size = size + alignment;
 
 		// NOTE(bill): Out of memory
-		if (arena->total_allocated + total_size > cast(isize)arena->total_size)
+		if (arena->total_allocated + total_size > cast(isize)arena->total_size) {
+			gb_printf_err("Arena out of memory\n");
 			return NULL;
+		}
 
 		ptr = gb_align_forward(end, alignment);
 		arena->total_allocated += total_size;
+		gb_zero_size(ptr, size);
 		return ptr;
 	} break;
 
