@@ -1,4 +1,4 @@
-/* gb.h - v0.25a - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.26  - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -58,6 +58,7 @@ TODOS
 	- More date & time functions
 
 VERSION HISTORY
+	0.26  - Default allocator flags and generic hash table
 	0.25a - Fix UTF-8 stuff
 	0.25  - OS X gbPlatform Support (missing some things)
 	0.24b - Compile on OSX (excluding platform part)
@@ -1047,7 +1048,7 @@ typedef enum gbAllocationType {
 void *name(void *allocator_data, gbAllocationType type, \
            isize size, isize alignment,                 \
            void *old_memory, isize old_size,            \
-           u64 options)
+           u64 flags)
 typedef GB_ALLOCATOR_PROC(gbAllocatorProc);
 
 typedef struct gbAllocator {
@@ -1055,8 +1056,17 @@ typedef struct gbAllocator {
 	void *           data;
 } gbAllocator;
 
+typedef enum gbAllocatorFlag {
+	gbAllocatorFlag_ClearToZero = GB_BIT(0),
+} gbAllocatorFlag;
+
+// TODO(bill): Is this a decent default alignment?
 #ifndef GB_DEFAULT_MEMORY_ALIGNMENT
 #define GB_DEFAULT_MEMORY_ALIGNMENT (2 * gb_size_of(void *))
+#endif
+
+#ifndef GB_DEFAULT_ALLOCATOR_FLAGS
+#define GB_DEFAULT_ALLOCATOR_FLAGS (gbAllocatorFlag_ClearToZero)
 #endif
 
 GB_DEF void *gb_alloc_align (gbAllocator a, isize size, isize alignment);
@@ -1727,247 +1737,145 @@ GB_EXTERN u64 gb_murmur64_seed(void const *data, isize len, u64 seed);
 //     FUNC    - the name will prefix function names
 //     VALUE   - the type of the value to be stored
 //
-// NOTE(bill): This also allows for a multi-valued keys with the multi_* functions
 // NOTE(bill): I really wish C had decent metaprogramming capabilities (and no I don't mean C++'s templates either)
 //
 
-
 typedef struct gbHashTableFindResult {
 	isize hash_index;
-	isize data_prev;
+	isize entry_prev;
 	isize entry_index;
 } gbHashTableFindResult;
-#define GB__INVALID_FIND_RESULT {-1, -1, -1}
 
 #define GB_TABLE(PREFIX, NAME, FUNC, VALUE) \
-	GB_TABLE_DECLARE(PREFIX, NAME, FUNC, VALUE) \
-	GB_TABLE_DEFINE(NAME, FUNC, VALUE) \
-
-#if defined(_MSC_VER)
-#define GB_TABLE_DEFINE(NAME, FUNC, VALUE) \
-	__pragma(warning(push)); \
-	__pragma(warning(disable:4127)); \
-	GB_TABLE_DEFINE_(NAME, FUNC, VALUE); \
-	__pragma(warning(pop));
-#else
-#define GB_TABLE_DEFINE(NAME, FUNC, VALUE) GB_TABLE_DEFINE_(NAME, FUNC, VALUE)
-#endif
+	GB_TABLE_DECLARE(PREFIX, NAME, FUNC, VALUE); \
+	GB_TABLE_DEFINE(NAME, FUNC, VALUE);
 
 #define GB_TABLE_DECLARE(PREFIX, NAME, FUNC, VALUE) \
-typedef struct GB_JOIN2(NAME, Entry) { \
-	u64   key; \
+typedef struct GB_JOIN2(NAME,Entry) { \
+	u64 key; \
 	isize next; \
 	VALUE value; \
-} GB_JOIN2(NAME, Entry); \
+} GB_JOIN2(NAME,Entry); \
 \
 typedef struct NAME { \
-	gbArray(isize)                 hashes; \
-	gbArray(GB_JOIN2(NAME, Entry)) entries; \
+	gbArray(isize) hashes; \
+	gbArray(GB_JOIN2(NAME,Entry)) entries; \
 } NAME; \
 \
-PREFIX void  GB_JOIN2(FUNC,init)   (NAME *h, gbAllocator a); \
-PREFIX void  GB_JOIN2(FUNC,free)   (NAME *h); \
-PREFIX void  GB_JOIN2(FUNC,clear)  (NAME *h); \
-PREFIX b32   GB_JOIN2(FUNC,has)    (NAME const *h, u64 key); \
-PREFIX VALUE GB_JOIN2(FUNC,get)    (NAME const *h, u64 key, VALUE default_value); \
-PREFIX void  GB_JOIN2(FUNC,set)    (NAME *h, u64 key, VALUE value); \
-PREFIX void  GB_JOIN2(FUNC,remove) (NAME *h, u64 key); \
-PREFIX void  GB_JOIN2(FUNC,reserve)(NAME *h, isize capacity); \
-\
-/* NOTE(bill): multi-valued keys functions */ \
-PREFIX void  GB_JOIN2(FUNC,multi_get)         (NAME const *h, u64 key, VALUE *values, isize count); \
-PREFIX isize GB_JOIN2(FUNC,multi_count)       (NAME const *h, u64 key); \
-PREFIX void  GB_JOIN2(FUNC,multi_insert)      (NAME *h, u64 key, isize value); \
-PREFIX void  GB_JOIN2(FUNC,multi_remove_entry)(NAME *h, GB_JOIN2(NAME, Entry) const *e); \
-PREFIX void  GB_JOIN2(FUNC,multi_remove_all)  (NAME *h, u64 key); \
-\
-PREFIX GB_JOIN2(NAME, Entry) const *GB_JOIN2(FUNC,multi_find_first_entry)(NAME const *h, u64 key); \
-PREFIX GB_JOIN2(NAME, Entry) const *GB_JOIN2(FUNC,multi_find_next_entry) (NAME const *h, GB_JOIN2(NAME, Entry) const *e); \
+PREFIX void                  GB_JOIN2(FUNC,init)       (NAME *h, gbAllocator a); \
+PREFIX void                  GB_JOIN2(FUNC,destroy)    (NAME *h); \
+PREFIX VALUE *               GB_JOIN2(FUNC,get)        (NAME *h, u64 key); \
+PREFIX void                  GB_JOIN2(FUNC,set)        (NAME *h, u64 key, VALUE value); \
+PREFIX void                  GB_JOIN2(FUNC,grow)       (NAME *h); \
+PREFIX void                  GB_JOIN2(FUNC,rehash)     (NAME *h, isize new_count); \
 
 
 
 
-#define GB_TABLE_DEFINE_(NAME, FUNC, VALUE) \
-gb_inline void GB_JOIN2(FUNC,init)(NAME *h, gbAllocator a) { \
-	gb_array_init(h->hashes, a); \
+
+#define GB_TABLE_DEFINE(NAME, FUNC, VALUE) \
+void GB_JOIN2(FUNC,init)(NAME *h, gbAllocator a) { \
+	gb_array_init(h->hashes,  a); \
 	gb_array_init(h->entries, a); \
 } \
-gb_inline void GB_JOIN2(FUNC,free)(NAME *h) { \
-	gb_array_free(h->hashes); \
-	gb_array_free(h->entries); \
+\
+void GB_JOIN2(FUNC,destroy)(NAME *h) { \
+	if (h->entries) gb_array_free(h->entries); \
+	if (h->hashes)  gb_array_free(h->hashes); \
 } \
-gbHashTableFindResult GB_JOIN2(FUNC,_find_result_from_key)(NAME const *h, u64 key)  { \
-	gbHashTableFindResult fr = GB__INVALID_FIND_RESULT; \
-	if (gb_array_count(h->hashes) == 0) \
-		return fr; \
-	fr.hash_index = key % gb_array_count(h->hashes); \
-	fr.entry_index = h->hashes[fr.hash_index]; \
-	while (fr.entry_index >= 0) { \
-		if (h->entries[fr.entry_index].key == key) \
-			return fr; \
-		fr.data_prev = fr.entry_index; \
-		fr.entry_index = h->entries[fr.entry_index].next; \
-	} \
-	return fr; \
-} \
-gb_inline b32 GB_JOIN2(FUNC,has)(NAME const *h, u64 key) { \
-	return GB_JOIN2(FUNC,_find_result_from_key)(h, key).entry_index >= 0; \
-} \
-gb_inline VALUE GB_JOIN2(FUNC,get)(NAME const *h, u64 key, VALUE default_value) { \
-	isize index = GB_JOIN2(FUNC,_find_result_from_key)(h, key).entry_index; \
-	if (index < 0) \
-		return default_value; \
-	return h->entries[index].value; \
-} \
-gb_internal gb_inline isize GB_JOIN2(FUNC,_add_entry)(NAME *h, u64 key) { \
-	isize i = gb_array_count(h->entries); \
+\
+gb_internal isize GB_JOIN2(FUNC,_add_entry)(NAME *h, u64 key) { \
+	isize index; \
 	GB_JOIN2(NAME,Entry) e = {0}; \
 	e.key = key; \
 	e.next = -1; \
+	index = gb_array_count(h->entries); \
 	gb_array_append(h->entries, e); \
-	return i; \
-} \
-gb_internal gb_inline isize GB_JOIN2(FUNC,_is_full)(NAME *h) { \
-	f64 const maximum_load_coefficient = 0.85; \
-	return gb_array_count(h->entries) >= maximum_load_coefficient * gb_array_count(h->hashes); \
-} \
-gb_internal gb_inline void GB_JOIN2(FUNC,_table_grow)(NAME *h); \
-gb_inline void GB_JOIN2(FUNC,multi_insert)(NAME *h, u64 key, VALUE value) { \
-	gbHashTableFindResult fr; \
-	isize next; \
-	if (gb_array_count(h->hashes) == 0) \
-		GB_JOIN2(FUNC,_table_grow)(h); \
-	fr = GB_JOIN2(FUNC,_find_result_from_key)(h, key); \
-	next = GB_JOIN2(FUNC,_add_entry)(h, key); \
-	if (fr.data_prev < 0) \
-		h->hashes[fr.hash_index] = next; \
-	else \
-		h->entries[fr.data_prev].next = next; \
-	h->entries[next].next = fr.entry_index; \
-	h->entries[next].value = value; \
-	if (GB_JOIN2(FUNC,_is_full)(h)) \
-		GB_JOIN2(FUNC,_table_grow)(h); \
-} \
-gb_inline void GB_JOIN2(FUNC,multi_get)(NAME const *h, u64 key, VALUE *values, isize count) { \
-	isize i = 0; \
-	GB_JOIN2(NAME,Entry) const *e = GB_JOIN2(FUNC,multi_find_first_entry)(h, key); \
-	while (e && count --> 0) { \
-		values[i++] = e->value; \
-		e = GB_JOIN2(FUNC,multi_find_next_entry)(h, e); \
-	} \
-} \
-gb_inline isize GB_JOIN2(FUNC,multi_count)(NAME const *h, u64 key) { \
-	isize count = 0; \
-	GB_JOIN2(NAME,Entry) const *e = GB_JOIN2(FUNC,multi_find_first_entry)(h, key); \
-	while (e) { \
-		count++; \
-		e = GB_JOIN2(FUNC,multi_find_next_entry)(h, e); \
-	} \
-	return count; \
-} \
-GB_JOIN2(NAME,Entry) const *GB_JOIN2(FUNC,multi_find_first_entry)(NAME const *h, u64 key) { \
-	isize index = GB_JOIN2(FUNC,_find_result_from_key)(h, key).entry_index; \
-	if (index < 0) return NULL; \
-	return &h->entries[index]; \
-} \
-GB_JOIN2(NAME,Entry) const *GB_JOIN2(FUNC,multi_find_next_entry)(NAME const *h, GB_JOIN2(NAME,Entry) const *e) { \
-	if (e) { \
-		isize index = e->next; \
-		while (index >= 0) { \
-			if (h->entries[index].key == e->key) \
-				return &h->entries[index]; \
-			index = h->entries[index].next; \
-		} \
-	} \
-	return NULL; \
-} \
-void GB_JOIN2(FUNC,_erase_find_result)(NAME *h, gbHashTableFindResult fr) { \
-	if (fr.data_prev < 0) \
-		h->hashes[fr.hash_index] = h->entries[fr.entry_index].next; \
-	else \
-		h->entries[fr.data_prev].next = h->entries[fr.entry_index].next; \
-	gb_array_pop(h->entries); \
-	if (fr.entry_index != gb_array_count(h->entries)) { \
-		gbHashTableFindResult last; \
-		h->entries[fr.entry_index] = h->entries[gb_array_count(h->entries)]; \
-		last = GB_JOIN2(FUNC,_find_result_from_key)(h, h->entries[fr.entry_index].key); \
-		if (last.data_prev < 0) \
-			h->hashes[last.hash_index] = fr.entry_index; \
-		else \
-			h->entries[last.entry_index].next = fr.entry_index; \
-	} \
-} \
-gb_inline void GB_JOIN2(FUNC,multi_remove_entry)(NAME *h, GB_JOIN2(NAME,Entry) const *e) { \
-	gbHashTableFindResult fr = GB__INVALID_FIND_RESULT; \
-	if (gb_array_count(h->hashes) && e) { \
-		fr.hash_index  = e->key % gb_array_count(h->hashes); \
-		fr.entry_index = h->hashes[fr.hash_index]; \
-		while (fr.entry_index >= 0) { \
-			if (&h->entries[fr.entry_index] == e) \
-				break; \
-			fr.data_prev = fr.entry_index; \
-			fr.entry_index = h->entries[fr.entry_index].next; \
-		} \
-	} \
-	if (fr.entry_index >= 0) \
-		GB_JOIN2(FUNC,_erase_find_result)(h, fr); \
-} \
-gb_inline void GB_JOIN2(FUNC,multi_remove_all)(NAME *h, u64 key) { \
-	while (GB_JOIN2(FUNC,has)(h, key)) \
-		GB_JOIN2(FUNC,remove)(h, key); \
-} \
-void GB_JOIN2(FUNC,_rehash)(NAME *h, isize new_capacity) { \
-	NAME nh, empty; \
-	isize i; \
-	GB_JOIN2(FUNC,init)(&nh, gb_array_allocator(h->hashes)); \
-	gb_array_resize(nh.hashes, new_capacity); \
-	gb_array_reserve(nh.entries, gb_array_count(h->entries)); \
-	for (i = 0; i < new_capacity; i++) \
-		nh.hashes[i] = -1; \
-	for (i = 0; i < gb_array_count(h->entries); i++) { \
-		GB_JOIN2(NAME,Entry) *e = &h->entries[i]; \
-		GB_JOIN2(FUNC,multi_insert)(&nh, e->key, e->value); \
-	} \
-	GB_JOIN2(FUNC,free)(h); \
-	gb_memcopy(h, &nh, gb_size_of(NAME)); \
-} \
-gb_internal gb_inline void GB_JOIN2(FUNC,_table_grow)(NAME *h) { \
-	isize new_capacity = GB_ARRAY_GROW_FORMULA(gb_array_count(h->entries)); \
-	GB_JOIN2(FUNC,_rehash)(h, new_capacity); \
-} \
-isize GB_JOIN2(FUNC,_find_or_make_entry)(NAME *h, u64 key) { \
-	isize index; \
-	gbHashTableFindResult fr = GB_JOIN2(FUNC,_find_result_from_key)(h, key); \
-	if (fr.entry_index >= 0) \
-		return fr.entry_index; \
-	index = GB_JOIN2(FUNC,_add_entry)(h, key); \
-	if (fr.data_prev < 0) \
-		h->hashes[fr.hash_index] = index; \
-	else \
-		h->entries[fr.data_prev].next = index; \
 	return index; \
 } \
-gb_inline void GB_JOIN2(FUNC,set)(NAME *h, u64 key, VALUE value_) { \
-	isize i; \
+\
+gb_internal gbHashTableFindResult GB_JOIN2(FUNC,_find)(NAME *h, u64 key) { \
+	gbHashTableFindResult r = {-1, -1, -1}; \
+	if (gb_array_count(h->hashes) > 0) { \
+		r.hash_index  = key % gb_array_count(h->hashes); \
+		r.entry_index = h->hashes[r.hash_index]; \
+		while (r.entry_index >= 0) { \
+			if (h->entries[r.entry_index].key == key) \
+				return r; \
+			r.entry_prev = r.entry_index; \
+			r.entry_index = h->entries[r.entry_index].next; \
+		} \
+	} \
+	return r; \
+} \
+\
+gb_internal b32 GB_JOIN2(FUNC,_full)(NAME *h) { \
+	return 0.75f * gb_array_count(h->hashes) < gb_array_count(h->entries); \
+} \
+\
+void GB_JOIN2(FUNC,grow)(NAME *h) { \
+	isize new_count = GB_ARRAY_GROW_FORMULA(gb_array_count(h->entries)); \
+	GB_JOIN2(FUNC,rehash)(h, new_count); \
+} \
+\
+void GB_JOIN2(FUNC,rehash)(NAME *h, isize new_count) { \
+	isize i, j; \
+	NAME nh = {0}; \
+	GB_JOIN2(FUNC,init)(&nh, gb_array_allocator(h->hashes)); \
+	gb_array_resize(nh.hashes, new_count); \
+	gb_array_reserve(nh.entries, gb_array_count(h->entries)); \
+	for (i = 0; i < new_count; i++) \
+		nh.hashes[i] = -1; \
+	for (i = 0; i < gb_array_count(h->entries); i++) { \
+		GB_JOIN2(NAME,Entry) *e; \
+		gbHashTableFindResult fr; \
+		if (gb_array_count(nh.hashes) == 0) \
+			GB_JOIN2(FUNC,grow)(&nh); \
+		e = &nh.entries[i]; \
+		fr = GB_JOIN2(FUNC,_find)(&nh, e->key); \
+		j = GB_JOIN2(FUNC,_add_entry)(&nh, e->key); \
+		if (fr.entry_prev < 0) \
+			nh.hashes[fr.hash_index] = j; \
+		else \
+			nh.entries[fr.entry_prev].next = j; \
+		nh.entries[j].next = fr.entry_index; \
+		nh.entries[j].value = e->value; \
+		if (GB_JOIN2(FUNC,_full)(&nh)) \
+			GB_JOIN2(FUNC,grow)(&nh); \
+	} \
+	GB_JOIN2(FUNC,destroy)(h); \
+	h->hashes  = nh.hashes; \
+	h->entries = nh.entries; \
+} \
+\
+VALUE *GB_JOIN2(FUNC,get)(NAME *h, u64 key) { \
+	isize index = GB_JOIN2(FUNC,_find)(h, key).entry_index; \
+	if (index >= 0) \
+		return &h->entries[index].value; \
+	return NULL; \
+} \
+\
+void GB_JOIN2(FUNC,set)(NAME *h, u64 key, VALUE value) { \
+	isize index; \
+	gbHashTableFindResult fr; \
 	if (gb_array_count(h->hashes) == 0) \
-		GB_JOIN2(FUNC,_table_grow)(h); \
-	i = GB_JOIN2(FUNC,_find_or_make_entry)(h, key); \
-	h->entries[i].value = value_; \
-	if (GB_JOIN2(FUNC,_is_full)(h)) \
-		GB_JOIN2(FUNC,_table_grow)(h); \
+		GB_JOIN2(FUNC,grow)(h); \
+	fr = GB_JOIN2(FUNC,_find)(h, key); \
+	if (fr.entry_index >= 0) { \
+		index = fr.entry_index; \
+	} else { \
+		index = GB_JOIN2(FUNC,_add_entry)(h, key); \
+		if (fr.entry_prev >= 0) { \
+			h->entries[fr.entry_prev].next = index; \
+		} else { \
+			h->hashes[fr.hash_index] = index; \
+		} \
+	} \
+	h->entries[index].value = value; \
+	if (GB_JOIN2(FUNC,_full)(h)) \
+		GB_JOIN2(FUNC,grow)(h); \
 } \
-gb_inline void GB_JOIN2(FUNC,remove)(NAME *h, u64 key) { \
-	gbHashTableFindResult fr = GB_JOIN2(FUNC,_find_result_from_key)(h, key); \
-	if (fr.entry_index >= 0) \
-		GB_JOIN2(FUNC,_erase_find_result)(h, fr); \
-} \
-gb_inline void GB_JOIN2(FUNC,reserve)(NAME *h, isize capacity) { \
-	GB_JOIN2(FUNC,_rehash)(h, capacity); \
-} \
-gb_inline void GB_JOIN2(FUNC,clear)(NAME *h) { \
-	gb_array_clear(h->hashes); \
-	gb_array_clear(h->entries); \
-} \
+
 
 
 
@@ -4032,12 +3940,12 @@ void const *gb_memrchr(void const *data, u8 c, isize n) {
 
 
 
-gb_inline void *gb_alloc_align (gbAllocator a, isize size, isize alignment)                                { return a.proc(a.data, gbAllocation_Alloc, size, alignment, NULL, 0, 0); }
+gb_inline void *gb_alloc_align (gbAllocator a, isize size, isize alignment)                                { return a.proc(a.data, gbAllocation_Alloc, size, alignment, NULL, 0, GB_DEFAULT_ALLOCATOR_FLAGS); }
 gb_inline void *gb_alloc       (gbAllocator a, isize size)                                                 { return gb_alloc_align(a, size, GB_DEFAULT_MEMORY_ALIGNMENT); }
-gb_inline void  gb_free        (gbAllocator a, void *ptr)                                                  { a.proc(a.data, gbAllocation_Free, 0, 0, ptr, 0, 0); }
-gb_inline void  gb_free_all    (gbAllocator a)                                                             { a.proc(a.data, gbAllocation_FreeAll, 0, 0, NULL, 0, 0); }
+gb_inline void  gb_free        (gbAllocator a, void *ptr)                                                  { a.proc(a.data, gbAllocation_Free, 0, 0, ptr, 0, GB_DEFAULT_ALLOCATOR_FLAGS); }
+gb_inline void  gb_free_all    (gbAllocator a)                                                             { a.proc(a.data, gbAllocation_FreeAll, 0, 0, NULL, 0, GB_DEFAULT_ALLOCATOR_FLAGS); }
 gb_inline void *gb_resize      (gbAllocator a, void *ptr, isize old_size, isize new_size)                  { return gb_resize_align(a, ptr, old_size, new_size, GB_DEFAULT_MEMORY_ALIGNMENT); }
-gb_inline void *gb_resize_align(gbAllocator a, void *ptr, isize old_size, isize new_size, isize alignment) { return a.proc(a.data, gbAllocation_Resize, new_size, alignment, ptr, old_size, 0); }
+gb_inline void *gb_resize_align(gbAllocator a, void *ptr, isize old_size, isize new_size, isize alignment) { return a.proc(a.data, gbAllocation_Resize, new_size, alignment, ptr, old_size, GB_DEFAULT_ALLOCATOR_FLAGS); }
 
 gb_inline void *gb_alloc_copy      (gbAllocator a, void const *src, isize size)                  { return gb_memcopy(gb_alloc(a, size), src, size); }
 gb_inline void *gb_alloc_copy_align(gbAllocator a, void const *src, isize size, isize alignment) { return gb_memcopy(gb_alloc_align(a, size, alignment), src, size); }
@@ -4885,24 +4793,26 @@ gb_inline gbAllocator gb_heap_allocator(void) {
 }
 
 GB_ALLOCATOR_PROC(gb_heap_allocator_proc) {
+	void *ptr = NULL;
 	gb_unused(allocator_data);
-	gb_unused(options);
 	gb_unused(old_size);
 // TODO(bill): Throughly test!
 	switch (type) {
 #if defined(GB_COMPILER_MSVC)
-	case gbAllocation_Alloc:  return _aligned_malloc(size, alignment);
-	case gbAllocation_Free:   _aligned_free(old_memory); break;
-	case gbAllocation_Resize: return _aligned_realloc(old_memory, size, alignment);
+	case gbAllocation_Alloc: ptr = _aligned_malloc(size, alignment); break;
+	case gbAllocation_Free: _aligned_free(old_memory); break;
+	case gbAllocation_Resize: ptr = _aligned_realloc(old_memory, size, alignment); break;
 #else
 	// TODO(bill): *nix version that's decent
 	case gbAllocation_Alloc: {
+		gbAllocationHeader *header;
 		isize total_size = size + alignment + gb_size_of(gbAllocationHeader);
-		void *ptr = malloc(total_size);
-		gbAllocationHeader *header = cast(gbAllocationHeader *)ptr;
+		ptr = malloc(total_size);
+		header = cast(gbAllocationHeader *)ptr;
 		ptr = gb_align_forward(header+1, alignment);
 		gb_allocation_header_fill(header, ptr, size);
-		return ptr;
+		if (flags & gbAllocatorFlag_ClearToZero)
+			gb_zero_size(ptr, size);
 	} break;
 
 	case gbAllocation_Free: {
@@ -4911,7 +4821,7 @@ GB_ALLOCATOR_PROC(gb_heap_allocator_proc) {
 
 	case gbAllocation_Resize: {
 		gbAllocator a = gb_heap_allocator();
-		return gb_default_resize_align(a, old_memory, old_size, size, alignment);
+		ptr = gb_default_resize_align(a, old_memory, old_size, size, alignment);
 	} break;
 #endif
 
@@ -4919,7 +4829,7 @@ GB_ALLOCATOR_PROC(gb_heap_allocator_proc) {
 		break;
 	}
 
-	return NULL; // NOTE(bill): Default return value
+	return ptr;
 }
 
 
@@ -5261,13 +5171,12 @@ gb_inline gbAllocator gb_arena_allocator(gbArena *arena) {
 
 GB_ALLOCATOR_PROC(gb_arena_allocator_proc) {
 	gbArena *arena = cast(gbArena *)allocator_data;
+	void *ptr = NULL;
 
-	gb_unused(options);
 	gb_unused(old_size);
 
 	switch (type) {
 	case gbAllocation_Alloc: {
-		void *ptr = NULL;
 		void *end = gb_pointer_add(arena->physical_start, arena->total_allocated);
 		isize total_size = size + alignment;
 
@@ -5279,8 +5188,8 @@ GB_ALLOCATOR_PROC(gb_arena_allocator_proc) {
 
 		ptr = gb_align_forward(end, alignment);
 		arena->total_allocated += total_size;
-		gb_zero_size(ptr, size);
-		return ptr;
+		if (flags & gbAllocatorFlag_ClearToZero)
+			gb_zero_size(ptr, size);
 	} break;
 
 	case gbAllocation_Free:
@@ -5295,11 +5204,10 @@ GB_ALLOCATOR_PROC(gb_arena_allocator_proc) {
 	case gbAllocation_Resize: {
 		// TODO(bill): Check if ptr is on top of stack and just extend
 		gbAllocator a = gb_arena_allocator(arena);
-		return gb_default_resize_align(a, old_memory, old_size, size, alignment);
+		ptr = gb_default_resize_align(a, old_memory, old_size, size, alignment);
 	} break;
 	}
-
-	return NULL; // NOTE(bill): Default return value
+	return ptr;
 }
 
 
@@ -5376,14 +5284,13 @@ gb_inline gbAllocator gb_pool_allocator(gbPool *pool) {
 }
 GB_ALLOCATOR_PROC(gb_pool_allocator_proc) {
 	gbPool *pool = cast(gbPool *)allocator_data;
+	void *ptr = NULL;
 
-	gb_unused(options);
 	gb_unused(old_size);
 
 	switch (type) {
 	case gbAllocation_Alloc: {
 		uintptr next_free;
-		void *ptr;
 		GB_ASSERT(size      == pool->block_size);
 		GB_ASSERT(alignment == pool->block_align);
 		GB_ASSERT(pool->free_list != NULL);
@@ -5392,7 +5299,8 @@ GB_ALLOCATOR_PROC(gb_pool_allocator_proc) {
 		ptr = pool->free_list;
 		pool->free_list = cast(void *)next_free;
 		pool->total_size += pool->block_size;
-		return ptr;
+		if (flags & gbAllocatorFlag_ClearToZero)
+			gb_zero_size(ptr, size);
 	} break;
 
 	case gbAllocation_Free: {
@@ -5415,7 +5323,7 @@ GB_ALLOCATOR_PROC(gb_pool_allocator_proc) {
 		break;
 	}
 
-	return NULL;
+	return ptr;
 }
 
 
@@ -5470,8 +5378,9 @@ gb_inline gbAllocator gb_free_list_allocator(gbFreeList *fl) {
 
 GB_ALLOCATOR_PROC(gb_free_list_allocator_proc) {
 	gbFreeList *fl = cast(gbFreeList *)allocator_data;
+	void *ptr = NULL;
+
 	GB_ASSERT_NOT_NULL(fl);
-	gb_unused(options);
 
 	switch (type) {
 	case gbAllocation_Alloc: {
@@ -5479,7 +5388,6 @@ GB_ALLOCATOR_PROC(gb_free_list_allocator_proc) {
 		gbFreeListBlock *curr_block = fl->curr_block;
 
 		while (curr_block) {
-			void *ptr = NULL;
 			isize total_size;
 			gbAllocationHeader *header;
 
@@ -5524,10 +5432,11 @@ GB_ALLOCATOR_PROC(gb_free_list_allocator_proc) {
 			fl->allocation_count++;
 
 
+			if (flags & gbAllocatorFlag_ClearToZero)
+				gb_zero_size(ptr, size);
 			return ptr;
 		}
-
-		// NOTE(bill): Ran out of free list memory! FUCK!
+		// NOTE(bill): if ptr == NULL, ran out of free list memory! FUCK!
 		return NULL;
 	} break;
 
@@ -5574,15 +5483,16 @@ GB_ALLOCATOR_PROC(gb_free_list_allocator_proc) {
 		fl->total_allocated -= block_size;
 	} break;
 
-	case gbAllocation_FreeAll: {
+	case gbAllocation_FreeAll:
 		gb_free_list_init(fl, fl->physical_start, fl->total_size);
-	} break;
+		break;
 
 	case gbAllocation_Resize:
-		return gb_default_resize_align(gb_free_list_allocator(fl), old_memory, old_size, size, alignment);
+		ptr = gb_default_resize_align(gb_free_list_allocator(fl), old_memory, old_size, size, alignment);
+		break;
 	}
 
-	return NULL;
+	return ptr;
 }
 
 
@@ -5612,34 +5522,37 @@ gbAllocator gb_scratch_allocator(gbScratchMemory *s) {
 
 GB_ALLOCATOR_PROC(gb_scratch_allocator_proc) {
 	gbScratchMemory *s = cast(gbScratchMemory *)allocator_data;
+	void *ptr = NULL;
 	GB_ASSERT_NOT_NULL(s);
-	gb_unused(options);
 
 	switch (type) {
 	case gbAllocation_Alloc: {
-		void *ptr = s->alloc_point;
-		gbAllocationHeader *header = cast(gbAllocationHeader *)ptr;
+		void *pt = s->alloc_point;
+		gbAllocationHeader *header = cast(gbAllocationHeader *)pt;
 		void *data = gb_align_forward(header+1, alignment);
 		void *end = gb_pointer_add(s->physical_start, s->total_size);
 
 		GB_ASSERT(alignment % 4 == 0);
 		size = ((size + 3)/4)*4;
-		ptr = gb_pointer_add(ptr, size);
+		pt = gb_pointer_add(pt, size);
 
 		// NOTE(bill): Wrap around
-		if (ptr > end) {
+		if (pt > end) {
 			header->size = gb_pointer_diff(header, end) | GB_ISIZE_HIGH_BIT;
-			ptr = s->physical_start;
-			header = cast(gbAllocationHeader *)ptr;
+			pt = s->physical_start;
+			header = cast(gbAllocationHeader *)pt;
 			data = gb_align_forward(header+1, alignment);
-			ptr = gb_pointer_add(ptr, size);
+			pt = gb_pointer_add(pt, size);
 		}
 
-		if (!gb_scratch_memory_is_in_use(s, ptr)) {
-			gb_allocation_header_fill(header, ptr, gb_pointer_diff(header, ptr));
-			s->alloc_point = cast(u8 *)ptr;
-			return data;
+		if (!gb_scratch_memory_is_in_use(s, pt)) {
+			gb_allocation_header_fill(header, pt, gb_pointer_diff(header, pt));
+			s->alloc_point = cast(u8 *)pt;
+			ptr = data;
 		}
+
+		if (flags & gbAllocatorFlag_ClearToZero)
+			gb_zero_size(ptr, size);
 	} break;
 
 	case gbAllocation_Free: {
@@ -5666,16 +5579,17 @@ GB_ALLOCATOR_PROC(gb_scratch_allocator_proc) {
 		}
 	} break;
 
-	case gbAllocation_FreeAll: {
+	case gbAllocation_FreeAll:
 		s->alloc_point = s->physical_start;
 		s->free_point  = s->physical_start;
-	} break;
+		break;
 
 	case gbAllocation_Resize:
-		return gb_default_resize_align(gb_scratch_allocator(s), old_memory, old_size, size, alignment);
+		ptr = gb_default_resize_align(gb_scratch_allocator(s), old_memory, old_size, size, alignment);
+		break;
 	}
 
-	return NULL;
+	return ptr;
 }
 
 

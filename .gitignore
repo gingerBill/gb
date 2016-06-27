@@ -226,3 +226,4 @@ src/
 *.sln
 run.bat
 external/
+gb_gl_dsa.h
