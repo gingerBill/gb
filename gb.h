@@ -1,4 +1,4 @@
-/* gb.h - v0.26  - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.26a - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -58,6 +58,7 @@ TODOS
 	- More date & time functions
 
 VERSION HISTORY
+	0.26a - gbString Fix
 	0.26  - Default allocator flags and generic hash table
 	0.25a - Fix UTF-8 stuff
 	0.25  - OS X gbPlatform Support (missing some things)
@@ -4799,9 +4800,17 @@ GB_ALLOCATOR_PROC(gb_heap_allocator_proc) {
 // TODO(bill): Throughly test!
 	switch (type) {
 #if defined(GB_COMPILER_MSVC)
-	case gbAllocation_Alloc: ptr = _aligned_malloc(size, alignment); break;
-	case gbAllocation_Free: _aligned_free(old_memory); break;
-	case gbAllocation_Resize: ptr = _aligned_realloc(old_memory, size, alignment); break;
+	case gbAllocation_Alloc:
+		ptr = _aligned_malloc(size, alignment);
+		if (flags & gbAllocatorFlag_ClearToZero)
+			gb_zero_size(ptr, size);
+		break;
+	case gbAllocation_Free:
+		_aligned_free(old_memory);
+		break;
+	case gbAllocation_Resize:
+		ptr = _aligned_realloc(old_memory, size, alignment);
+		break;
 #else
 	// TODO(bill): *nix version that's decent
 	case gbAllocation_Alloc: {
@@ -6409,16 +6418,21 @@ gbString gb_string_make_space_for(gbString str, isize add_len) {
 	} else {
 		isize new_len, old_size, new_size;
 		void *ptr, *new_ptr;
+		gbAllocator a = GB_STRING_HEADER(str)->allocator;
+		gbStringHeader *header;
 
 		new_len = gb_string_length(str) + add_len;
 		ptr = GB_STRING_HEADER(str);
 		old_size = gb_size_of(gbStringHeader) + gb_string_length(str) + 1;
 		new_size = gb_size_of(gbStringHeader) + new_len + 1;
 
-		new_ptr = gb_resize(GB_STRING_HEADER(str)->allocator, ptr, old_size, new_size);
+		new_ptr = gb_resize(a, ptr, old_size, new_size);
 		if (new_ptr == NULL) return NULL;
 
-		str = cast(char *)(GB_STRING_HEADER(new_ptr) + 1);
+		header = cast(gbStringHeader *)new_ptr;
+		header->allocator = a;
+
+		str = cast(gbString)(header+1);
 		gb__set_string_capacity(str, new_len);
 
 		return str;
