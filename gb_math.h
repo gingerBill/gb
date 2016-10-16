@@ -1,8 +1,9 @@
-/* gb_math.h - v0.06h - public domain C math library - no warranty implied; use at your own risk
+/* gb_math.h - v0.07  - public domain C math library - no warranty implied; use at your own risk
    A C math library geared towards game development
    use '#define GB_MATH_IMPLEMENTATION' before including to create the implementation in _ONE_ file
 
 Version History:
+	0.07  - Better Mat4 procedures
 	0.06h - Ignore silly warnings
 	0.06g - Remove memzero
 	0.06f - Remove warning on MSVC
@@ -338,9 +339,11 @@ GB_MATH_DEF float gb_vec2_aspect_ratio(gbVec2 v);
 GB_MATH_DEF void gb_mat2_identity   (gbMat2 *m);
 GB_MATH_DEF void gb_float22_identity(float m[2][2]);
 
-GB_MATH_DEF void gb_mat2_transpose(gbMat2 *m);
-GB_MATH_DEF void gb_mat2_mul      (gbMat2 *out, gbMat2 *m1, gbMat2 *m2);
-GB_MATH_DEF void gb_mat2_mul_vec2 (gbVec2 *out, gbMat2 *m, gbVec2 in);
+GB_MATH_DEF void  gb_mat2_transpose  (gbMat2 *m);
+GB_MATH_DEF void  gb_mat2_mul        (gbMat2 *out, gbMat2 *m1, gbMat2 *m2);
+GB_MATH_DEF void  gb_mat2_mul_vec2   (gbVec2 *out, gbMat2 *m, gbVec2 in);
+GB_MATH_DEF void  gb_mat2_inverse    (gbMat2 *out, gbMat2 *in);
+GB_MATH_DEF float gb_mat2_determinate(gbMat2 *m);
 
 GB_MATH_DEF gbMat2 *gb_mat2_v(gbVec2 m[2]);
 GB_MATH_DEF gbMat2 *gb_mat2_f(float m[2][2]);
@@ -356,9 +359,12 @@ GB_MATH_DEF void gb_float22_mul_vec2 (gbVec2 *out, float m[2][2], gbVec2 in);
 GB_MATH_DEF void gb_mat3_identity   (gbMat3 *m);
 GB_MATH_DEF void gb_float33_identity(float m[3][3]);
 
-GB_MATH_DEF void gb_mat3_transpose(gbMat3 *m);
-GB_MATH_DEF void gb_mat3_mul      (gbMat3 *out, gbMat3 *m1, gbMat3 *m2);
-GB_MATH_DEF void gb_mat3_mul_vec3 (gbVec3 *out, gbMat3 *m, gbVec3 in);
+GB_MATH_DEF void  gb_mat3_transpose  (gbMat3 *m);
+GB_MATH_DEF void  gb_mat3_mul        (gbMat3 *out, gbMat3 *m1, gbMat3 *m2);
+GB_MATH_DEF void  gb_mat3_mul_vec3   (gbVec3 *out, gbMat3 *m, gbVec3 in);
+GB_MATH_DEF void  gb_mat3_inverse    (gbMat3 *out, gbMat3 *in);
+GB_MATH_DEF float gb_mat3_determinate(gbMat3 *m);
+
 
 GB_MATH_DEF gbMat3 *gb_mat3_v(gbVec3 m[3]);
 GB_MATH_DEF gbMat3 *gb_mat3_f(float m[3][3]);
@@ -374,9 +380,10 @@ GB_MATH_DEF void gb_float33_mul_vec3 (gbVec3 *out, float m[3][3], gbVec3 in);
 GB_MATH_DEF void gb_mat4_identity   (gbMat4 *m);
 GB_MATH_DEF void gb_float44_identity(float m[4][4]);
 
-GB_MATH_DEF void gb_mat4_transpose(gbMat4 *m);
-GB_MATH_DEF void gb_mat4_mul      (gbMat4 *out, gbMat4 *m1, gbMat4 *m2);
-GB_MATH_DEF void gb_mat4_mul_vec4 (gbVec4 *out, gbMat4 *m, gbVec4 in);
+GB_MATH_DEF void  gb_mat4_transpose  (gbMat4 *m);
+GB_MATH_DEF void  gb_mat4_mul        (gbMat4 *out, gbMat4 *m1, gbMat4 *m2);
+GB_MATH_DEF void  gb_mat4_mul_vec4   (gbVec4 *out, gbMat4 *m, gbVec4 in);
+GB_MATH_DEF void  gb_mat4_inverse    (gbMat4 *out, gbMat4 *in);
 
 GB_MATH_DEF gbMat4 *gb_mat4_v(gbVec4 m[4]);
 GB_MATH_DEF gbMat4 *gb_mat4_f(float m[4][4]);
@@ -1342,6 +1349,23 @@ void gb_float22_mul_vec2(gbVec2 *out, float m[2][2], gbVec2 v) {
 	out->y = m[1][0]*v.x + m[1][1]*v.y;
 }
 
+float gb_mat2_determinate(gbMat2 *m) {
+	gbFloat2 *e = gb_float22_m(m);
+	return e[0][0]*e[1][1] - e[1][0]*e[0][1];
+}
+
+void gb_mat2_inverse(gbMat2 *out, gbMat2 *in) {
+	gbFloat2 *o = gb_float22_m(out);
+	gbFloat2 *i = gb_float22_m(in);
+
+	float ood = 1.0f / gb_mat2_determinate(in);
+
+	o[0][0] = +i[1][1] * ood;
+	o[0][1] = -i[0][1] * ood;
+	o[1][0] = -i[1][0] * ood;
+	o[1][1] = +i[0][0] * ood;
+}
+
 
 
 
@@ -1396,6 +1420,35 @@ void gb_float33_mul_vec3(gbVec3 *out, float m[3][3], gbVec3 v) {
 	out->y = m[1][0]*v.x + m[1][1]*v.y + m[1][2]*v.z;
 	out->z = m[2][0]*v.x + m[2][1]*v.y + m[2][2]*v.z;
 }
+
+
+
+float gb_mat3_determinate(gbMat3 *m) {
+	gbFloat3 *e = gb_float33_m(m);
+	float d = +e[0][0] * (e[1][1] * e[2][2] - e[1][2] * e[2][1])
+	          -e[0][1] * (e[1][0] * e[2][2] - e[1][2] * e[2][0])
+	          +e[0][2] * (e[1][0] * e[2][1] - e[1][1] * e[2][0]);
+	return d;
+}
+
+void gb_mat3_inverse(gbMat3 *out, gbMat3 *in) {
+	gbFloat3 *o = gb_float33_m(out);
+	gbFloat3 *i = gb_float33_m(in);
+
+	float ood = 1.0f / gb_mat3_determinate(in);
+
+	o[0][0] = +(i[1][1] * i[2][2] - i[2][1] * i[1][2]) * ood;
+	o[0][1] = -(i[1][0] * i[2][2] - i[2][0] * i[1][2]) * ood;
+	o[0][2] = +(i[1][0] * i[2][1] - i[2][0] * i[1][1]) * ood;
+	o[1][0] = -(i[0][1] * i[2][2] - i[2][1] * i[0][2]) * ood;
+	o[1][1] = +(i[0][0] * i[2][2] - i[2][0] * i[0][2]) * ood;
+	o[1][2] = -(i[0][0] * i[2][1] - i[2][0] * i[0][1]) * ood;
+	o[2][0] = +(i[0][1] * i[1][2] - i[1][1] * i[0][2]) * ood;
+	o[2][1] = -(i[0][0] * i[1][2] - i[1][0] * i[0][2]) * ood;
+	o[2][2] = +(i[0][0] * i[1][1] - i[1][0] * i[0][1]) * ood;
+}
+
+
 
 
 
@@ -1454,11 +1507,84 @@ void gb_float44_mul(float (*out)[4], float (*mat1)[4], float (*mat2)[4]) {
 }
 
 void gb_float44_mul_vec4(gbVec4 *out, float m[4][4], gbVec4 v) {
-	out->x = m[0][0]*v.x + m[0][1]*v.y + m[0][2]*v.z + m[0][3]*v.w;
-	out->y = m[1][0]*v.x + m[1][1]*v.y + m[1][2]*v.z + m[1][3]*v.w;
-	out->z = m[2][0]*v.x + m[2][1]*v.y + m[2][2]*v.z + m[2][3]*v.w;
-	out->w = m[3][0]*v.x + m[3][1]*v.y + m[3][2]*v.z + m[3][3]*v.w;
+	out->x = m[0][0]*v.x + m[1][0]*v.y + m[2][0]*v.z + m[3][0]*v.w;
+	out->y = m[0][1]*v.x + m[1][1]*v.y + m[2][1]*v.z + m[3][1]*v.w;
+	out->z = m[0][2]*v.x + m[1][2]*v.y + m[2][2]*v.z + m[3][2]*v.w;
+	out->w = m[0][3]*v.x + m[1][3]*v.y + m[2][3]*v.z + m[3][3]*v.w;
 }
+
+void gb_mat4_inverse(gbMat4 *out, gbMat4 *in) {
+	gbFloat4 *o = gb_float44_m(out);
+	gbFloat4 *m = gb_float44_m(in);
+
+	float ood;
+
+	float sf00 = m[2][2] * m[3][3] - m[3][2] * m[2][3];
+	float sf01 = m[2][1] * m[3][3] - m[3][1] * m[2][3];
+	float sf02 = m[2][1] * m[3][2] - m[3][1] * m[2][2];
+	float sf03 = m[2][0] * m[3][3] - m[3][0] * m[2][3];
+	float sf04 = m[2][0] * m[3][2] - m[3][0] * m[2][2];
+	float sf05 = m[2][0] * m[3][1] - m[3][0] * m[2][1];
+	float sf06 = m[1][2] * m[3][3] - m[3][2] * m[1][3];
+	float sf07 = m[1][1] * m[3][3] - m[3][1] * m[1][3];
+	float sf08 = m[1][1] * m[3][2] - m[3][1] * m[1][2];
+	float sf09 = m[1][0] * m[3][3] - m[3][0] * m[1][3];
+	float sf10 = m[1][0] * m[3][2] - m[3][0] * m[1][2];
+	float sf11 = m[1][1] * m[3][3] - m[3][1] * m[1][3];
+	float sf12 = m[1][0] * m[3][1] - m[3][0] * m[1][1];
+	float sf13 = m[1][2] * m[2][3] - m[2][2] * m[1][3];
+	float sf14 = m[1][1] * m[2][3] - m[2][1] * m[1][3];
+	float sf15 = m[1][1] * m[2][2] - m[2][1] * m[1][2];
+	float sf16 = m[1][0] * m[2][3] - m[2][0] * m[1][3];
+	float sf17 = m[1][0] * m[2][2] - m[2][0] * m[1][2];
+	float sf18 = m[1][0] * m[2][1] - m[2][0] * m[1][1];
+
+	o[0][0] = +(m[1][1] * sf00 - m[1][2] * sf01 + m[1][3] * sf02);
+	o[0][1] = -(m[1][0] * sf00 - m[1][2] * sf03 + m[1][3] * sf04);
+	o[0][2] = +(m[1][0] * sf01 - m[1][1] * sf03 + m[1][3] * sf05);
+	o[0][3] = -(m[1][0] * sf02 - m[1][1] * sf04 + m[1][2] * sf05);
+
+	o[1][0] = -(m[0][1] * sf00 - m[0][2] * sf01 + m[0][3] * sf02);
+	o[1][1] = +(m[0][0] * sf00 - m[0][2] * sf03 + m[0][3] * sf04);
+	o[1][2] = -(m[0][0] * sf01 - m[0][1] * sf03 + m[0][3] * sf05);
+	o[1][3] = +(m[0][0] * sf02 - m[0][1] * sf04 + m[0][2] * sf05);
+
+	o[2][0] = +(m[0][1] * sf06 - m[0][2] * sf07 + m[0][3] * sf08);
+	o[2][1] = -(m[0][0] * sf06 - m[0][2] * sf09 + m[0][3] * sf10);
+	o[2][2] = +(m[0][0] * sf11 - m[0][1] * sf09 + m[0][3] * sf12);
+	o[2][3] = -(m[0][0] * sf08 - m[0][1] * sf10 + m[0][2] * sf12);
+
+	o[3][0] = -(m[0][1] * sf13 - m[0][2] * sf14 + m[0][3] * sf15);
+	o[3][1] = +(m[0][0] * sf13 - m[0][2] * sf16 + m[0][3] * sf17);
+	o[3][2] = -(m[0][0] * sf14 - m[0][1] * sf16 + m[0][3] * sf18);
+	o[3][3] = +(m[0][0] * sf15 - m[0][1] * sf17 + m[0][2] * sf18);
+
+	ood = 1.0f / (m[0][0] * o[0][0]
+	              m[0][1] * o[0][1]
+	              m[0][2] * o[0][2]
+	              m[0][3] * o[0][3]);
+
+	o[0][0] *= ood;
+	o[0][1] *= ood;
+	o[0][2] *= ood;
+	o[0][3] *= ood;
+	o[1][0] *= ood;
+	o[1][1] *= ood;
+	o[1][2] *= ood;
+	o[1][3] *= ood;
+	o[2][0] *= ood;
+	o[2][1] *= ood;
+	o[2][2] *= ood;
+	o[2][3] *= ood;
+	o[3][0] *= ood;
+	o[3][1] *= ood;
+	o[3][2] *= ood;
+	o[3][3] *= ood;
+}
+
+
+
+
 
 
 

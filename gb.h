@@ -1,4 +1,4 @@
-/* gb.h - v0.26c - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.26d - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -58,6 +58,7 @@ TODOS
 	- More date & time functions
 
 VERSION HISTORY
+	0.26d - Minor changes to how gbFile works
 	0.26c - gb_str_to_f* fix
 	0.26b - Minor fixes
 	0.26a - gbString Fix
@@ -700,6 +701,10 @@ extern "C++" {
 
 #ifndef gb_is_between
 #define gb_is_between(x, lower, upper) (((x) >= (lower)) && ((x) <= (upper)))
+#endif
+
+#ifndef gb_abs
+#define gb_abs(x) ((x) < 0 ? -(x) : (x))
 #endif
 
 /* NOTE(bill): Very useful bit setting */
@@ -1370,6 +1375,7 @@ GB_DEF u8 * gb_ucs2_to_utf8_buf(u16 const *str); // NOTE(bill): Uses locally per
 // NOTE(bill): Returns size of codepoint in bytes
 GB_DEF isize gb_utf8_decode        (u8 const *str, isize str_len, Rune *codepoint);
 GB_DEF isize gb_utf8_codepoint_size(u8 const *str, isize str_len);
+GB_DEF isize gb_utf8_encode_rune   (u8 buf[4], Rune r);
 
 ////////////////////////////////////////////////////////////////
 //
@@ -1923,7 +1929,7 @@ typedef union gbFileDescriptor {
 
 typedef struct gbFileOperations gbFileOperations;
 
-#define GB_FILE_OPEN_PROC(name)     gbFileError name(gbFileDescriptor *fd, gbFileOperations const **ops, gbFileMode mode, char const *filename)
+#define GB_FILE_OPEN_PROC(name)     gbFileError name(gbFileDescriptor *fd, gbFileOperations *ops, gbFileMode mode, char const *filename)
 #define GB_FILE_READ_AT_PROC(name)  b32         name(gbFileDescriptor fd, void *buffer, isize size, i64 offset, isize *bytes_read)
 #define GB_FILE_WRITE_AT_PROC(name) b32         name(gbFileDescriptor fd, void const *buffer, isize size, i64 offset, isize *bytes_written)
 #define GB_FILE_SEEK_PROC(name)     b32         name(gbFileDescriptor fd, i64 offset, gbSeekWhenceType whence, i64 *new_offset)
@@ -1953,11 +1959,11 @@ extern gbFileOperations const gbDefaultFileOperations;
 typedef u64 gbFileTime;
 
 typedef struct gbFile {
-	gbFileOperations const *ops;
-	gbFileDescriptor        fd;
-	char const *            filename;
-	gbFileTime              last_write_time;
-	// gbDirInfo *          dir_info; // TODO(bill): Get directory info
+	gbFileOperations ops;
+	gbFileDescriptor fd;
+	char const *     filename;
+	gbFileTime       last_write_time;
+	// gbDirInfo *   dir_info; // TODO(bill): Get directory info
 } gbFile;
 
 // TODO(bill): gbAsyncFile
@@ -1975,7 +1981,7 @@ GB_DEF gbFile *const gb_file_get_standard(gbFileStandardType std);
 GB_DEF gbFileError gb_file_create        (gbFile *file, char const *filename);
 GB_DEF gbFileError gb_file_open          (gbFile *file, char const *filename);
 GB_DEF gbFileError gb_file_open_mode     (gbFile *file, gbFileMode mode, char const *filename);
-GB_DEF gbFileError gb_file_new           (gbFile *file, gbFileDescriptor fd, gbFileOperations const *ops, char const *filename);
+GB_DEF gbFileError gb_file_new           (gbFile *file, gbFileDescriptor fd, gbFileOperations ops, char const *filename);
 GB_DEF b32         gb_file_read_at_check (gbFile *file, void *buffer, isize size, i64 offset, isize *bytes_read);
 GB_DEF b32         gb_file_write_at_check(gbFile *file, void const *buffer, isize size, i64 offset, isize *bytes_written);
 GB_DEF b32         gb_file_read_at       (gbFile *file, void *buffer, isize size, i64 offset);
@@ -2963,8 +2969,6 @@ extern "C" {
 		DWORD dwFlags;
 	} MONITORINFO;
 
-
-
 	#define INFINITE 0xffffffffl
 	#define INVALID_HANDLE_VALUE ((void *)(intptr)(-1))
 
@@ -2982,7 +2986,6 @@ extern "C" {
 	                                                 DWORD creation_flags, DWORD *thread_id);
 	GB_DLL_IMPORT DWORD   WINAPI GetThreadId        (HANDLE handle);
 	GB_DLL_IMPORT void    WINAPI RaiseException     (DWORD, DWORD, DWORD, ULONG_PTR const *);
-
 
 
 	GB_DLL_IMPORT BOOL      WINAPI GetLogicalProcessorInformation(SYSTEM_LOGICAL_PROCESSOR_INFORMATION *buffer, DWORD *return_length);
@@ -3618,9 +3621,9 @@ gb_inline void gb_zero_size(void *ptr, isize size) { gb_memset(ptr, 0, size); }
 gb_inline void *gb_memcopy(void *dest, void const *source, isize n) {
 #if defined(_MSC_VER)
 	// TODO(bill): Is this good enough?
-	__movsb(cast(u8 *gb_restrict)dest, cast(u8 *gb_restrict)source, n);
+	__movsb(cast(u8 *)dest, cast(u8 *)source, n);
 #elif defined(GB_CPU_X86)
-	__asm__ __volatile__("rep movsb" : "+D"(cast(u8 *gb_restrict)dest), "+S"(cast(u8 *gb_restrict)source), "+c"(n) : : "memory");
+	__asm__ __volatile__("rep movsb" : "+D"(cast(u8 *)dest), "+S"(cast(u8 *)source), "+c"(n) : : "memory");
 #else
 	u8 *d = cast(u8 *)dest;
 	u8 const *s = cast(u8 const *)source;
@@ -3946,7 +3949,7 @@ void const *gb_memrchr(void const *data, u8 c, isize n) {
 
 gb_inline void *gb_alloc_align (gbAllocator a, isize size, isize alignment)                                { return a.proc(a.data, gbAllocation_Alloc, size, alignment, NULL, 0, GB_DEFAULT_ALLOCATOR_FLAGS); }
 gb_inline void *gb_alloc       (gbAllocator a, isize size)                                                 { return gb_alloc_align(a, size, GB_DEFAULT_MEMORY_ALIGNMENT); }
-gb_inline void  gb_free        (gbAllocator a, void *ptr)                                                  { a.proc(a.data, gbAllocation_Free, 0, 0, ptr, 0, GB_DEFAULT_ALLOCATOR_FLAGS); }
+gb_inline void  gb_free        (gbAllocator a, void *ptr)                                                  { if (ptr != NULL) a.proc(a.data, gbAllocation_Free, 0, 0, ptr, 0, GB_DEFAULT_ALLOCATOR_FLAGS); }
 gb_inline void  gb_free_all    (gbAllocator a)                                                             { a.proc(a.data, gbAllocation_FreeAll, 0, 0, NULL, 0, GB_DEFAULT_ALLOCATOR_FLAGS); }
 gb_inline void *gb_resize      (gbAllocator a, void *ptr, isize old_size, isize new_size)                  { return gb_resize_align(a, ptr, old_size, new_size, GB_DEFAULT_MEMORY_ALIGNMENT); }
 gb_inline void *gb_resize_align(gbAllocator a, void *ptr, isize old_size, isize new_size, isize alignment) { return a.proc(a.data, gbAllocation_Resize, new_size, alignment, ptr, old_size, GB_DEFAULT_ALLOCATOR_FLAGS); }
@@ -4696,7 +4699,7 @@ void gb_thread_set_name(gbThread *t, char const *name) {
 		tn.flags = 0;
 
 		__try {
-			RaiseException(0x406d1388, 0, gb_size_of(tn)/4, cast(usize *)&tn);
+			RaiseException(0x406d1388, 0, gb_size_of(tn)/4, cast(ULONG_PTR *)&tn);
 		} __except(1 /*EXCEPTION_EXECUTE_HANDLER*/) {
 		}
 
@@ -5755,7 +5758,7 @@ void gb_sort(void *base_, isize count, isize size, gbCompareProc cmp) {
 			Type radix_piece = (radix_value >> byte_index) & 0xff; \
 			dest[offsets[radix_piece]++] = source[i]; \
 		} \
-		gb_swap(Type *gb_restrict, source, dest); \
+		gb_swap(Type *, source, dest); \
 	} \
 }
 
@@ -5871,7 +5874,7 @@ gb_inline i32 gb_hex_digit_to_int(char c) {
 		return c - 'a' + 10;
 	else if (gb_is_between(c, 'A', 'F'))
 		return c - 'A' + 10;
-	return 0;
+	return -1;
 }
 
 
@@ -5919,21 +5922,36 @@ gb_inline isize gb_strnlen(char const *str, isize max_len) {
 }
 
 gb_inline isize gb_utf8_strlen(u8 const *str) {
-	isize result = 0;
-	for (; *str; str++) {
-		if ((*str & 0xc0) != 0x80)
-			result++;
+	isize count = 0;
+	for (; *str; count++) {
+		u8 c = *str;
+		isize inc = 0;
+		     if (c < 0x80)           inc = 1;
+		else if ((c & 0xe0) == 0xc0) inc = 2;
+		else if ((c & 0xf0) == 0xe0) inc = 3;
+		else if ((c & 0xf8) == 0xf0) inc = 4;
+		else return -1;
+
+		str += inc;
 	}
-	return result;
+	return count;
 }
 
 gb_inline isize gb_utf8_strnlen(u8 const *str, isize max_len) {
-	isize result = 0;
-	for (; *str && result < max_len; str++) {
-		if ((*str & 0xc0) != 0x80)
-			result++;
+	isize count = 0;
+	for (; *str && max_len > 0; count++) {
+		u8 c = *str;
+		isize inc = 0;
+		     if (c < 0x80)           inc = 1;
+		else if ((c & 0xe0) == 0xc0) inc = 2;
+		else if ((c & 0xf0) == 0xe0) inc = 3;
+		else if ((c & 0xf8) == 0xf0) inc = 4;
+		else return -1;
+
+		str += inc;
+		max_len -= inc;
 	}
-	return result;
+	return count;
 }
 
 
@@ -6352,16 +6370,17 @@ gb_inline void gb_string_clear(gbString str) { gb__set_string_length(str, 0); st
 gb_inline gbString gb_string_append(gbString str, gbString const other) { return gb_string_append_length(str, other, gb_string_length(other)); }
 
 gbString gb_string_append_length(gbString str, void const *other, isize other_len) {
-	isize curr_len = gb_string_length(str);
+	if (other_len > 0) {
+		isize curr_len = gb_string_length(str);
 
-	str = gb_string_make_space_for(str, other_len);
-	if (str == NULL)
-		return NULL;
+		str = gb_string_make_space_for(str, other_len);
+		if (str == NULL)
+			return NULL;
 
-	gb_memcopy(str + curr_len, other, other_len);
-	str[curr_len + other_len] = '\0';
-	gb__set_string_length(str, curr_len + other_len);
-
+		gb_memcopy(str + curr_len, other, other_len);
+		str[curr_len + other_len] = '\0';
+		gb__set_string_length(str, curr_len + other_len);
+	}
 	return str;
 }
 
@@ -6623,6 +6642,8 @@ gb_global gbUtf8AcceptRange const gb__utf8_accept_ranges[] = {
 
 
 isize gb_utf8_decode(u8 const *str, isize str_len, Rune *codepoint_out) {
+
+
 	isize width = 0;
 	Rune codepoint = GB_RUNE_INVALID;
 
@@ -6634,6 +6655,11 @@ isize gb_utf8_decode(u8 const *str, isize str_len, Rune *codepoint_out) {
 		if (x > 0xf0) {
 			Rune mask = (cast(Rune)x >> 31) << 31;
 			codepoint = (cast(Rune)s0 & (~mask)) | (GB_RUNE_INVALID & mask);
+			width = 1;
+			goto end;
+		}
+		if (s0 < 0x80) {
+			codepoint = s0;
 			width = 1;
 			goto end;
 		}
@@ -6690,6 +6716,43 @@ isize gb_utf8_codepoint_size(u8 const *str, isize str_len) {
 	return i+1;
 }
 
+isize gb_utf8_encode_rune(u8 buf[4], Rune r) {
+	u32 i = cast(u32)r;
+	u8 mask = 0x3f;
+	if (i <= (1<<7)-1) {
+		buf[0] = cast(u8)r;
+		return 1;
+	}
+	if (i <= (1<<11)-1) {
+		buf[0] = 0xc0 | cast(u8)(r>>6);
+		buf[1] = 0x80 | (cast(u8)(r)&mask);
+		return 2;
+	}
+
+	// Invalid or Surrogate range
+	if (i > GB_RUNE_MAX ||
+	    gb_is_between(i, 0xd800, 0xdfff)) {
+		r = GB_RUNE_INVALID;
+
+		buf[0] = 0xe0 | cast(u8)(r>>12);
+		buf[1] = 0x80 | (cast(u8)(r>>6)&mask);
+		buf[2] = 0x80 | (cast(u8)(r)&mask);
+		return 3;
+	}
+
+	if (i <= (1<<16)-1) {
+		buf[0] = 0xe0 | cast(u8)(r>>12);
+		buf[1] = 0x80 | (cast(u8)(r>>6)&mask);
+		buf[2] = 0x80 | (cast(u8)(r)&mask);
+		return 3;
+	}
+
+	buf[0] = 0xf0 | cast(u8)(r>>18);
+	buf[1] = 0x80 | (cast(u8)(r>>12)&mask);
+	buf[2] = 0x80 | (cast(u8)(r>>6)&mask);
+	buf[3] = 0x80 | (cast(u8)(r)&mask);
+	return 4;
+}
 
 
 
@@ -7237,7 +7300,7 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 		}
 
 		fd->p = handle;
-		*ops = &gbDefaultFileOperations;
+		*ops = gbDefaultFileOperations;
 		return gbFileError_None;
 	}
 
@@ -7319,7 +7382,7 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 			return gbFileError_Invalid;
 		}
 
-		*ops = &gbDefaultFileOperations;
+		*ops = gbDefaultFileOperations;
 		return gbFileError_None;
 	}
 
@@ -7327,7 +7390,7 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 
 
 
-gbFileError gb_file_new(gbFile *f, gbFileDescriptor fd, gbFileOperations const *ops, char const *filename) {
+gbFileError gb_file_new(gbFile *f, gbFileDescriptor fd, gbFileOperations ops, char const *filename) {
 	gbFileError err = gbFileError_None;
 
 	f->ops = ops;
@@ -7366,20 +7429,20 @@ gbFileError gb_file_close(gbFile *f) {
 		return gbFileError_Invalid;
 #endif
 
-	if (!f->ops) f->ops = &gbDefaultFileOperations;
-	f->ops->close(f->fd);
+	if (!f->ops.read_at) f->ops = gbDefaultFileOperations;
+	f->ops.close(f->fd);
 
 	return gbFileError_None;
 }
 
 gb_inline b32 gb_file_read_at_check(gbFile *f, void *buffer, isize size, i64 offset, isize *bytes_read) {
-	if (!f->ops) f->ops = &gbDefaultFileOperations;
-	return f->ops->read_at(f->fd, buffer, size, offset, bytes_read);
+	if (!f->ops.read_at) f->ops = gbDefaultFileOperations;
+	return f->ops.read_at(f->fd, buffer, size, offset, bytes_read);
 }
 
 gb_inline b32 gb_file_write_at_check(gbFile *f, void const *buffer, isize size, i64 offset, isize *bytes_written) {
-	if (!f->ops) f->ops = &gbDefaultFileOperations;
-	return f->ops->write_at(f->fd, buffer, size, offset, bytes_written);
+	if (!f->ops.read_at) f->ops = gbDefaultFileOperations;
+	return f->ops.write_at(f->fd, buffer, size, offset, bytes_written);
 }
 
 
@@ -7393,30 +7456,30 @@ gb_inline b32 gb_file_write_at(gbFile *f, void const *buffer, isize size, i64 of
 
 gb_inline i64 gb_file_seek(gbFile *f, i64 offset) {
 	i64 new_offset = 0;
-	if (!f->ops) f->ops = &gbDefaultFileOperations;
-	f->ops->seek(f->fd, offset, gbSeekWhence_Begin, &new_offset);
+	if (!f->ops.read_at) f->ops = gbDefaultFileOperations;
+	f->ops.seek(f->fd, offset, gbSeekWhence_Begin, &new_offset);
 	return new_offset;
 }
 
 gb_inline i64 gb_file_seek_to_end(gbFile *f) {
 	i64 new_offset = 0;
-	if (!f->ops) f->ops = &gbDefaultFileOperations;
-	f->ops->seek(f->fd, 0, gbSeekWhence_End, &new_offset);
+	if (!f->ops.read_at) f->ops = gbDefaultFileOperations;
+	f->ops.seek(f->fd, 0, gbSeekWhence_End, &new_offset);
 	return new_offset;
 }
 
 // NOTE(bill): Skips a certain amount of bytes
 gb_inline i64 gb_file_skip(gbFile *f, i64 bytes) {
 	i64 new_offset = 0;
-	if (!f->ops) f->ops = &gbDefaultFileOperations;
-	f->ops->seek(f->fd, bytes, gbSeekWhence_Current, &new_offset);
+	if (!f->ops.read_at) f->ops = gbDefaultFileOperations;
+	f->ops.seek(f->fd, bytes, gbSeekWhence_Current, &new_offset);
 	return new_offset;
 }
 
 gb_inline i64 gb_file_tell(gbFile *f) {
 	i64 new_offset = 0;
-	if (!f->ops) f->ops = &gbDefaultFileOperations;
-	f->ops->seek(f->fd, 0, gbSeekWhence_Current, &new_offset);
+	if (!f->ops.read_at) f->ops = gbDefaultFileOperations;
+	f->ops.seek(f->fd, 0, gbSeekWhence_Current, &new_offset);
 	return new_offset;
 }
 gb_inline b32 gb_file_read (gbFile *f, void *buffer, isize size)       { return gb_file_read_at(f, buffer, size, gb_file_tell(f)); }
@@ -7454,7 +7517,7 @@ gb_global gbFile gb__std_files[gbFileStandard_Count] = {{0}};
 
 gb_inline gbFile *const gb_file_get_standard(gbFileStandardType std) {
 	if (!gb__std_file_set) {
-	#define GB__SET_STD_FILE(type, v) gb__std_files[type].fd.p = v; gb__std_files[type].ops = &gbDefaultFileOperations
+	#define GB__SET_STD_FILE(type, v) gb__std_files[type].fd.p = v; gb__std_files[type].ops = gbDefaultFileOperations
 		GB__SET_STD_FILE(gbFileStandard_Input,  GetStdHandle(STD_INPUT_HANDLE));
 		GB__SET_STD_FILE(gbFileStandard_Output, GetStdHandle(STD_OUTPUT_HANDLE));
 		GB__SET_STD_FILE(gbFileStandard_Error,  GetStdHandle(STD_ERROR_HANDLE));
@@ -7493,7 +7556,7 @@ b32 gb_file_exists(char const *name) {
 
 gb_inline gbFile *const gb_file_get_standard(gbFileStandardType std) {
 	if (!gb__std_file_set) {
-	#define GB__SET_STD_FILE(type, v) gb__std_files[type].fd.i = v; gb__std_files[type].ops = &gbDefaultFileOperations
+	#define GB__SET_STD_FILE(type, v) gb__std_files[type].fd.i = v; gb__std_files[type].ops = gbDefaultFileOperations
 		GB__SET_STD_FILE(gbFileStandard_Input,  0);
 		GB__SET_STD_FILE(gbFileStandard_Output, 1);
 		GB__SET_STD_FILE(gbFileStandard_Error,  2);
