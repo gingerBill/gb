@@ -1,8 +1,9 @@
-/* gb_math.h - v0.07  - public domain C math library - no warranty implied; use at your own risk
+/* gb_math.h - v0.07a - public domain C math library - no warranty implied; use at your own risk
    A C math library geared towards game development
    use '#define GB_MATH_IMPLEMENTATION' before including to create the implementation in _ONE_ file
 
 Version History:
+	0.07a - Fix Mat2
 	0.07  - Better Mat4 procedures
 	0.06h - Ignore silly warnings
 	0.06g - Remove memzero
@@ -97,7 +98,7 @@ typedef union gbVec4 {
 
 typedef union gbMat2 {
 	struct { gbVec2 x, y; };
-	gbVec4 col[2];
+	gbVec2 col[2];
 	float e[4];
 } gbMat2;
 
