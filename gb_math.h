@@ -3,6 +3,7 @@
    use '#define GB_MATH_IMPLEMENTATION' before including to create the implementation in _ONE_ file
 
 Version History:
+	0.07b - Fix mat4_inverse
 	0.07a - Fix Mat2
 	0.07  - Better Mat4 procedures
 	0.06h - Ignore silly warnings
@@ -1560,9 +1561,9 @@ void gb_mat4_inverse(gbMat4 *out, gbMat4 *in) {
 	o[3][2] = -(m[0][0] * sf14 - m[0][1] * sf16 + m[0][3] * sf18);
 	o[3][3] = +(m[0][0] * sf15 - m[0][1] * sf17 + m[0][2] * sf18);
 
-	ood = 1.0f / (m[0][0] * o[0][0]
-	              m[0][1] * o[0][1]
-	              m[0][2] * o[0][2]
+	ood = 1.0f / (m[0][0] * o[0][0] +
+	              m[0][1] * o[0][1] +
+	              m[0][2] * o[0][2] +
 	              m[0][3] * o[0][3]);
 
 	o[0][0] *= ood;
