@@ -2190,8 +2190,9 @@ float gb_random_range_float(float min_inc, float max_inc) {
 }
 
 int gb_random_range_int(int min_inc, int max_inc) {
-	static int random_value = 0xdeadbeef; /* Random Value */
-	int diff, result;
+	static unsigned int random_value = 0xdeadbeef; /* Random Value */
+	unsigned int diff;
+	int result;
 	random_value = random_value * 2147001325 + 715136305; /* BCPL generator */
 	diff = max_inc - min_inc + 1;
 	result = random_value % diff;
