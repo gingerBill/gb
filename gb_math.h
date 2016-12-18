@@ -3,6 +3,7 @@
    use '#define GB_MATH_IMPLEMENTATION' before including to create the implementation in _ONE_ file
 
 Version History:
+	0.07d - Fix mat4_inverse
 	0.07c - Add gb_random01
 	0.07b - Fix mat4_inverse
 	0.07a - Fix Mat2
@@ -1565,9 +1566,9 @@ void gb_mat4_inverse(gbMat4 *out, gbMat4 *in) {
 	o[3][3] = +(m[0][0] * sf15 - m[0][1] * sf17 + m[0][2] * sf18);
 
 	ood = 1.0f / (m[0][0] * o[0][0] +
-	              m[1][0] * o[1][0] +
-	              m[2][0] * o[2][0] +
-	              m[3][0] * o[3][0]);
+				  m[0][1] * o[1][0] +
+				  m[0][2] * o[2][0] +
+				  m[0][3] * o[3][0]);
 
 	o[0][0] *= ood;
 	o[0][1] *= ood;
@@ -1585,14 +1586,6 @@ void gb_mat4_inverse(gbMat4 *out, gbMat4 *in) {
 	o[3][1] *= ood;
 	o[3][2] *= ood;
 	o[3][3] *= ood;
-
-	/* Transpose */
-	tmp = o[1][0]; o[1][0] = o[0][1]; o[0][1] = tmp;
-	tmp = o[2][0]; o[2][0] = o[0][2]; o[0][2] = tmp;
-	tmp = o[3][0]; o[3][0] = o[0][3]; o[0][3] = tmp;
-	tmp = o[2][1]; o[2][1] = o[1][2]; o[1][2] = tmp;
-	tmp = o[3][1]; o[3][1] = o[1][3]; o[1][3] = tmp;
-	tmp = o[3][2]; o[3][2] = o[2][3]; o[2][3] = tmp;
 }
 
 
