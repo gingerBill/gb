@@ -1,8 +1,9 @@
-/* gb_math.h - v0.07a - public domain C math library - no warranty implied; use at your own risk
+/* gb_math.h - v0.07c - public domain C math library - no warranty implied; use at your own risk
    A C math library geared towards game development
    use '#define GB_MATH_IMPLEMENTATION' before including to create the implementation in _ONE_ file
 
 Version History:
+	0.07c - Add gb_random01
 	0.07b - Fix mat4_inverse
 	0.07a - Fix Mat2
 	0.07  - Better Mat4 procedures
@@ -499,6 +500,8 @@ GB_MATH_DEF gb_math_u64 gb_hash_murmur64(void const *key, size_t num_bytes, gb_m
 /* TODO(bill): Use a generator for the random numbers */
 GB_MATH_DEF float gb_random_range_float(float min_inc, float max_inc);
 GB_MATH_DEF int   gb_random_range_int  (int min_inc, int max_inc);
+GB_MATH_DEF float gb_random01          (void);
+
 
 
 #if defined(__cplusplus)
@@ -1483,14 +1486,13 @@ gbFloat4 *gb_float44_v(gbVec4 m[4])  { return (gbFloat4 *)m; }
 gbFloat4 *gb_float44_16(float m[16]) { return (gbFloat4 *)m; }
 
 void gb_float44_transpose(float (*vec)[4]) {
-	int i, j;
-	for (j = 0; j < 4; j++) {
-		for (i = j + 1; i < 4; i++) {
-			float t = vec[i][j];
-			vec[i][j] = vec[j][i];
-			vec[j][i] = t;
-		}
-	}
+	float tmp;
+	tmp = vec[1][0]; vec[1][0] = vec[0][1]; vec[0][1] = tmp;
+	tmp = vec[2][0]; vec[2][0] = vec[0][2]; vec[0][2] = tmp;
+	tmp = vec[3][0]; vec[3][0] = vec[0][3]; vec[0][3] = tmp;
+	tmp = vec[2][1]; vec[2][1] = vec[1][2]; vec[1][2] = tmp;
+	tmp = vec[3][1]; vec[3][1] = vec[1][3]; vec[1][3] = tmp;
+	tmp = vec[3][2]; vec[3][2] = vec[2][3]; vec[2][3] = tmp;
 }
 
 void gb_float44_mul(float (*out)[4], float (*mat1)[4], float (*mat2)[4]) {
@@ -1520,6 +1522,7 @@ void gb_mat4_inverse(gbMat4 *out, gbMat4 *in) {
 	gbFloat4 *m = gb_float44_m(in);
 
 	float ood;
+	float tmp;
 
 	float sf00 = m[2][2] * m[3][3] - m[3][2] * m[2][3];
 	float sf01 = m[2][1] * m[3][3] - m[3][1] * m[2][3];
@@ -1542,29 +1545,29 @@ void gb_mat4_inverse(gbMat4 *out, gbMat4 *in) {
 	float sf18 = m[1][0] * m[2][1] - m[2][0] * m[1][1];
 
 	o[0][0] = +(m[1][1] * sf00 - m[1][2] * sf01 + m[1][3] * sf02);
-	o[0][1] = -(m[1][0] * sf00 - m[1][2] * sf03 + m[1][3] * sf04);
-	o[0][2] = +(m[1][0] * sf01 - m[1][1] * sf03 + m[1][3] * sf05);
-	o[0][3] = -(m[1][0] * sf02 - m[1][1] * sf04 + m[1][2] * sf05);
+	o[1][0] = -(m[1][0] * sf00 - m[1][2] * sf03 + m[1][3] * sf04);
+	o[2][0] = +(m[1][0] * sf01 - m[1][1] * sf03 + m[1][3] * sf05);
+	o[3][0] = -(m[1][0] * sf02 - m[1][1] * sf04 + m[1][2] * sf05);
 
-	o[1][0] = -(m[0][1] * sf00 - m[0][2] * sf01 + m[0][3] * sf02);
+	o[0][1] = -(m[0][1] * sf00 - m[0][2] * sf01 + m[0][3] * sf02);
 	o[1][1] = +(m[0][0] * sf00 - m[0][2] * sf03 + m[0][3] * sf04);
-	o[1][2] = -(m[0][0] * sf01 - m[0][1] * sf03 + m[0][3] * sf05);
-	o[1][3] = +(m[0][0] * sf02 - m[0][1] * sf04 + m[0][2] * sf05);
+	o[2][1] = -(m[0][0] * sf01 - m[0][1] * sf03 + m[0][3] * sf05);
+	o[3][1] = +(m[0][0] * sf02 - m[0][1] * sf04 + m[0][2] * sf05);
 
-	o[2][0] = +(m[0][1] * sf06 - m[0][2] * sf07 + m[0][3] * sf08);
-	o[2][1] = -(m[0][0] * sf06 - m[0][2] * sf09 + m[0][3] * sf10);
+	o[0][2] = +(m[0][1] * sf06 - m[0][2] * sf07 + m[0][3] * sf08);
+	o[1][2] = -(m[0][0] * sf06 - m[0][2] * sf09 + m[0][3] * sf10);
 	o[2][2] = +(m[0][0] * sf11 - m[0][1] * sf09 + m[0][3] * sf12);
-	o[2][3] = -(m[0][0] * sf08 - m[0][1] * sf10 + m[0][2] * sf12);
+	o[3][2] = -(m[0][0] * sf08 - m[0][1] * sf10 + m[0][2] * sf12);
 
-	o[3][0] = -(m[0][1] * sf13 - m[0][2] * sf14 + m[0][3] * sf15);
-	o[3][1] = +(m[0][0] * sf13 - m[0][2] * sf16 + m[0][3] * sf17);
-	o[3][2] = -(m[0][0] * sf14 - m[0][1] * sf16 + m[0][3] * sf18);
+	o[0][3] = -(m[0][1] * sf13 - m[0][2] * sf14 + m[0][3] * sf15);
+	o[1][3] = +(m[0][0] * sf13 - m[0][2] * sf16 + m[0][3] * sf17);
+	o[2][3] = -(m[0][0] * sf14 - m[0][1] * sf16 + m[0][3] * sf18);
 	o[3][3] = +(m[0][0] * sf15 - m[0][1] * sf17 + m[0][2] * sf18);
 
 	ood = 1.0f / (m[0][0] * o[0][0] +
-	              m[0][1] * o[0][1] +
-	              m[0][2] * o[0][2] +
-	              m[0][3] * o[0][3]);
+	              m[1][0] * o[1][0] +
+	              m[2][0] * o[2][0] +
+	              m[3][0] * o[3][0]);
 
 	o[0][0] *= ood;
 	o[0][1] *= ood;
@@ -1582,6 +1585,14 @@ void gb_mat4_inverse(gbMat4 *out, gbMat4 *in) {
 	o[3][1] *= ood;
 	o[3][2] *= ood;
 	o[3][3] *= ood;
+
+	/* Transpose */
+	tmp = o[1][0]; o[1][0] = o[0][1]; o[0][1] = tmp;
+	tmp = o[2][0]; o[2][0] = o[0][2]; o[0][2] = tmp;
+	tmp = o[3][0]; o[3][0] = o[0][3]; o[0][3] = tmp;
+	tmp = o[2][1]; o[2][1] = o[1][2]; o[1][2] = tmp;
+	tmp = o[3][1]; o[3][1] = o[1][3]; o[1][3] = tmp;
+	tmp = o[3][2]; o[3][2] = o[2][3]; o[2][3] = tmp;
 }
 
 
@@ -2186,14 +2197,18 @@ float gb_random_range_float(float min_inc, float max_inc) {
 }
 
 int gb_random_range_int(int min_inc, int max_inc) {
-	static int random_value = 0xdeadbeef; /* Random Value */
-	int diff, result;
+	static unsigned int random_value = 0xdeadbeef; /* Random Value */
+	unsigned int diff, result;
 	random_value = random_value * 2147001325 + 715136305; /* BCPL generator */
 	diff = max_inc - min_inc + 1;
 	result = random_value % diff;
 	result += min_inc;
 
 	return result;
+}
+
+float gb_random01(void) {
+	return gb_random_range_float(0.0f, 1.0f);
 }
 
 #if defined(__GCC__) || defined(__GNUC__)
