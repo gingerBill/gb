@@ -4987,6 +4987,9 @@ isize gb_affinity_thread_count_for_core(gbAffinity *a, isize core) {
 #warning gbAffinity is mostly mostly untested on Linux. All I know is that it compiles and runs.
 #warning TODO(bill): gb_affinity_set on Linux is a stub
 
+// I have to read /proc/cpuinfo to get the number of threads per core.
+#include <stdio.h>
+
 void gb_affinity_init(gbAffinity *a) {
 	usize count, count_size = gb_size_of(count);
 
