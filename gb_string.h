@@ -2,6 +2,7 @@
 	A Simple Dynamic Strings Library for C and C++
 
 	Version History:
+		0.95b - Fix issue #21
 		0.95a - Change brace style because why not?
 		0.95  - C90 Support
 	    0.94  - Remove "declare anywhere"
@@ -325,11 +326,10 @@ gbString gb_make_string_length(void const *init_str, gbUsize len) {
 	gbStringHeader *header;
 	gbUsize header_size = sizeof(gbStringHeader);
 	void *ptr = GB_ALLOC(header_size + len + 1);
-	if (!init_str)
-		memset(ptr, 0, header_size + len + 1);
-
 	if (ptr == GB_NULLPTR)
 		return GB_NULLPTR;
+	if (!init_str)
+		memset(ptr, 0, header_size + len + 1);
 
 	str = (char *)ptr + header_size;
 	header = GB_STRING_HEADER(str);
