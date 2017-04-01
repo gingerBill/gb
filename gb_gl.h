@@ -696,6 +696,7 @@ typedef struct gbglBasicState {
 	u32 vao, vbo, ebo;
 	u32 nearest_sampler;
 	u32 linear_sampler;
+	u32 mipmap_sampler;
 	gbglShader ortho_tex_shader;
 	gbglShader ortho_col_shader;
 
@@ -1299,8 +1300,9 @@ b32 gbgl_load_texture2d_from_memory(gbglTexture *tex, void const *data, i32 widt
 	             gbglTextureFormat[channel_count-1],
 	             GL_UNSIGNED_BYTE, data);
 
-	glBindTexture(GL_TEXTURE_2D, 0);
 	glGenerateMipmap(GL_TEXTURE_2D);
+
+	glBindTexture(GL_TEXTURE_2D, 0);
 	glFinish();
 
 
@@ -1909,6 +1911,7 @@ void gbgl_bs_init(gbglBasicState *bs, i32 window_width, i32 window_height) {
 
 	bs->nearest_sampler = gbgl_make_sampler(GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
 	bs->linear_sampler  = gbgl_make_sampler(GL_LINEAR,  GL_LINEAR,  GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
+	bs->mipmap_sampler = gbgl_make_sampler(GL_LINEAR_MIPMAP_LINEAR, GL_LINEAR, GL_REPEAT, GL_REPEAT);
 
 	gbgl_load_shader_from_memory_vf(&bs->ortho_tex_shader,
 		"#version 410 core\n"
@@ -2063,7 +2066,7 @@ void gbgl_bs_draw_textured_rect(gbglBasicState *bs, gbglTexture *tex, f32 x, f32
 
 	gbgl_use_shader(&bs->ortho_tex_shader);
 	gbgl_set_uniform_mat4(&bs->ortho_tex_shader, "u_ortho_mat", bs->ortho_mat);
-	gbgl_bind_texture2d(tex, 0, bs->nearest_sampler);
+	gbgl_bind_texture2d(tex, 0, bs->mipmap_sampler);
 
 	gbgl_vbo_copy(bs->vbo, bs->vertices, 4*gb_size_of(bs->vertices[0]), 0);
 
