@@ -1266,6 +1266,9 @@ GB_DEF GB_ALLOCATOR_PROC(gb_scratch_allocator_proc);
 //
 // Stack Memory Allocator
 //
+// TODO(ZaKlaus): While this was tested on a simple code, further testing would be recommended.
+// I am also not sure whether it is implemented correctly neither if it misses something.
+//
 
 typedef struct gbStackMemory {
     gbAllocator backing;
