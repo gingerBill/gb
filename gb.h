@@ -4815,7 +4815,7 @@ GB_ALLOCATOR_PROC(gb_heap_allocator_proc) {
 	gb_unused(old_size);
 // TODO(bill): Throughly test!
 	switch (type) {
-#if defined(GB_COMPILER_MSVC)
+#if defined(GB_COMPILER_MSVC) || (defined(GB_COMPILER_GCC) && defined(GB_SYSTEM_WINDOWS))
 	case gbAllocation_Alloc:
 		ptr = _aligned_malloc(size, alignment);
 		if (flags & gbAllocatorFlag_ClearToZero)
