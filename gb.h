@@ -770,6 +770,7 @@ extern "C++" {
 #endif
 
 GB_DEF void gb_assert_handler(char const *condition, char const *file, i32 line, char const *msg, ...);
+GB_DEF i32  gb_assert_crash(char const *condition);
 
 
 
@@ -1735,6 +1736,144 @@ GB_DEF void *gb__array_set_capacity(void *array, isize capacity, isize element_s
 		gb_array_set_capacity(x, new_capacity); \
 } while (0)
 
+
+
+    ////////////////////////////////////////////////////////////////
+    //
+    // Bit stream
+    //
+    // Bitstream is a fixed-size buffer using FIFO scheme.
+    // It's purpose is to serialize data into sequential chunk
+    // which can be portable.
+    //
+
+#if 0
+int foo(void) {
+    gbBitstream bsp;
+    gb_bs_init(bsp, gb_heap_allocator(), 0);
+
+    gb_bs_write_value(bsp, 5.824442232, f64);
+    gb_bs_write_value(bsp, -42230, i64);
+    gb_bs_write_value(bsp, 322, u64);
+
+    gb_printf("current capacity: %d\n", gb_bs_capacity(bsp));
+    f64 boo = gb_bs_read_value(bsp, f64);
+    i64 foo = gb_bs_read_value(bsp, i64);
+    gb_bs_write_value_at(bsp, 8, u64,  8 + 8);
+
+    gb_printf("%f %lld\n", boo, foo);
+
+    gb_bs_size(bsp);
+    gb_bs_capacity(bsp);
+    gb_bs_read_pos(bsp);
+    gb_bs_write_pos(bsp);
+
+    gb_bs_free(bsp);
+    
+    return 0;
+}
+#endif
+
+    typedef void *gbBitstream;
+
+    typedef struct gbBitstreamHeader {
+        gbAllocator allocator;
+
+        usize capacity;
+        usize read_pos;
+        usize write_pos;
+    } gbBitstreamHeader;
+
+#ifndef GB_BS_GROW_FORMULA
+#define GB_BS_GROW_FORMULA(x) (2*(x) + 16)
+#endif
+
+#define GB_BS_HEADER(x) (cast(gbBitstreamHeader *)(x) - 1)
+
+#define gb_bs_init(x, allocator_, size) do {                                                                             \
+        void **gb__bs_ = cast(void **)&(x);                                                                           \
+        gbBitstreamHeader *gb__bsh = cast(gbBitstreamHeader *)gb_alloc(allocator_, gb_size_of(gbBitstreamHeader) + size); \
+        gb__bsh->allocator = allocator_;                                                                              \
+        gb__bsh->capacity  = size;                                                                                    \
+        gb__bsh->read_pos  = 0;                                                                                       \
+        gb__bsh->write_pos = 0;                                                                                       \
+        *gb__bs_ = cast(void *)(gb__bsh+1);                                                                          \
+    } while (0)
+
+#define gb_bs_free(x) do {                                                                                            \
+        gbBitstreamHeader *gb__bsh = GB_BS_HEADER(x);                                                                  \
+        gb_free(gb__bsh->allocator, gb__bsh);                                                                       \
+        x = NULL;                                                                                                      \
+    } while (0)
+
+#define gb_bs_capacity(x)  GB_BS_HEADER(x)->capacity
+#define gb_bs_read_pos(x)  GB_BS_HEADER(x)->read_pos
+#define gb_bs_write_pos(x) GB_BS_HEADER(x)->write_pos
+#define gb_bs_size(x)      gb_bs_write_pos(x)
+
+#define gb_bs_set_capacity(x, new_capacity) do {                                                                                        \
+        void **gb__bs_ = cast(void **)&(x);                                                                                             \
+        gbBitstreamHeader *gb__bs_h = GB_BS_HEADER(x);                                                                                   \
+        gbBitstreamHeader *gb__bsh = cast(gbBitstreamHeader *)gb_alloc(gb__bs_h->allocator, gb_size_of(gbBitstreamHeader) + new_capacity); \
+        *gb__bsh = *gb__bs_h;                                                                                                          \
+        gb__bsh->capacity = new_capacity;                                                                                               \
+        void *gb__bs = cast(void *)(gb__bsh+1);                                                                                        \
+        gb_memmove(gb__bs, x, gb_bs_capacity(x));                                                                                     \
+        gb_free(gb__bs_h->allocator, gb__bs_h);                                                                                       \
+        *gb__bs_ = cast(void *)(gb__bsh+1);                                                                                            \
+    } while (0)
+
+#define gb_bs_grow(x, min_capacity) do {                                                                                                \
+        isize new_capacity = GB_BS_GROW_FORMULA(gb_bs_capacity(x));                                                                    \
+        if (new_capacity < (min_capacity))                                                                                               \
+            new_capacity = (min_capacity);                                                                                               \
+        gb_bs_set_capacity(x, new_capacity);                                                                                            \
+    } while (0)
+
+#define gb_bs_fits(x, size) do {                                                                                                        \
+        if (size > gb_bs_capacity(x)) {                                                                                                 \
+            gb_bs_grow(x, gb_bs_capacity(x) + size);                                                                                   \
+        }                                                                                                                                \
+    } while (0)
+
+#define gb_bs_write_size_at(x, value, size, offset) do {                                                   \
+    if (offset == 0) gb_bs_fits(x, gb_bs_write_pos(x) + size); \
+        else             gb_bs_fits(x, offset + size);                                                     \
+        gbBitstreamHeader *gb__bsh = GB_BS_HEADER(x);                                                       \
+        if (((offset == 0) ? gb__bsh->write_pos : offset) + size > gb_bs_capacity(x))                     \
+            gb_bs_grow(x, gb_bs_capacity(x) + size + offset);                                             \
+        gb_memcopy(x + ((offset == 0) ? gb__bsh->write_pos : offset), value, size);                       \
+        if (offset == 0) gb__bsh->write_pos += size;                                                       \
+    } while (0)
+
+#define gb_bs_read_size_at(x, value, size, offset) do {                                                               \
+            gbBitstreamHeader *gb__bsh = GB_BS_HEADER(x);                                                              \
+            GB_ASSERT_MSG(((offset == 0) ? gb__bsh->read_pos : offset) + size <= gb_bs_capacity(x),                 \
+                           "gb_bs_read: trying to read from outside of the bounds");                                  \
+            gb_memcopy(value, x + ((offset == 0) ? gb__bsh->read_pos : offset), size);                               \
+            if (offset == 0) gb__bsh->read_pos += size;                                                               \
+        } while (0)
+
+#define gb_bs_write_value_at(x, value, type, offset) do {                                                             \
+        if (offset == 0) gb_bs_fits(x, gb_bs_write_pos(x) + gb_size_of(type));                                      \
+        else             gb_bs_fits(x, offset + gb_size_of(type));                                                   \
+        gbBitstreamHeader *gb__bsh = GB_BS_HEADER(x);                                                                  \
+        if (((offset == 0) ? gb__bsh->write_pos : offset) + gb_size_of(type) > gb_bs_capacity(x))                   \
+            gb_bs_grow(x, gb_bs_capacity(x) + gb_size_of(type) + offset);                                           \
+        *(type *)(gb_pointer_add(x, (offset == 0) ? gb__bsh->write_pos : offset)) = value;                           \
+        if (offset == 0) gb__bsh->write_pos += gb_size_of(type);                                                     \
+    } while (0)
+
+#define gb_bs_read_value_at(x, type, offset)                                                                          \
+    (gb_size_of(type) + ((offset == 0) ? gb_bs_read_pos(x) : offset) <= (gb_bs_capacity(x)))                        \
+    ? *(type *)(gb_pointer_add(x, (offset == 0) ? gb_bs_read_pos(x) : offset))                                       \
+    : gb_assert_crash("gb_bs_read: trying to read from outside of the bounds");                                      \
+    if (offset == 0) GB_BS_HEADER(x)->read_pos += gb_size_of(type);
+
+#define gb_bs_write_size(x, value, size)   gb_bs_write_size_at(x, value, size, 0)
+#define gb_bs_read_size(x, value, size)    gb_bs_read_size_at(x, value, size, 0)
+#define gb_bs_write_value(x, value, type)  gb_bs_write_value_at(x, value, type, 0)
+#define gb_bs_read_value(x, type)          gb_bs_read_value_at(x, type, 0)
 
 
 
@@ -3615,6 +3754,13 @@ void gb_assert_handler(char const *condition, char const *file, i32 line, char c
 		va_end(va);
 	}
 	gb_printf_err("\n");
+}
+
+
+i32 gb_assert_crash(char const *condition) {
+    GB_PANIC(condition);
+    
+    return 0;
 }
 
 b32 gb_is_power_of_two(isize x) {
