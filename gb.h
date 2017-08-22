@@ -4085,7 +4085,7 @@ void gb_memswap(void *i, void *j, isize size) {
 
 #define GB__ONES        (cast(usize)-1/U8_MAX)
 #define GB__HIGHS       (GB__ONES * (U8_MAX/2+1))
-#define GB__HAS_ZERO(x) ((x)-GB__ONES & ~(x) & GB__HIGHS)
+#define GB__HAS_ZERO(x) (((x)-GB__ONES) & ~(x) & GB__HIGHS)
 
 
 void const *gb_memchr(void const *data, u8 c, isize n) {
@@ -8069,7 +8069,7 @@ gb_inline b32 gb_path_is_absolute(char const *path) {
 	b32 result = false;
 	GB_ASSERT_NOT_NULL(path);
 #if defined(GB_SYSTEM_WINDOWS)
-	result == (gb_strlen(path) > 2) &&
+	result = (gb_strlen(path) > 2) &&
 	          gb_char_is_alpha(path[0]) &&
 	          (path[1] == ':' && path[2] == GB_PATH_SEPARATOR);
 #else
