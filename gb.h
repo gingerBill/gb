@@ -1843,8 +1843,6 @@ int foo(void) {
     if (offset == 0) gb_bs_fits(x, gb_bs_write_pos(x) + size); \
         else             gb_bs_fits(x, offset + size);                                                     \
         gbBitstreamHeader *gb__bsh = GB_BS_HEADER(x);                                                       \
-        if (((offset == 0) ? gb__bsh->write_pos : offset) + size > gb_bs_capacity(x))                     \
-            gb_bs_grow(x, gb_bs_capacity(x) + size + offset);                                             \
         gb_memcopy(x + ((offset == 0) ? gb__bsh->write_pos : offset), value, size);                       \
         if (offset == 0) gb__bsh->write_pos += size;                                                       \
     } while (0)
@@ -1861,8 +1859,6 @@ int foo(void) {
         if (offset == 0) gb_bs_fits(x, gb_bs_write_pos(x) + gb_size_of(type));                                      \
         else             gb_bs_fits(x, offset + gb_size_of(type));                                                   \
         gbBitstreamHeader *gb__bsh = GB_BS_HEADER(x);                                                                  \
-        if (((offset == 0) ? gb__bsh->write_pos : offset) + gb_size_of(type) > gb_bs_capacity(x))                   \
-            gb_bs_grow(x, gb_bs_capacity(x) + gb_size_of(type) + offset);                                           \
         *(type *)(gb_pointer_add(x, (offset == 0) ? gb__bsh->write_pos : offset)) = value;                           \
         if (offset == 0) gb__bsh->write_pos += gb_size_of(type);                                                     \
     } while (0)
