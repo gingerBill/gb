@@ -1261,7 +1261,29 @@ GB_DEF b32  gb_scratch_memory_is_in_use(gbScratchMemory *s, void *ptr);
 GB_DEF gbAllocator gb_scratch_allocator(gbScratchMemory *s);
 GB_DEF GB_ALLOCATOR_PROC(gb_scratch_allocator_proc);
 
-// TODO(bill): Stack allocator
+
+//
+// Stack Memory Allocator
+//
+
+typedef struct gbStackMemory {
+    gbAllocator backing;
+    
+    void *physical_start;
+    isize total_size;
+    isize allocated;
+} gbStackMemory;
+
+GB_DEF void gb_stack_memory_init_from_memory(gbStackMemory *s, void *start, isize size);
+GB_DEF void gb_stack_memory_init            (gbStackMemory *s, gbAllocator backing, isize size);
+GB_DEF b32  gb_stack_memory_is_in_use       (gbStackMemory *s, void *ptr);
+GB_DEF void gb_stack_memory_free            (gbStackMemory *s);
+
+// Allocation Types: alloc, free, free_all
+GB_DEF gbAllocator gb_stack_allocator(gbStackMemory *s);
+GB_DEF GB_ALLOCATOR_PROC(gb_stack_allocator_proc);
+
+
 // TODO(bill): Fixed heap allocator
 // TODO(bill): General heap allocator. Maybe a TCMalloc like clone?
 
@@ -5692,7 +5714,115 @@ GB_ALLOCATOR_PROC(gb_scratch_allocator_proc) {
 
 
 
+    //
+    // Stack Memory Allocator
+    //
 
+#define GB_STACK_ALLOC_OFFSET sizeof(u64)
+    GB_STATIC_ASSERT(GB_STACK_ALLOC_OFFSET == 8);
+
+    gb_inline void gb_stack_memory_init_from_memory(gbStackMemory *s, void *start, isize size) {
+        s->physical_start = start;
+        s->total_size = size;
+        s->allocated = 0;
+    }
+
+    gb_inline void gb_stack_memory_init(gbStackMemory *s, gbAllocator backing, isize size) {
+        s->backing = backing;
+        s->physical_start = gb_alloc(backing, size);
+        s->total_size = size;
+        s->allocated = 0;
+    }
+
+    gb_inline b32 gb_stack_memory_is_in_use(gbStackMemory *s, void *ptr) {
+        if (s->allocated == 0) return false;
+
+        if (ptr > s->physical_start && ptr < gb_pointer_add(s->physical_start, s->total_size)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    gb_inline void gb_stack_memory_free(gbStackMemory *s) {
+        if (s->backing.proc) {
+            gb_free(s->backing, s->physical_start);
+            s->physical_start = NULL;
+        }
+    }
+
+    typedef union gbStackMemoryHeader {
+        void *a_ptr;
+        u8   *a_u8;
+        u64  *a_u64;
+    } gbStackMemoryHeader;
+
+    gb_inline gbAllocator gb_stack_allocator(gbStackMemory *s) {
+        gbAllocator a;
+        a.proc = gb_stack_allocator_proc;
+        a.data = s;
+        return a;
+    }
+
+    GB_ALLOCATOR_PROC(gb_stack_allocator_proc) {
+        gbStackMemory *s = cast(gbStackMemory *)allocator_data;
+        void *ptr = NULL;
+        GB_ASSERT_NOT_NULL(s);
+        gb_unused(old_size);
+        gb_unused(flags);
+
+        switch(type) {
+        case gbAllocation_Alloc: {
+            size += GB_STACK_ALLOC_OFFSET;
+            u64 alloc_offset = s->allocated;
+
+            void *curr = cast(u64 *)gb_align_forward(cast(u64 *)s->physical_start + s->allocated + GB_STACK_ALLOC_OFFSET, alignment) - GB_STACK_ALLOC_OFFSET;
+
+            if (cast(u64 *)curr + size > cast(u64 *)gb_pointer_add(s->physical_start, s->total_size)) {
+                if (s->backing.proc) {
+                    s->physical_start = gb_resize_align(s->backing, s->physical_start, s->total_size, s->total_size + size, alignment);
+                    s->total_size += size;
+                }
+                else {
+                    GB_PANIC("Can not resize stack's memory! Allocator not defined!");
+                }
+            }
+
+            s->allocated = gb_pointer_diff(curr, s->physical_start);
+
+            gbStackMemoryHeader h;
+
+            h.a_u8 = cast(u8 *)curr;
+            *h.a_u64 = alloc_offset;
+            h.a_u8 += GB_STACK_ALLOC_OFFSET;
+
+            ptr = h.a_ptr;
+            s->allocated += size;
+        }break;
+
+        case gbAllocation_Free: {
+            if (old_memory) {
+                gbStackMemoryHeader h;
+
+                h.a_ptr = old_memory;
+                h.a_u8 -= GB_STACK_ALLOC_OFFSET;
+
+                u64 alloc_offset = *h.a_u64;
+
+                s->allocated = alloc_offset;
+            }
+        }break;
+
+        case gbAllocation_FreeAll: {
+            s->allocated = 0;
+        }break;
+
+        case gbAllocation_Resize: {
+            GB_PANIC("You cannot resize something allocated by a stack.");
+        }break;
+        }
+        return ptr;
+    }
 
 
 ////////////////////////////////////////////////////////////////
