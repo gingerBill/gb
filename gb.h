@@ -1745,7 +1745,7 @@ GB_DEF void *gb__array_set_capacity(void *array, isize capacity, isize element_s
     //
     // Bit stream
     //
-    // Bitstream is a fixed-size buffer using FIFO scheme.
+    // Bitstream is a buffer using FIFO scheme (stack).
     // It's purpose is to serialize data into sequential chunk
     // which can be portable.
     //
