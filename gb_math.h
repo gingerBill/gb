@@ -483,7 +483,10 @@ GB_MATH_DEF void gb_quat_squad_approx(gbQuat *d, gbQuat p, gbQuat a, gbQuat b, g
 
 /* Rects */
 GB_MATH_DEF gbRect2 gb_rect2(gbVec2 pos, gbVec2 dim);
+GB_MATH_DEF gbRect2 gb_rect2v(float v[4]);
+
 GB_MATH_DEF gbRect3 gb_rect3(gbVec3 pos, gbVec3 dim);
+GB_MATH_DEF gbRect3 gb_rect3v(float v[6]);
 
 GB_MATH_DEF int gb_rect2_contains           (gbRect2 a, float x, float y);
 GB_MATH_DEF int gb_rect2_contains_vec2      (gbRect2 a, gbVec2 p);
@@ -2025,12 +2028,27 @@ gbRect2 gb_rect2(gbVec2 pos, gbVec2 dim) {
 	return r;
 }
 
+gbRect2 gb_rect2v(float v[4]) {
+	gbRect2 r;
+	r.pos = gb_vec2v(&v[0]);
+	r.dim = gb_vec2v(&v[2]);
+	return r;
+}
+
 gbRect3 gb_rect3(gbVec3 pos, gbVec3 dim) {
 	gbRect3 r;
 	r.pos = pos;
 	r.dim = dim;
 	return r;
 }
+
+gbRect3 gb_rect3v(float v[6]) {
+	gbRect3 r;
+	r.pos = gb_vec3v(&v[0]);
+	r.dim = gb_vec3v(&v[3]);
+	return r;
+}
+
 
 int gb_rect2_contains(gbRect2 a, float x, float y) {
 	float min_x = gb_min(a.pos.x, a.pos.x+a.dim.x);
