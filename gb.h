@@ -770,7 +770,6 @@ extern "C++" {
 #endif
 
 GB_DEF void gb_assert_handler(char const *condition, char const *file, i32 line, char const *msg, ...);
-GB_DEF i32  gb_assert_crash(char const *condition);
 
 
 
@@ -1777,7 +1776,7 @@ int foo(void) {
 }
 #endif
 
-    typedef void *gbBitstream;
+    typedef void *gbBitstreamHandle;
 
     typedef struct gbBitstreamHeader {
         gbAllocator allocator;
@@ -1840,7 +1839,7 @@ int foo(void) {
     } while (0)
 
 #define gb_bs_write_size_at(x, value, size, offset) do {                                                   \
-    if (offset == 0) gb_bs_fits(x, gb_bs_write_pos(x) + size); \
+        if (offset == 0) gb_bs_fits(x, gb_bs_write_pos(x) + size); \
         else             gb_bs_fits(x, offset + size);                                                     \
         gbBitstreamHeader *gb__bsh = GB_BS_HEADER(x);                                                       \
         gb_memcopy(x + ((offset == 0) ? gb__bsh->write_pos : offset), value, size);                       \
@@ -1863,10 +1862,9 @@ int foo(void) {
         if (offset == 0) gb__bsh->write_pos += gb_size_of(type);                                                     \
     } while (0)
 
+    // TODO(ZaKlaus): Error handling
 #define gb_bs_read_value_at(x, type, offset)                                                                          \
-    (gb_size_of(type) + ((offset == 0) ? gb_bs_read_pos(x) : offset) <= (gb_bs_capacity(x)))                        \
-    ? *(type *)(gb_pointer_add(x, (offset == 0) ? gb_bs_read_pos(x) : offset))                                       \
-    : gb_assert_crash("gb_bs_read: trying to read from outside of the bounds");                                      \
+    *(type *)(gb_pointer_add(x, (offset == 0) ? gb_bs_read_pos(x) : offset));                                       \
     if (offset == 0) GB_BS_HEADER(x)->read_pos += gb_size_of(type);
 
 #define gb_bs_write_size(x, value, size)   gb_bs_write_size_at(x, value, size, 0)
@@ -3753,13 +3751,6 @@ void gb_assert_handler(char const *condition, char const *file, i32 line, char c
 		va_end(va);
 	}
 	gb_printf_err("\n");
-}
-
-
-i32 gb_assert_crash(char const *condition) {
-    GB_PANIC(condition);
-    
-    return 0;
 }
 
 b32 gb_is_power_of_two(isize x) {
