@@ -301,6 +301,11 @@ extern "C" {
 
 	#include <malloc.h> // NOTE(bill): _aligned_*()
 	#include <intrin.h>
+    
+    // TODO(ZaKlaus): Find a better way to get this flag in MinGW.
+    #if defined(GB_COMPILER_GCC) && !defined(WC_ERR_INVALID_CHARS)
+        #define WC_ERR_INVALID_CHARS 0x0080
+    #endif
 #else
 	#include <dlfcn.h>
 	#include <errno.h>
@@ -957,7 +962,7 @@ gb_mutex_init(&m);
 }
 #endif
 
-
+struct gbThread;
 
 #define GB_THREAD_PROC(name) isize name(struct gbThread *thread)
 typedef GB_THREAD_PROC(gbThreadProc);
