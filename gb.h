@@ -1,4 +1,4 @@
-/* gb.h - v0.27  - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.31  - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -58,6 +58,10 @@ TODOS
 	- More date & time functions
 
 VERSION HISTORY
+	0.31  - Add gb_file_remove
+	0.30  - Changes to gbThread (and gbMutex on Windows)
+	0.29  - Add extras for gbString
+	0.28  - Handle UCS2 correctly in Win32 part
 	0.27  - OSX fixes and Linux gbAffinity
 	0.26d - Minor changes to how gbFile works
 	0.26c - gb_str_to_f* fix
@@ -163,11 +167,11 @@ extern "C" {
 #endif
 
 
-#ifndef GB_EDIAN_ORDER
-#define GB_EDIAN_ORDER
+#ifndef GB_ENDIAN_ORDER
+#define GB_ENDIAN_ORDER
 	// TODO(bill): Is the a good way or is it better to test for certain compilers and macros?
-	#define GB_IS_BIG_EDIAN    (!*(u8*)&(u16){1})
-	#define GB_IS_LITTLE_EDIAN (!GB_IS_BIG_EDIAN)
+	#define GB_IS_BIG_ENDIAN    (!*(u8*)&(u16){1})
+	#define GB_IS_LITTLE_ENDIAN (!GB_IS_BIG_ENDIAN)
 #endif
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -274,8 +278,11 @@ extern "C" {
 
 
 // TODO(bill): How many of these headers do I really need?
-#include <stdarg.h>
-#include <stddef.h>
+// #include <stdarg.h>
+#if !defined(GB_SYSTEM_WINDOWS)
+	#include <stddef.h>
+	#include <stdarg.h>
+#endif
 
 
 
@@ -312,6 +319,10 @@ extern "C" {
 	#include <sys/types.h>
 	#include <time.h>
 	#include <unistd.h>
+
+	#if defined(GB_CPU_X86)
+		#include <xmmintrin.h>
+	#endif
 #endif
 
 #if defined(GB_SYSTEM_OSX)
@@ -424,7 +435,7 @@ typedef i32 b32; // NOTE(bill): Prefer this!!!
 
 // NOTE(bill): Get true and false
 #if !defined(__cplusplus)
-	#if (defined(_MSC_VER) && _MSC_VER <= 1800) || (!defined(_MSC_VER) && !defined(__STDC_VERSION__))
+	#if (defined(_MSC_VER) && _MSC_VER < 1800) || (!defined(_MSC_VER) && !defined(__STDC_VERSION__))
 		#ifndef true
 		#define true  (0 == 0)
 		#endif
@@ -705,7 +716,7 @@ extern "C++" {
 #endif
 
 #ifndef gb_is_between
-#define gb_is_between(x, lower, upper) (((x) >= (lower)) && ((x) <= (upper)))
+#define gb_is_between(x, lower, upper) (((lower) <= (x)) && ((x) <= (upper)))
 #endif
 
 #ifndef gb_abs
@@ -805,6 +816,14 @@ GB_DEF void        gb_memswap   (void *i, void *j, isize size);
 GB_DEF void const *gb_memchr    (void const *data, u8 byte_value, isize size);
 GB_DEF void const *gb_memrchr   (void const *data, u8 byte_value, isize size);
 
+
+#ifndef gb_memcopy_array
+#define gb_memcopy_array(dst, src, count) gb_memcopy((dst), (src), gb_size_of(*(dst))*(count))
+#endif
+
+#ifndef gb_memmove_array
+#define gb_memmove_array(dst, src, count) gb_memmove((dst), (src), gb_size_of(*(dst))*(count))
+#endif
 
 // NOTE(bill): Very similar to doing `*cast(T *)(&u)`
 #ifndef GB_BIT_CAST
@@ -911,12 +930,12 @@ GB_DEF void gb_semaphore_wait   (gbSemaphore *s);
 
 
 // Mutex
-// TODO(bill): Should this be replaced with a CRITICAL_SECTION on win32 or is the better?
 typedef struct gbMutex {
-	gbSemaphore semaphore;
-	gbAtomic32  counter;
-	gbAtomic32  owner;
-	i32         recursion;
+#if defined(GB_SYSTEM_WINDOWS)
+	CRITICAL_SECTION win32_critical_section;
+#else
+	pthread_mutex_t pthread_mutex;
+#endif
 } gbMutex;
 
 GB_DEF void gb_mutex_init    (gbMutex *m);
@@ -940,7 +959,7 @@ gb_mutex_init(&m);
 
 
 
-#define GB_THREAD_PROC(name) void name(void *data)
+#define GB_THREAD_PROC(name) isize name(struct gbThread *thread)
 typedef GB_THREAD_PROC(gbThreadProc);
 
 typedef struct gbThread {
@@ -951,7 +970,9 @@ typedef struct gbThread {
 #endif
 
 	gbThreadProc *proc;
-	void *        data;
+	void *        user_data;
+	isize         user_index;
+	isize         return_value;
 
 	gbSemaphore   semaphore;
 	isize         stack_size;
@@ -959,7 +980,7 @@ typedef struct gbThread {
 } gbThread;
 
 GB_DEF void gb_thread_init            (gbThread *t);
-GB_DEF void gb_thread_destory         (gbThread *t);
+GB_DEF void gb_thread_destroy         (gbThread *t);
 GB_DEF void gb_thread_start           (gbThread *t, gbThreadProc *proc, void *data);
 GB_DEF void gb_thread_start_with_stack(gbThread *t, gbThreadProc *proc, void *data, isize stack_size);
 GB_DEF void gb_thread_join            (gbThread *t);
@@ -1530,6 +1551,8 @@ GB_DEF void     gb_string_clear          (gbString str);
 GB_DEF gbString gb_string_append         (gbString str, gbString const other);
 GB_DEF gbString gb_string_append_length  (gbString str, void const *other, isize num_bytes);
 GB_DEF gbString gb_string_appendc        (gbString str, char const *other);
+GB_DEF gbString gb_string_append_rune    (gbString str, Rune r);
+GB_DEF gbString gb_string_append_fmt     (gbString str, char const *fmt, ...);
 GB_DEF gbString gb_string_set            (gbString str, char const *cstr);
 GB_DEF gbString gb_string_make_space_for (gbString str, isize add_len);
 GB_DEF isize    gb_string_allocation_size(gbString const str);
@@ -1947,6 +1970,7 @@ typedef enum gbSeekWhenceType {
 typedef enum gbFileError {
 	gbFileError_None,
 	gbFileError_Invalid,
+	gbFileError_InvalidFilename,
 	gbFileError_Exists,
 	gbFileError_NotExists,
 	gbFileError_Permission,
@@ -2049,6 +2073,7 @@ GB_DEF b32        gb_file_exists         (char const *filepath);
 GB_DEF gbFileTime gb_file_last_write_time(char const *filepath);
 GB_DEF b32        gb_file_copy           (char const *existing_filename, char const *new_filename, b32 fail_if_exists);
 GB_DEF b32        gb_file_move           (char const *existing_filename, char const *new_filename);
+GB_DEF b32        gb_file_remove         (char const *filename);
 
 
 #ifndef GB_PATH_SEPARATOR
@@ -3260,6 +3285,8 @@ extern "C" {
 	#define STD_OUTPUT_HANDLE        ((DWORD)-11)
 	#define STD_ERROR_HANDLE         ((DWORD)-12)
 
+	GB_DLL_IMPORT int           MultiByteToWideChar(UINT code_page, DWORD flags, char const *   multi_byte_str, int multi_byte_len, wchar_t const *wide_char_str,  int wide_char_len);
+	GB_DLL_IMPORT int           WideCharToMultiByte(UINT code_page, DWORD flags, wchar_t const *wide_char_str,  int wide_char_len, char const *    multi_byte_str, int multi_byte_len);
 	GB_DLL_IMPORT BOOL   WINAPI SetFilePointerEx(HANDLE file, LARGE_INTEGER distance_to_move,
 	                                             LARGE_INTEGER *new_file_pointer, DWORD move_method);
 	GB_DLL_IMPORT BOOL   WINAPI ReadFile        (HANDLE file, void *buffer, DWORD bytes_to_read, DWORD *bytes_read, OVERLAPPED *overlapped);
@@ -3605,7 +3632,7 @@ extern "C" {
 #endif
 
 void gb_assert_handler(char const *condition, char const *file, i32 line, char const *msg, ...) {
-	gb_printf_err("%s:%d: Assert Failure: ", file, line);
+	gb_printf_err("%s(%d): Assert Failure: ", file, line);
 	if (condition)
 		gb_printf_err( "`%s` ", condition);
 	if (msg) {
@@ -3625,14 +3652,11 @@ b32 gb_is_power_of_two(isize x) {
 
 gb_inline void *gb_align_forward(void *ptr, isize alignment) {
 	uintptr p;
-	isize modulo;
 
 	GB_ASSERT(gb_is_power_of_two(alignment));
 
 	p = cast(uintptr)ptr;
-	modulo = p & (alignment-1);
-	if (modulo) p += (alignment - modulo);
-	return cast(void *)p;
+	return cast(void *)((p + (alignment-1)) &~ (alignment-1));
 }
 
 
@@ -3652,17 +3676,36 @@ gb_inline void gb_zero_size(void *ptr, isize size) { gb_memset(ptr, 0, size); }
 
 gb_inline void *gb_memcopy(void *dest, void const *source, isize n) {
 #if defined(_MSC_VER)
+	if (dest == NULL) {
+		return NULL;
+	}
 	// TODO(bill): Is this good enough?
 	__movsb(cast(u8 *)dest, cast(u8 *)source, n);
+// #elif defined(GB_SYSTEM_OSX) || defined(GB_SYSTEM_UNIX)
+	// NOTE(zangent): I assume there's a reason this isn't being used elsewhere,
+	//   but casting pointers as arguments to an __asm__ call is considered an
+	//   error on MacOS and (I think) Linux
+	// TODO(zangent): Figure out how to refactor the asm code so it works on MacOS,
+	//   since this is probably not the way the author intended this to work.
+	// memcpy(dest, source, n);
 #elif defined(GB_CPU_X86)
-	__asm__ __volatile__("rep movsb" : "+D"(cast(u8 *)dest), "+S"(cast(u8 *)source), "+c"(n) : : "memory");
+	if (dest == NULL) {
+		return NULL;
+	}
+
+	__asm__ __volatile__("rep movsb" : "+D"(dest), "+S"(source), "+c"(n) : : "memory");
 #else
 	u8 *d = cast(u8 *)dest;
 	u8 const *s = cast(u8 const *)source;
 	u32 w, x;
 
-	for (; cast(uintptr)s % 4 && n; n--)
+	if (dest == NULL) {
+		return NULL;
+	}
+
+	for (; cast(uintptr)s % 4 && n; n--) {
 		*d++ = *s++;
+	}
 
 	if (cast(uintptr)d % 4 == 0) {
 		for (; n >= 16;
@@ -3791,10 +3834,16 @@ gb_inline void *gb_memmove(void *dest, void const *source, isize n) {
 	u8 *d = cast(u8 *)dest;
 	u8 const *s = cast(u8 const *)source;
 
-	if (d == s)
+	if (dest == NULL) {
+		return NULL;
+	}
+
+	if (d == s) {
 		return d;
-	if (s+n <= d || d+n <= s) // NOTE(bill): Non-overlapping
+	}
+	if (s+n <= d || d+n <= s) { // NOTE(bill): Non-overlapping
 		return gb_memcopy(d, s, n);
+	}
 
 	if (d < s) {
 		if (cast(uintptr)s % gb_size_of(isize) == cast(uintptr)d % gb_size_of(isize)) {
@@ -3833,6 +3882,10 @@ gb_inline void *gb_memset(void *dest, u8 c, isize n) {
 	isize k;
 	u32 c32 = ((u32)-1)/255 * c;
 
+	if (dest == NULL) {
+		return NULL;
+	}
+
 	if (n == 0)
 		return dest;
 	s[0] = s[n-1] = c;
@@ -3853,14 +3906,16 @@ gb_inline void *gb_memset(void *dest, u8 c, isize n) {
 
 	*cast(u32 *)(s+0) = c32;
 	*cast(u32 *)(s+n-4) = c32;
-	if (n < 9)
+	if (n < 9) {
 		return dest;
+	}
 	*cast(u32 *)(s +  4)    = c32;
 	*cast(u32 *)(s +  8)    = c32;
 	*cast(u32 *)(s+n-12) = c32;
 	*cast(u32 *)(s+n- 8) = c32;
-	if (n < 25)
+	if (n < 25) {
 		return dest;
+	}
 	*cast(u32 *)(s + 12) = c32;
 	*cast(u32 *)(s + 16) = c32;
 	*cast(u32 *)(s + 20) = c32;
@@ -3893,12 +3948,17 @@ gb_inline void *gb_memset(void *dest, u8 c, isize n) {
 
 gb_inline i32 gb_memcompare(void const *s1, void const *s2, isize size) {
 	// TODO(bill): Heavily optimize
-
 	u8 const *s1p8 = cast(u8 const *)s1;
 	u8 const *s2p8 = cast(u8 const *)s2;
+
+	if (s1 == NULL || s2 == NULL) {
+		return 0;
+	}
+
 	while (size--) {
-		if (*s1p8 != *s2p8)
+		if (*s1p8 != *s2p8) {
 			return (*s1p8 - *s2p8);
+		}
 		s1p8++, s2p8++;
 	}
 	return 0;
@@ -3986,8 +4046,12 @@ gb_inline void  gb_free_all    (gbAllocator a)                                  
 gb_inline void *gb_resize      (gbAllocator a, void *ptr, isize old_size, isize new_size)                  { return gb_resize_align(a, ptr, old_size, new_size, GB_DEFAULT_MEMORY_ALIGNMENT); }
 gb_inline void *gb_resize_align(gbAllocator a, void *ptr, isize old_size, isize new_size, isize alignment) { return a.proc(a.data, gbAllocation_Resize, new_size, alignment, ptr, old_size, GB_DEFAULT_ALLOCATOR_FLAGS); }
 
-gb_inline void *gb_alloc_copy      (gbAllocator a, void const *src, isize size)                  { return gb_memcopy(gb_alloc(a, size), src, size); }
-gb_inline void *gb_alloc_copy_align(gbAllocator a, void const *src, isize size, isize alignment) { return gb_memcopy(gb_alloc_align(a, size, alignment), src, size); }
+gb_inline void *gb_alloc_copy      (gbAllocator a, void const *src, isize size) {
+	return gb_memcopy(gb_alloc(a, size), src, size);
+}
+gb_inline void *gb_alloc_copy_align(gbAllocator a, void const *src, isize size, isize alignment) {
+	return gb_memcopy(gb_alloc_align(a, size, alignment), src, size);
+}
 
 gb_inline char *gb_alloc_str(gbAllocator a, char const *str) {
 	return gb_alloc_str_len(a, str, gb_strlen(str));
@@ -4556,59 +4620,44 @@ gb_inline void gb_semaphore_release(gbSemaphore *s) { gb_semaphore_post(s, 1); }
 #error
 #endif
 
-// NOTE(bill): THIS IS FUCKING AWESOME THAT THIS "MUTEX" IS FAST AND RECURSIVE TOO!
-// NOTE(bill): WHO THE FUCK NEEDS A NORMAL MUTEX NOW?!?!?!?!
 gb_inline void gb_mutex_init(gbMutex *m) {
-	gb_atomic32_store(&m->counter, 0);
-	gb_atomic32_store(&m->owner, gb_thread_current_id());
-	gb_semaphore_init(&m->semaphore);
-	m->recursion = 0;
+#if defined(GB_SYSTEM_WINDOWS)
+	InitializeCriticalSection(&m->win32_critical_section);
+#else
+	pthread_mutex_init(&m->pthread_mutex, NULL);
+#endif
 }
 
-gb_inline void gb_mutex_destroy(gbMutex *m) { gb_semaphore_destroy(&m->semaphore); }
+gb_inline void gb_mutex_destroy(gbMutex *m) {
+#if defined(GB_SYSTEM_WINDOWS)
+	DeleteCriticalSection(&m->win32_critical_section);
+#else
+	pthread_mutex_destroy(&m->pthread_mutex);
+#endif
+}
 
 gb_inline void gb_mutex_lock(gbMutex *m) {
-	i32 thread_id = cast(i32)gb_thread_current_id();
-	if (gb_atomic32_fetch_add(&m->counter, 1) > 0) {
-		if (thread_id != gb_atomic32_load(&m->owner))
-			gb_semaphore_wait(&m->semaphore);
-	}
-
-	gb_atomic32_store(&m->owner, thread_id);
-	m->recursion++;
+#if defined(GB_SYSTEM_WINDOWS)
+	EnterCriticalSection(&m->win32_critical_section);
+#else
+	pthread_mutex_lock(&m->pthread_mutex);
+#endif
 }
 
 gb_inline b32 gb_mutex_try_lock(gbMutex *m) {
-	i32 thread_id = cast(i32)gb_thread_current_id();
-	if (gb_atomic32_load(&m->owner) == thread_id) {
-		gb_atomic32_fetch_add(&m->counter, 1);
-	} else {
-		i32 expected = 0;
-		if (gb_atomic32_load(&m->counter) != 0)
-			return false;
-		if (!gb_atomic32_compare_exchange(&m->counter, expected, 1))
-			return false;
-		gb_atomic32_store(&m->owner, thread_id);
-	}
-
-	m->recursion++;
-	return true;
+#if defined(GB_SYSTEM_WINDOWS)
+	return TryEnterCriticalSection(&m->win32_critical_section) != 0;
+#else
+	return pthread_mutex_trylock(&m->pthread_mutex) == 0;
+#endif
 }
 
 gb_inline void gb_mutex_unlock(gbMutex *m) {
-	i32 recursion;
-	i32 thread_id = cast(i32)gb_thread_current_id();
-
-	GB_ASSERT(thread_id == gb_atomic32_load(&m->owner));
-
-	recursion = --m->recursion;
-	if (recursion == 0)
-		gb_atomic32_store(&m->owner, thread_id);
-
-	if (gb_atomic32_fetch_add(&m->counter, -1) > 1) {
-		if (recursion == 0)
-			gb_semaphore_release(&m->semaphore);
-	}
+#if defined(GB_SYSTEM_WINDOWS)
+	LeaveCriticalSection(&m->win32_critical_section);
+#else
+	pthread_mutex_unlock(&m->pthread_mutex);
+#endif
 }
 
 
@@ -4627,7 +4676,7 @@ void gb_thread_init(gbThread *t) {
 	gb_semaphore_init(&t->semaphore);
 }
 
-void gb_thread_destory(gbThread *t) {
+void gb_thread_destroy(gbThread *t) {
 	if (t->is_running) gb_thread_join(t);
 	gb_semaphore_destroy(&t->semaphore);
 }
@@ -4635,22 +4684,32 @@ void gb_thread_destory(gbThread *t) {
 
 gb_inline void gb__thread_run(gbThread *t) {
 	gb_semaphore_release(&t->semaphore);
-	t->proc(t->data);
+	t->return_value = t->proc(t);
 }
 
 #if defined(GB_SYSTEM_WINDOWS)
-	gb_inline DWORD __stdcall gb__thread_proc(void *arg) { gb__thread_run(cast(gbThread *)arg); return 0; }
+	gb_inline DWORD __stdcall gb__thread_proc(void *arg) {
+		gbThread *t = cast(gbThread *)arg;
+		gb__thread_run(t);
+		t->is_running = false;
+		return 0;
+	}
 #else
-	gb_inline void *          gb__thread_proc(void *arg) { gb__thread_run(cast(gbThread *)arg); return NULL; }
+	gb_inline void *          gb__thread_proc(void *arg) {
+		gbThread *t = cast(gbThread *)arg;
+		gb__thread_run(t);
+		t->is_running = false;
+		return NULL;
+	}
 #endif
 
-gb_inline void gb_thread_start(gbThread *t, gbThreadProc *proc, void *data) { gb_thread_start_with_stack(t, proc, data, 0); }
+gb_inline void gb_thread_start(gbThread *t, gbThreadProc *proc, void *user_data) { gb_thread_start_with_stack(t, proc, user_data, 0); }
 
-gb_inline void gb_thread_start_with_stack(gbThread *t, gbThreadProc *proc, void *data, isize stack_size) {
+gb_inline void gb_thread_start_with_stack(gbThread *t, gbThreadProc *proc, void *user_data, isize stack_size) {
 	GB_ASSERT(!t->is_running);
 	GB_ASSERT(proc != NULL);
 	t->proc = proc;
-	t->data = data;
+	t->user_data = user_data;
 	t->stack_size = stack_size;
 
 #if defined(GB_SYSTEM_WINDOWS)
@@ -4661,8 +4720,9 @@ gb_inline void gb_thread_start_with_stack(gbThread *t, gbThreadProc *proc, void 
 		pthread_attr_t attr;
 		pthread_attr_init(&attr);
 		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-		if (stack_size != 0)
+		if (stack_size != 0) {
 			pthread_attr_setstacksize(&attr, stack_size);
+		}
 		pthread_create(&t->posix_handle, &attr, gb__thread_proc, t);
 		pthread_attr_destroy(&attr);
 	}
@@ -4704,7 +4764,7 @@ gb_inline u32 gb_thread_current_id(void) {
 #elif defined(GB_ARCH_32_BIT) && defined(GB_CPU_X86)
 	__asm__("mov %%gs:0x08,%0" : "=r"(thread_id));
 #elif defined(GB_ARCH_64_BIT) && defined(GB_CPU_X86)
-	__asm__("mov %%gs:0x10,%0" : "=r"(thread_id));
+	__asm__("mov %%fs:0x10,%0" : "=r"(thread_id));
 #else
 	#error Unsupported architecture for gb_thread_current_id()
 #endif
@@ -4849,6 +4909,26 @@ GB_ALLOCATOR_PROC(gb_heap_allocator_proc) {
 	case gbAllocation_Resize:
 		ptr = _aligned_realloc(old_memory, size, alignment);
 		break;
+
+#elif defined(GB_SYSTEM_LINUX)
+	// TODO(bill): *nix version that's decent
+	case gbAllocation_Alloc: {
+		ptr = aligned_alloc(alignment, size);
+		// ptr = malloc(size+alignment);
+
+		if (flags & gbAllocatorFlag_ClearToZero) {
+			gb_zero_size(ptr, size);
+		}
+	} break;
+
+	case gbAllocation_Free: {
+		free(old_memory);
+	} break;
+
+	case gbAllocation_Resize: {
+		// ptr = realloc(old_memory, size);
+		ptr = gb_default_resize_align(gb_heap_allocator(), old_memory, old_size, size, alignment);
+	} break;
 #else
 	// TODO(bill): *nix version that's decent
 	case gbAllocation_Alloc: {
@@ -4864,8 +4944,7 @@ GB_ALLOCATOR_PROC(gb_heap_allocator_proc) {
 	} break;
 
 	case gbAllocation_Resize: {
-		gbAllocator a = gb_heap_allocator();
-		ptr = gb_default_resize_align(a, old_memory, old_size, size, alignment);
+		ptr = gb_default_resize_align(gb_heap_allocator(), old_memory, old_size, size, alignment);
 	} break;
 #endif
 
@@ -5028,7 +5107,10 @@ void gb_affinity_init(gbAffinity *a) {
 	// Parsing /proc/cpuinfo to get the number of threads per core.
 	// NOTE(zangent): This calls the CPU's threads "cores", although the wording
 	// is kind of weird. This should be right, though.
-	if (fopen("/proc/cpuinfo", "r") != NULL) {
+
+	FILE* cpu_info = fopen("/proc/cpuinfo", "r");
+
+	if (cpu_info != NULL) {
 		for (;;) {
 			// The 'temporary char'. Everything goes into this char,
 			// so that we can check against EOF at the end of this loop.
@@ -5059,6 +5141,8 @@ void gb_affinity_init(gbAffinity *a) {
 			}
 #undef AF__CHECK
 		}
+
+		fclose(cpu_info);
 	}
 
 	if (threads == 0) {
@@ -5340,7 +5424,8 @@ gb_inline gbTempArenaMemory gb_temp_arena_memory_begin(gbArena *arena) {
 }
 
 gb_inline void gb_temp_arena_memory_end(gbTempArenaMemory tmp) {
-	GB_ASSERT(tmp.arena->total_allocated >= tmp.original_count);
+	GB_ASSERT_MSG(tmp.arena->total_allocated >= tmp.original_count,
+	              "%td >= %td", tmp.arena->total_allocated, tmp.original_count);
 	GB_ASSERT(tmp.arena->temp_count > 0);
 	tmp.arena->total_allocated = tmp.original_count;
 	tmp.arena->temp_count--;
@@ -5452,8 +5537,9 @@ GB_ALLOCATOR_PROC(gb_pool_allocator_proc) {
 
 gb_inline gbAllocationHeader *gb_allocation_header(void *data) {
 	isize *p = cast(isize *)data;
-	while (p[-1] == cast(isize)(-1))
+	while (p[-1] == cast(isize)(-1)) {
 		p--;
+	}
 	return cast(gbAllocationHeader *)p - 1;
 }
 
@@ -5461,8 +5547,9 @@ gb_inline void gb_allocation_header_fill(gbAllocationHeader *header, void *data,
 	isize *ptr;
 	header->size = size;
 	ptr = cast(isize *)(header + 1);
-	while (cast(void *)ptr < data)
+	while (cast(void *)ptr < data) {
 		*ptr++ = cast(isize)(-1);
+	}
 }
 
 
@@ -6013,8 +6100,9 @@ void gb_shuffle(void *base, isize count, isize size) {
 
 void gb_reverse(void *base, isize count, isize size) {
 	isize i, j = count-1;
-	for (i = 0; i < j; i++, j++)
+	for (i = 0; i < j; i++, j++) {
 		gb_memswap(cast(u8 *)base + i*size, cast(u8 *)base + j*size, size);
+	}
 }
 
 
@@ -6113,24 +6201,30 @@ gb_inline void gb_str_to_upper(char *str) {
 gb_inline isize gb_strlen(char const *str) {
 	char const *begin = str;
 	isize const *w;
+	if (str == NULL)  {
+		return 0;
+	}
 	while (cast(uintptr)str % sizeof(usize)) {
 		if (!*str)
 			return str - begin;
 		str++;
 	}
 	w = cast(isize const *)str;
-	while (!GB__HAS_ZERO(*w))
+	while (!GB__HAS_ZERO(*w)) {
 		w++;
+	}
 	str = cast(char const *)w;
-	while (*str)
+	while (*str) {
 		str++;
+	}
 	return str - begin;
 }
 
 gb_inline isize gb_strnlen(char const *str, isize max_len) {
 	char const *end = cast(char const *)gb_memchr(str, 0, max_len);
-	if (end)
+	if (end) {
 		return end - str;
+	}
 	return max_len;
 }
 
@@ -6239,18 +6333,20 @@ gb_inline char *gb_strrev(char *str) {
 gb_inline i32 gb_strncmp(char const *s1, char const *s2, isize len) {
 	for (; len > 0;
 	     s1++, s2++, len--) {
-		if (*s1 != *s2)
+		if (*s1 != *s2) {
 			return ((s1 < s2) ? -1 : +1);
-		else if (*s1 == '\0')
+		} else if (*s1 == '\0') {
 			return 0;
+		}
 	}
 	return 0;
 }
 
 
 gb_inline char const *gb_strtok(char *output, char const *src, char const *delimit) {
-	while (*src && gb_char_first_occurence(delimit, *src) != NULL)
+	while (*src && gb_char_first_occurence(delimit, *src) != NULL) {
 		*output++ = *src++;
+	}
 
 	*output = 0;
 	return *src ? src+1 : src;
@@ -6258,8 +6354,9 @@ gb_inline char const *gb_strtok(char *output, char const *src, char const *delim
 
 gb_inline b32 gb_str_has_prefix(char const *str, char const *prefix) {
 	while (*prefix) {
-		if (*str++ != *prefix++)
+		if (*str++ != *prefix++) {
 			return false;
+		}
 	}
 	return true;
 }
@@ -6267,8 +6364,9 @@ gb_inline b32 gb_str_has_prefix(char const *str, char const *prefix) {
 gb_inline b32 gb_str_has_suffix(char const *str, char const *suffix) {
 	isize i = gb_strlen(str);
 	isize j = gb_strlen(suffix);
-	if (j <= i)
+	if (j <= i) {
 		return gb_strcmp(str+i-j, suffix) == 0;
+	}
 	return false;
 }
 
@@ -6278,8 +6376,9 @@ gb_inline b32 gb_str_has_suffix(char const *str, char const *suffix) {
 gb_inline char const *gb_char_first_occurence(char const *s, char c) {
 	char ch = c;
 	for (; *s != ch; s++) {
-		if (*s == '\0')
+		if (*s == '\0') {
 			return NULL;
+		}
 	}
 	return s;
 }
@@ -6288,8 +6387,9 @@ gb_inline char const *gb_char_first_occurence(char const *s, char c) {
 gb_inline char const *gb_char_last_occurence(char const *s, char c) {
 	char const *result = NULL;
 	do {
-		if (*s == c)
+		if (*s == c) {
 			result = s;
+		}
 	} while (*s++);
 
 	return result;
@@ -6319,17 +6419,19 @@ gb_internal isize gb__scan_i64(char const *text, i32 base, i64 *value) {
 		text++;
 	}
 
-	if (base == 16 && gb_strncmp(text, "0x", 2) == 0)
+	if (base == 16 && gb_strncmp(text, "0x", 2) == 0) {
 		text += 2;
+	}
 
 	for (;;) {
 		i64 v;
-		if (gb_char_is_digit(*text))
+		if (gb_char_is_digit(*text)) {
 			v = *text - '0';
-		else if (base == 16 && gb_char_is_hex_digit(*text))
+		} else if (base == 16 && gb_char_is_hex_digit(*text)) {
 			v = gb_hex_digit_to_int(*text);
-		else
+		} else {
 			break;
+		}
 
 		result *= base;
 		result += v;
@@ -6348,16 +6450,17 @@ gb_internal isize gb__scan_u64(char const *text, i32 base, u64 *value) {
 	char const *text_begin = text;
 	u64 result = 0;
 
-	if (base == 16 && gb_strncmp(text, "0x", 2) == 0)
+	if (base == 16 && gb_strncmp(text, "0x", 2) == 0) {
 		text += 2;
+	}
 
 	for (;;) {
 		u64 v;
-		if (gb_char_is_digit(*text))
+		if (gb_char_is_digit(*text)) {
 			v = *text - '0';
-		else if (base == 16 && gb_char_is_hex_digit(*text))
+		} else if (base == 16 && gb_char_is_hex_digit(*text)) {
 			v = gb_hex_digit_to_int(*text);
-		else {
+		} else {
 			break;
 		}
 
@@ -6366,9 +6469,7 @@ gb_internal isize gb__scan_u64(char const *text, i32 base, u64 *value) {
 		text++;
 	}
 
-	if (value)
-		*value = result;
-
+	if (value) *value = result;
 	return (text - text_begin);
 }
 
@@ -6379,15 +6480,15 @@ u64 gb_str_to_u64(char const *str, char **end_ptr, i32 base) {
 	u64 value = 0;
 
 	if (!base) {
-		if ((gb_strlen(str) > 2) && (gb_strncmp(str, "0x", 2) == 0))
+		if ((gb_strlen(str) > 2) && (gb_strncmp(str, "0x", 2) == 0)) {
 			base = 16;
-		else
+		} else {
 			base = 10;
+		}
 	}
 
 	len = gb__scan_u64(str, base, &value);
-	if (end_ptr)
-		*end_ptr = (char *)str + len;
+	if (end_ptr) *end_ptr = (char *)str + len;
 	return value;
 }
 
@@ -6396,15 +6497,15 @@ i64 gb_str_to_i64(char const *str, char **end_ptr, i32 base) {
 	i64 value;
 
 	if (!base) {
-		if ((gb_strlen(str) > 2) && (gb_strncmp(str, "0x", 2) == 0))
+		if ((gb_strlen(str) > 2) && (gb_strncmp(str, "0x", 2) == 0)) {
 			base = 16;
-		else
+		} else {
 			base = 10;
+		}
 	}
 
 	len = gb__scan_i64(str, base, &value);
-	if (end_ptr)
-		*end_ptr = (char *)str + len;
+	if (end_ptr) *end_ptr = (char *)str + len;
 	return value;
 }
 
@@ -6418,20 +6519,23 @@ gb_global char const gb__num_to_char_table[] =
 gb_inline void gb_i64_to_str(i64 value, char *string, i32 base) {
 	char *buf = string;
 	b32 negative = false;
+	u64 v;
 	if (value < 0) {
 		negative = true;
 		value = -value;
 	}
-	if (value) {
-		while (value > 0) {
-			*buf++ = gb__num_to_char_table[value % base];
-			value /= base;
+	v = cast(u64)value;
+	if (v != 0) {
+		while (v > 0) {
+			*buf++ = gb__num_to_char_table[v % base];
+			v /= base;
 		}
 	} else {
 		*buf++ = '0';
 	}
-	if (negative)
+	if (negative) {
 		*buf++ = '-';
+	}
 	*buf = '\0';
 	gb_strrev(string);
 }
@@ -6550,8 +6654,9 @@ gbString gb_string_make_length(gbAllocator a, void const *init_str, isize num_by
 	header->allocator = a;
 	header->length    = num_bytes;
 	header->capacity  = num_bytes;
-	if (num_bytes && init_str)
+	if (num_bytes && init_str) {
 		gb_memcopy(str, init_str, num_bytes);
+	}
 	str[num_bytes] = '\0';
 
 	return str;
@@ -6572,8 +6677,9 @@ gb_inline isize gb_string_capacity(gbString const str) { return GB_STRING_HEADER
 
 gb_inline isize gb_string_available_space(gbString const str) {
 	gbStringHeader *h = GB_STRING_HEADER(str);
-	if (h->capacity > h->length)
+	if (h->capacity > h->length) {
 		return h->capacity - h->length;
+	}
 	return 0;
 }
 
@@ -6587,8 +6693,9 @@ gbString gb_string_append_length(gbString str, void const *other, isize other_le
 		isize curr_len = gb_string_length(str);
 
 		str = gb_string_make_space_for(str, other_len);
-		if (str == NULL)
+		if (str == NULL) {
 			return NULL;
+		}
 
 		gb_memcopy(str + curr_len, other, other_len);
 		str[curr_len + other_len] = '\0';
@@ -6601,13 +6708,34 @@ gb_inline gbString gb_string_appendc(gbString str, char const *other) {
 	return gb_string_append_length(str, other, gb_strlen(other));
 }
 
+gbString gb_string_append_rune(gbString str, Rune r) {
+	if (r >= 0) {
+		u8 buf[8] = {0};
+		isize len = gb_utf8_encode_rune(buf, r);
+		return gb_string_append_length(str, buf, len);
+	}
+	return str;
+}
+
+gbString gb_string_append_fmt(gbString str, char const *fmt, ...) {
+	isize res;
+	char buf[4096] = {0};
+	va_list va;
+	va_start(va, fmt);
+	res = gb_snprintf_va(str, gb_count_of(buf)-1, fmt, va);
+	va_end(va);
+	return gb_string_append_length(str, buf, res);
+}
+
+
 
 gbString gb_string_set(gbString str, char const *cstr) {
 	isize len = gb_strlen(cstr);
 	if (gb_string_capacity(str) < len) {
 		str = gb_string_make_space_for(str, len - gb_string_length(str));
-		if (str == NULL)
+		if (str == NULL) {
 			return NULL;
+		}
 	}
 
 	gb_memcopy(str, cstr, len);
@@ -6659,12 +6787,14 @@ gb_inline b32 gb_string_are_equal(gbString const lhs, gbString const rhs) {
 	isize lhs_len, rhs_len, i;
 	lhs_len = gb_string_length(lhs);
 	rhs_len = gb_string_length(rhs);
-	if (lhs_len != rhs_len)
+	if (lhs_len != rhs_len) {
 		return false;
+	}
 
 	for (i = 0; i < lhs_len; i++) {
-		if (lhs[i] != rhs[i])
+		if (lhs[i] != rhs[i]) {
 			return false;
+		}
 	}
 
 	return true;
@@ -6678,10 +6808,12 @@ gbString gb_string_trim(gbString str, char const *cut_set) {
 	start_pos = start = str;
 	end_pos   = end   = str + gb_string_length(str) - 1;
 
-	while (start_pos <= end && gb_char_first_occurence(cut_set, *start_pos))
+	while (start_pos <= end && gb_char_first_occurence(cut_set, *start_pos)) {
 		start_pos++;
-	while (end_pos > start_pos && gb_char_first_occurence(cut_set, *end_pos))
+	}
+	while (end_pos > start_pos && gb_char_first_occurence(cut_set, *end_pos)) {
 		end_pos--;
+	}
 
 	len = cast(isize)((start_pos > end_pos) ? 0 : ((end_pos - start_pos)+1));
 
@@ -7035,8 +7167,9 @@ u32 gb_adler32(void const *data, isize len) {
 
 			bytes += 8;
 		}
-		for (; i < block_len; i++)
+		for (; i < block_len; i++) {
 			a += *bytes++, b += a;
+		}
 
 		a %= MOD_ALDER, b %= MOD_ALDER;
 		len -= block_len;
@@ -7185,8 +7318,9 @@ u32 gb_crc32(void const *data, isize len) {
 	isize remaining;
 	u32 result = ~(cast(u32)0);
 	u8 const *c = cast(u8 const *)data;
-	for (remaining = len; remaining--; c++)
+	for (remaining = len; remaining--; c++) {
 		result = (result >> 8) ^ (GB__CRC32_TABLE[(result ^ *c) & 0xff]);
+	}
 	return ~result;
 }
 
@@ -7194,8 +7328,9 @@ u64 gb_crc64(void const *data, isize len) {
 	isize remaining;
 	u64 result = ~(cast(u64)0);
 	u8 const *c = cast(u8 const *)data;
-	for (remaining = len; remaining--; c++)
+	for (remaining = len; remaining--; c++) {
 		result = (result >> 8) ^ (GB__CRC64_TABLE[(result ^ *c) & 0xff]);
+	}
 	return ~result;
 }
 
@@ -7204,8 +7339,9 @@ u32 gb_fnv32(void const *data, isize len) {
 	u32 h = 0x811c9dc5;
 	u8 const *c = cast(u8 const *)data;
 
-	for (i = 0; i < len; i++)
+	for (i = 0; i < len; i++) {
 		h = (h * 0x01000193) ^ c[i];
+	}
 
 	return h;
 }
@@ -7215,8 +7351,9 @@ u64 gb_fnv64(void const *data, isize len) {
 	u64 h = 0xcbf29ce484222325ull;
 	u8 const *c = cast(u8 const *)data;
 
-	for (i = 0; i < len; i++)
+	for (i = 0; i < len; i++) {
 		h = (h * 0x100000001b3ll) ^ c[i];
+	}
 
 	return h;
 }
@@ -7226,8 +7363,9 @@ u32 gb_fnv32a(void const *data, isize len) {
 	u32 h = 0x811c9dc5;
 	u8 const *c = cast(u8 const *)data;
 
-	for (i = 0; i < len; i++)
+	for (i = 0; i < len; i++) {
 		h = (h ^ c[i]) * 0x01000193;
+	}
 
 	return h;
 }
@@ -7237,8 +7375,9 @@ u64 gb_fnv64a(void const *data, isize len) {
 	u64 h = 0xcbf29ce484222325ull;
 	u8 const *c = cast(u8 const *)data;
 
-	for (i = 0; i < len; i++)
+	for (i = 0; i < len; i++) {
 		h = (h ^ c[i]) * 0x100000001b3ll;
+	}
 
 	return h;
 }
@@ -7406,6 +7545,36 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 //
 
 #if defined(GB_SYSTEM_WINDOWS)
+
+	gb_internal wchar_t *gb__alloc_utf8_to_ucs2(gbAllocator a, char const *text, isize *w_len_) {
+		wchar_t *w_text = NULL;
+		isize len = 0, w_len = 0, w_len1 = 0;
+		if (text == NULL) {
+			if (w_len_) *w_len_ = w_len;
+			return NULL;
+		}
+		len = gb_strlen(text);
+		if (len == 0) {
+			if (w_len_) *w_len_ = w_len;
+			return NULL;
+		}
+		w_len = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, cast(int)len, NULL, 0);
+		if (w_len == 0) {
+			if (w_len_) *w_len_ = w_len;
+			return NULL;
+		}
+		w_text = gb_alloc_array(a, wchar_t, w_len+1);
+		w_len1 = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, cast(int)len, w_text, cast(int)w_len);
+		if (w_len1 == 0) {
+			gb_free(a, w_text);
+			if (w_len_) *w_len_ = 0;
+			return NULL;
+		}
+		w_text[w_len] = 0;
+		if (w_len_) *w_len_ = w_len;
+		return w_text;
+	}
+
 	gb_internal GB_FILE_SEEK_PROC(gb__win32_file_seek) {
 		LARGE_INTEGER li_offset;
 		li_offset.QuadPart = offset;
@@ -7456,7 +7625,7 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 		DWORD desired_access;
 		DWORD creation_disposition;
 		void *handle;
-		u16 path[1024] = {0}; // TODO(bill): Is this really enough or should I heap allocate this if it's too large?
+		wchar_t *w_text;
 
 		switch (mode & gbFileMode_Modes) {
 		case gbFileMode_Read:
@@ -7488,10 +7657,16 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 			return gbFileError_Invalid;
 		}
 
-		handle = CreateFileW(cast(wchar_t const *)gb_utf8_to_ucs2(path, gb_count_of(path), cast(u8 *)filename),
+		w_text = gb__alloc_utf8_to_ucs2(gb_heap_allocator(), filename, NULL);
+		if (w_text == NULL) {
+			return gbFileError_InvalidFilename;
+		}
+		handle = CreateFileW(w_text,
 		                     desired_access,
 		                     FILE_SHARE_READ|FILE_SHARE_DELETE, NULL,
 		                     creation_disposition, FILE_ATTRIBUTE_NORMAL, NULL);
+
+		gb_free(gb_heap_allocator(), w_text);
 
 		if (handle == INVALID_HANDLE_VALUE) {
 			DWORD err = GetLastError();
@@ -7605,10 +7780,14 @@ u64 gb_murmur64_seed(void const *data_, isize len, u64 seed) {
 
 gbFileError gb_file_new(gbFile *f, gbFileDescriptor fd, gbFileOperations ops, char const *filename) {
 	gbFileError err = gbFileError_None;
+	isize len = gb_strlen(filename);
+
+	// gb_printf_err("gb_file_new: %s\n", filename);
 
 	f->ops = ops;
 	f->fd = fd;
-	f->filename = gb_alloc_str(gb_heap_allocator(), filename);
+	f->filename = gb_alloc_array(gb_heap_allocator(), char, len+1);
+	gb_memcopy(cast(char *)f->filename, cast(char *)filename, len+1);
 	f->last_write_time = gb_file_last_write_time(f->filename);
 
 	return err;
@@ -7623,23 +7802,33 @@ gbFileError gb_file_open_mode(gbFile *f, gbFileMode mode, char const *filename) 
 #else
 	err = gb__posix_file_open(&f->fd, &f->ops, mode, filename);
 #endif
-	if (err == gbFileError_None)
+	if (err == gbFileError_None) {
 		return gb_file_new(f, f->fd, f->ops, filename);
+	}
 	return err;
 }
 
 gbFileError gb_file_close(gbFile *f) {
-	if (!f)
+	if (f == NULL) {
 		return gbFileError_Invalid;
+	}
 
-	if (f->filename) gb_free(gb_heap_allocator(), cast(char *)f->filename);
+#if defined(GB_COMPILER_MSVC)
+	if (f->filename != NULL) {
+		gb_free(gb_heap_allocator(), cast(char *)f->filename);
+	}
+#else
+	// TODO HACK(bill): Memory Leak!!!
+#endif
 
 #if defined(GB_SYSTEM_WINDOWS)
-	if (f->fd.p == INVALID_HANDLE_VALUE)
+	if (f->fd.p == INVALID_HANDLE_VALUE) {
 		return gbFileError_Invalid;
+	}
 #else
-	if (f->fd.i < 0)
+	if (f->fd.i < 0) {
 		return gbFileError_Invalid;
+	}
 #endif
 
 	if (!f->ops.read_at) f->ops = gbDefaultFileOperations;
@@ -7750,8 +7939,9 @@ gbFileError gb_file_truncate(gbFile *f, i64 size) {
 	gbFileError err = gbFileError_None;
 	i64 prev_offset = gb_file_tell(f);
 	gb_file_seek(f, size);
-	if (!SetEndOfFile(f))
+	if (!SetEndOfFile(f)) {
 		err = gbFileError_TruncationFailure;
+	}
 	gb_file_seek(f, prev_offset);
 	return err;
 }
@@ -7759,8 +7949,18 @@ gbFileError gb_file_truncate(gbFile *f, i64 size) {
 
 b32 gb_file_exists(char const *name) {
 	WIN32_FIND_DATAW data;
-	void *handle = FindFirstFileW(cast(wchar_t const *)gb_utf8_to_ucs2_buf(cast(u8 *)name), &data);
-	b32 found = handle != INVALID_HANDLE_VALUE;
+	wchar_t *w_text;
+	void *handle;
+	b32 found = false;
+	gbAllocator a = gb_heap_allocator();
+
+	w_text = gb__alloc_utf8_to_ucs2(a, name, NULL);
+	if (w_text == NULL) {
+		return false;
+	}
+	handle = FindFirstFileW(w_text, &data);
+	gb_free(a, w_text);
+	found = handle != INVALID_HANDLE_VALUE;
 	if (found) FindClose(handle);
 	return found;
 }
@@ -7804,14 +8004,20 @@ gb_inline b32 gb_file_exists(char const *name) {
 
 #if defined(GB_SYSTEM_WINDOWS)
 gbFileTime gb_file_last_write_time(char const *filepath) {
-	u16 path[1024] = {0};
 	ULARGE_INTEGER li = {0};
 	FILETIME last_write_time = {0};
 	WIN32_FILE_ATTRIBUTE_DATA data = {0};
+	gbAllocator a = gb_heap_allocator();
 
-	if (GetFileAttributesExW(cast(wchar_t const *)gb_utf8_to_ucs2(path, gb_count_of(path), cast(u8 *)filepath),
-	                         GetFileExInfoStandard, &data))
+	wchar_t *w_text = gb__alloc_utf8_to_ucs2(a, filepath, NULL);
+	if (w_text == NULL) {
+		return 0;
+	}
+
+	if (GetFileAttributesExW(w_text, GetFileExInfoStandard, &data)) {
 		last_write_time = data.ftLastWriteTime;
+	}
+	gb_free(a, w_text);
 
 	li.LowPart = last_write_time.dwLowDateTime;
 	li.HighPart = last_write_time.dwHighDateTime;
@@ -7820,20 +8026,54 @@ gbFileTime gb_file_last_write_time(char const *filepath) {
 
 
 gb_inline b32 gb_file_copy(char const *existing_filename, char const *new_filename, b32 fail_if_exists) {
-	u16 old_f[300] = {0};
-	u16 new_f[300] = {0};
+	wchar_t *w_old = NULL;
+	wchar_t *w_new = NULL;
+	gbAllocator a = gb_heap_allocator();
+	b32 result = false;
 
-	return CopyFileW(cast(wchar_t const *)gb_utf8_to_ucs2(old_f, gb_count_of(old_f), cast(u8 *)existing_filename),
-	                 cast(wchar_t const *)gb_utf8_to_ucs2(new_f, gb_count_of(new_f), cast(u8 *)new_filename),
-	                 fail_if_exists);
+	w_old = gb__alloc_utf8_to_ucs2(a, existing_filename, NULL);
+	if (w_old == NULL) {
+		return false;
+	}
+	w_new = gb__alloc_utf8_to_ucs2(a, new_filename, NULL);
+	if (w_new != NULL) {
+		result = CopyFileW(w_old, w_new, fail_if_exists);
+	}
+	gb_free(a, w_new);
+	gb_free(a, w_old);
+	return result;
 }
 
 gb_inline b32 gb_file_move(char const *existing_filename, char const *new_filename) {
-	u16 old_f[300] = {0};
-	u16 new_f[300] = {0};
+	wchar_t *w_old = NULL;
+	wchar_t *w_new = NULL;
+	gbAllocator a = gb_heap_allocator();
+	b32 result = false;
 
-	return MoveFileW(cast(wchar_t const *)gb_utf8_to_ucs2(old_f, gb_count_of(old_f), cast(u8 *)existing_filename),
-	                 cast(wchar_t const *)gb_utf8_to_ucs2(new_f, gb_count_of(new_f), cast(u8 *)new_filename));
+	w_old = gb__alloc_utf8_to_ucs2(a, existing_filename, NULL);
+	if (w_old == NULL) {
+		return false;
+	}
+	w_new = gb__alloc_utf8_to_ucs2(a, new_filename, NULL);
+	if (w_new != NULL) {
+		result = MoveFileW(w_old, w_new);
+	}
+	gb_free(a, w_new);
+	gb_free(a, w_old);
+	return result;
+}
+
+b32 gb_file_remove(char const *filename) {
+	wchar_t *w_filename = NULL;
+	gbAllocator a = gb_heap_allocator();
+	b32 result = false;
+	w_filename = gb__alloc_utf8_to_ucs2(a, filename, NULL);
+	if (w_filename == NULL) {
+		return false;
+	}
+	result = DeleteFileW(w_filename);
+	gb_free(a, w_filename);
+	return result;
 }
 
 
@@ -7844,8 +8084,9 @@ gbFileTime gb_file_last_write_time(char const *filepath) {
 	time_t result = 0;
 	struct stat file_stat;
 
-	if (stat(filepath, &file_stat))
+	if (stat(filepath, &file_stat)) {
 		result = file_stat.st_mtime;
+	}
 
 	return cast(gbFileTime)result;
 }
@@ -7873,11 +8114,19 @@ gb_inline b32 gb_file_copy(char const *existing_filename, char const *new_filena
 
 gb_inline b32 gb_file_move(char const *existing_filename, char const *new_filename) {
 	if (link(existing_filename, new_filename) == 0) {
-		if (unlink(existing_filename) != -1)
-			return true;
+		return unlink(existing_filename) != -1;
 	}
 	return false;
 }
+
+b32 gb_file_remove(char const *filename) {
+#if defined(GB_SYSTEM_OSX)
+	return unlink(filename) != -1;
+#else
+	return remove(filename) == 0;
+#endif
+}
+
 
 #endif
 
@@ -7962,28 +8211,63 @@ gb_inline char const *gb_path_extension(char const *path) {
 
 #if !defined(_WINDOWS_) && defined(GB_SYSTEM_WINDOWS)
 GB_DLL_IMPORT DWORD WINAPI GetFullPathNameA(char const *lpFileName, DWORD nBufferLength, char *lpBuffer, char **lpFilePart);
+GB_DLL_IMPORT DWORD WINAPI GetFullPathNameW(wchar_t const *lpFileName, DWORD nBufferLength, wchar_t *lpBuffer, wchar_t **lpFilePart);
 #endif
 
 char *gb_path_get_full_name(gbAllocator a, char const *path) {
 #if defined(GB_SYSTEM_WINDOWS)
 // TODO(bill): Make UTF-8
-	char buf[300];
-	isize len = GetFullPathNameA(path, gb_count_of(buf), buf, NULL);
-	return gb_alloc_str_len(a, buf, len+1);
+	wchar_t *w_path = NULL;
+	wchar_t *w_fullpath = NULL;
+	isize w_len = 0;
+	isize new_len = 0;
+	isize new_len1 = 0;
+	char *new_path = 0;
+	w_path = gb__alloc_utf8_to_ucs2(gb_heap_allocator(), path, NULL);
+	if (w_path == NULL) {
+		return NULL;
+	}
+	w_len = GetFullPathNameW(w_path, 0, NULL, NULL);
+	if (w_len == 0) {
+		return NULL;
+	}
+	w_fullpath = gb_alloc_array(gb_heap_allocator(), wchar_t, w_len+1);
+	GetFullPathNameW(w_path, cast(int)w_len, w_fullpath, NULL);
+	w_fullpath[w_len] = 0;
+	gb_free(gb_heap_allocator(), w_path);
+
+	new_len = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, w_fullpath, cast(int)w_len, NULL, 0, NULL, NULL);
+	if (new_len == 0) {
+		gb_free(gb_heap_allocator(), w_fullpath);
+		return NULL;
+	}
+	new_path = gb_alloc_array(a, char, new_len+1);
+	new_len1 = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, w_fullpath, cast(int)w_len, new_path, cast(int)new_len, NULL, NULL);
+	if (new_len1 == 0) {
+		gb_free(gb_heap_allocator(), w_fullpath);
+		gb_free(a, new_path);
+		return NULL;
+	}
+	new_path[new_len] = 0;
+	return new_path;
 #else
-// TODO(bill): Make work on *nix, etc.
-	char* p = realpath(path, 0);
-	GB_ASSERT(p && "file does not exist");
+	char *p, *result, *fullpath = NULL;
+	isize len;
+	p = realpath(path, NULL);
+	fullpath = p;
+	if (p == NULL) {
+		// NOTE(bill): File does not exist
+		fullpath = cast(char *)path;
+	}
 
-	isize len = gb_strlen(p);
+	len = gb_strlen(fullpath);
 
-	// bill... gb_alloc_str_len refused to work for this...
-	char* ret = gb_alloc(a, sizeof(char) * len + 1);
-	gb_memmove(ret, p, len);
-	ret[len] = 0;
+	result = gb_alloc_array(a, char, len + 1);
+	gb_memmove(result, fullpath, len);
+	result[len] = 0;
 	free(p);
 
-	return ret;
+	return result;
 #endif
 }
 
@@ -8108,29 +8392,33 @@ gb_internal isize gb__print_string(char *text, isize max_len, gbprivFmtInfo *inf
 	isize res = 0, len;
 	isize remaining = max_len;
 
-	if (info && info->precision >= 0)
+	if (info && info->precision >= 0) {
 		len = gb_strnlen(str, info->precision);
-	else
+	} else {
 		len = gb_strlen(str);
+	}
 
 	if (info && (info->width == 0 || info->flags & gbFmt_Minus)) {
-		if (info->precision > 0)
+		if (info->precision > 0) {
 			len = info->precision < len ? info->precision : len;
+		}
 
 		res += gb_strlcpy(text, str, len);
 
 		if (info->width > res) {
 			isize padding = info->width - len;
 			char pad = (info->flags & gbFmt_Zero) ? '0' : ' ';
-			while (padding --> 0 && remaining --> 0)
+			while (padding --> 0 && remaining --> 0) {
 				*text++ = pad, res++;
+			}
 		}
 	} else {
 		if (info && (info->width > res)) {
 			isize padding = info->width - len;
 			char pad = (info->flags & gbFmt_Zero) ? '0' : ' ';
-			while (padding --> 0 && remaining --> 0)
+			while (padding --> 0 && remaining --> 0) {
 				*text++ = pad, res++;
+			}
 		}
 
 		res += gb_strlcpy(text, str, len);
@@ -8138,10 +8426,11 @@ gb_internal isize gb__print_string(char *text, isize max_len, gbprivFmtInfo *inf
 
 
 	if (info) {
-		if (info->flags & gbFmt_Upper)
+		if (info->flags & gbFmt_Upper) {
 			gb_str_to_upper(text);
-		else if (info->flags & gbFmt_Lower)
+		} else if (info->flags & gbFmt_Lower) {
 			gb_str_to_lower(text);
+		}
 	}
 
 	return res;
@@ -8175,13 +8464,15 @@ gb_internal isize gb__print_f64(char *text, isize max_len, gbprivFmtInfo *info, 
 	if (arg) {
 		u64 value;
 		if (arg < 0) {
-			if (remaining > 1)
+			if (remaining > 1) {
 				*text = '-', remaining--;
+			}
 			text++;
 			arg = -arg;
 		} else if (info->flags & gbFmt_Minus) {
-			if (remaining > 1)
+			if (remaining > 1) {
 				*text = '+', remaining--;
+			}
 			text++;
 		}
 
@@ -8189,39 +8480,45 @@ gb_internal isize gb__print_f64(char *text, isize max_len, gbprivFmtInfo *info, 
 		len = gb__print_u64(text, remaining, NULL, value);
 		text += len;
 
-		if (len >= remaining)
+		if (len >= remaining) {
 			remaining = gb_min(remaining, 1);
-		else
+		} else {
 			remaining -= len;
+		}
 		arg -= value;
 
-		if (info->precision < 0)
+		if (info->precision < 0) {
 			info->precision = 6;
+		}
 
 		if ((info->flags & gbFmt_Alt) || info->precision > 0) {
 			i64 mult = 10;
-			if (remaining > 1)
+			if (remaining > 1) {
 				*text = '.', remaining--;
+			}
 			text++;
 			while (info->precision-- > 0) {
 				value = cast(u64)(arg * mult);
 				len = gb__print_u64(text, remaining, NULL, value);
 				text += len;
-				if (len >= remaining)
+				if (len >= remaining) {
 					remaining = gb_min(remaining, 1);
-				else
+				} else {
 					remaining -= len;
+				}
 				arg -= cast(f64)value / mult;
 				mult *= 10;
 			}
 		}
 	} else {
-		if (remaining > 1)
+		if (remaining > 1) {
 			*text = '0', remaining--;
+		}
 		text++;
 		if (info->flags & gbFmt_Alt) {
-			if (remaining > 1)
+			if (remaining > 1) {
 				*text = '.', remaining--;
+			}
 			text++;
 		}
 	}
@@ -8233,20 +8530,23 @@ gb_internal isize gb__print_f64(char *text, isize max_len, gbprivFmtInfo *info, 
 		len = (text - text_begin);
 
 		for (len = (text - text_begin); len--; ) {
-			if ((text_begin+len+width) < end)
+			if ((text_begin+len+width) < end) {
 				*(text_begin+len+width) = *(text_begin+len);
+			}
 		}
 
 		len = width;
 		text += len;
-		if (len >= remaining)
+		if (len >= remaining) {
 			remaining = gb_min(remaining, 1);
-		else
+		} else {
 			remaining -= len;
+		}
 
 		while (len--) {
-			if (text_begin+len < end)
+			if (text_begin+len < end) {
 				text_begin[len] = fill;
+			}
 		}
 	}
 
@@ -8264,8 +8564,9 @@ gb_no_inline isize gb_snprintf_va(char *text, isize max_len, char const *fmt, va
 		isize len = 0;
 		info.precision = -1;
 
-		while (*fmt && *fmt != '%' && remaining)
+		while (*fmt && *fmt != '%' && remaining) {
 			*text++ = *fmt++;
+		}
 
 		if (*fmt == '%') {
 			do {
@@ -8429,10 +8730,11 @@ gb_no_inline isize gb_snprintf_va(char *text, isize max_len, char const *fmt, va
 
 
 		text += len;
-		if (len >= remaining)
+		if (len >= remaining) {
 			remaining = gb_min(remaining, 1);
-		else
+		} else {
 			remaining -= len;
+		}
 	}
 
 	*text++ = '\0';
@@ -8630,10 +8932,11 @@ gb_internal gb_inline u32 gb__permute_qpr(u32 x) {
 		return x;
 	} else {
 		u32 residue = cast(u32)(cast(u64) x * x) % prime;
-		if (x <= prime / 2)
+		if (x <= prime / 2) {
 			return residue;
-		else
+		} else {
 			return prime - residue;
+		}
 	}
 }
 
@@ -8860,10 +9163,11 @@ GB_XINPUT_SET_STATE(gbXInputSetState_Stub) {
 gb_internal gb_inline f32 gb__process_xinput_stick_value(i16 value, i16 dead_zone_threshold) {
 	f32 result = 0;
 
-	if (value < -dead_zone_threshold)
+	if (value < -dead_zone_threshold) {
 		result = cast(f32) (value + dead_zone_threshold) / (32768.0f - dead_zone_threshold);
-	else if (value > dead_zone_threshold)
+	} else if (value > dead_zone_threshold) {
 		result = cast(f32) (value - dead_zone_threshold) / (32767.0f - dead_zone_threshold);
+	}
 
 	return result;
 }
@@ -8873,8 +9177,9 @@ gb_internal void gb__platform_resize_dib_section(gbPlatform *p, i32 width, i32 h
 	    !(p->window_width == width && p->window_height == height)) {
 		BITMAPINFO bmi = {0};
 
-		if (width == 0 || height == 0)
+		if (width == 0 || height == 0) {
 			return;
+		}
 
 		p->window_width  = width;
 		p->window_height = height;
@@ -8893,8 +9198,9 @@ gb_internal void gb__platform_resize_dib_section(gbPlatform *p, i32 width, i32 h
 		p->sw_framebuffer.win32_bmi = bmi;
 
 
-		if (p->sw_framebuffer.memory)
+		if (p->sw_framebuffer.memory) {
 			gb_vm_free(gb_virtual_memory(p->sw_framebuffer.memory, p->sw_framebuffer.memory_size));
+		}
 
 		{
 			isize memory_size = p->sw_framebuffer.pitch * height;
@@ -9018,8 +9324,9 @@ LRESULT CALLBACK gb__win32_window_callback(HWND hWnd, UINT msg, WPARAM wParam, L
 		}
 	}
 
-	if (!platform)
+	if (!platform) {
 		return DefWindowProcW(hWnd, msg, wParam, lParam);
+	}
 
 	switch (msg) {
 	case WM_CLOSE:
@@ -9033,8 +9340,9 @@ LRESULT CALLBACK gb__win32_window_callback(HWND hWnd, UINT msg, WPARAM wParam, L
 
 	case WM_UNICHAR: {
 		if (window_has_focus) {
-			if (wParam == '\r')
+			if (wParam == '\r') {
 				wParam = '\n';
+			}
 			// TODO(bill): Does this need to be thread-safe?
 			platform->char_buffer[platform->char_buffer_count++] = cast(Rune)wParam;
 		}
@@ -9079,10 +9387,11 @@ LRESULT CALLBACK gb__win32_window_callback(HWND hWnd, UINT msg, WPARAM wParam, L
 			if (is_e1) {
 				// NOTE(bill): Escaped sequences, turn vk into the correct scan code
 				// except for VK_PAUSE (it's a bug)
-				if (vk == VK_PAUSE)
+				if (vk == VK_PAUSE) {
 					scan_code = 0x45;
-				else
+				} else {
 					scan_code = MapVirtualKeyW(vk, MAPVK_VK_TO_VSC);
+				}
 			}
 
 			switch (vk) {
@@ -9118,8 +9427,9 @@ LRESULT CALLBACK gb__win32_window_callback(HWND hWnd, UINT msg, WPARAM wParam, L
 			long dx = +raw_mouse->lLastX;
 			long dy = -raw_mouse->lLastY;
 
-			if (flags & RI_MOUSE_WHEEL)
+			if (flags & RI_MOUSE_WHEEL) {
 				platform->mouse_wheel_delta = cast(i16)raw_mouse->usButtonData;
+			}
 
 			platform->mouse_raw_dx = dx;
 			platform->mouse_raw_dy = dy;
@@ -9403,8 +9713,9 @@ void gb_platform_update(gbPlatform *p) {
 		h = window_rect.bottom - window_rect.top;
 
 		if ((p->window_width != w) || (p->window_height != h)) {
-			if (p->renderer_type == gbRenderer_Software)
+			if (p->renderer_type == gbRenderer_Software) {
 				gb__platform_resize_dib_section(p, w, h);
+			}
 		}
 
 
@@ -9429,8 +9740,9 @@ void gb_platform_update(gbPlatform *p) {
 
 		// NOTE(bill): This needs to be GetAsyncKeyState as RAWMOUSE doesn't aways work for some odd reason
 		// TODO(bill): Try and get RAWMOUSE to work for key presses
-		for (i = 0; i < gbMouseButton_Count; i++)
+		for (i = 0; i < gbMouseButton_Count; i++) {
 			gb_key_state_update(p->mouse_buttons+i, GetAsyncKeyState(win_button_id[i]) < 0);
+		}
 
 		GetCursorPos(&mouse_pos);
 		ScreenToClient(cast(HWND)p->window_handle, &mouse_pos);
@@ -9463,8 +9775,9 @@ void gb_platform_update(gbPlatform *p) {
 				update = true;
 			}
 
-			if (update)
+			if (update) {
 				gb_platform_set_mouse_position(p, x, y);
+			}
 		}
 
 
@@ -9489,8 +9802,9 @@ void gb_platform_update(gbPlatform *p) {
 
 	{ // NOTE(bill): Set Controller states
 		isize max_controller_count = XUSER_MAX_COUNT;
-		if (max_controller_count > gb_count_of(p->game_controllers))
+		if (max_controller_count > gb_count_of(p->game_controllers)) {
 			max_controller_count = gb_count_of(p->game_controllers);
+		}
 
 		for (i = 0; i < max_controller_count; i++) {
 			gbGameController *controller = &p->game_controllers[i];
@@ -9586,10 +9900,11 @@ void gb_platform_display(gbPlatform *p) {
 
 
 void gb_platform_destroy(gbPlatform *p) {
-	if (p->renderer_type == gbRenderer_Opengl)
+	if (p->renderer_type == gbRenderer_Opengl) {
 		wglDeleteContext(cast(HGLRC)p->opengl.context);
-	else if (p->renderer_type == gbRenderer_Software)
+	} else if (p->renderer_type == gbRenderer_Software) {
 		gb_vm_free(gb_virtual_memory(p->sw_framebuffer.memory, p->sw_framebuffer.memory_size));
+	}
 
 	DestroyWindow(cast(HWND)p->window_handle);
 }
@@ -9643,8 +9958,9 @@ void gb_platform_set_window_title(gbPlatform *p, char const *title, ...) {
 	gb_snprintf_va(str, gb_size_of(str), title, va);
 	va_end(va);
 
-	if (str[0] != '\0')
+	if (str[0] != '\0') {
 		SetWindowTextW(cast(HWND)p->window_handle, cast(wchar_t const *)gb_utf8_to_ucs2(buffer, gb_size_of(buffer), str));
+	}
 }
 
 void gb_platform_toggle_fullscreen(gbPlatform *p, b32 fullscreen_desktop) {
@@ -9669,10 +9985,11 @@ void gb_platform_toggle_fullscreen(gbPlatform *p, b32 fullscreen_desktop) {
 			             monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
 			             SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
 
-			if (fullscreen_desktop)
+			if (fullscreen_desktop) {
 				p->window_flags |= gbWindow_FullscreenDesktop;
-			else
+			} else {
 				p->window_flags |= gbWindow_Fullscreen;
+			}
 		}
 	} else {
 		style &= ~WS_POPUP;
@@ -9747,8 +10064,9 @@ b32 gb_platform_has_clipboard_text(gbPlatform *p) {
 		HANDLE mem = GetClipboardData(1/*CF_TEXT*/);
 		if (mem) {
 			char *str = cast(char *)GlobalLock(mem);
-			if (str && str[0] != '\0')
+			if (str && str[0] != '\0') {
 				result = true;
+			}
 			GlobalUnlock(mem);
 		} else {
 			return false;
@@ -9783,8 +10101,9 @@ void gb_platform_set_clipboard_text(gbPlatform *p, char const *str) {
 		}
 
 		EmptyClipboard();
-		if (!SetClipboardData(1/*CF_TEXT*/, mem))
+		if (!SetClipboardData(1/*CF_TEXT*/, mem)) {
 			return;
+		}
 		CloseClipboard();
 	}
 }
@@ -9877,8 +10196,9 @@ gb_internal void gb__osx_window_did_become_key(id self, SEL _sel, id notificatio
 }
 
 b32 gb__platform_init(gbPlatform *p, char const *window_title, gbVideoMode mode, gbRendererType type, u32 window_flags) {
-	if (p->is_initialized)
+	if (p->is_initialized) {
 		return true;
+	}
 	// Init Platform
 	{ // Initial OSX State
 		Class appDelegateClass;
@@ -10361,8 +10681,9 @@ void gb_platform_update(gbPlatform *p) {
 				update = true;
 			}
 
-			if (update)
+			if (update) {
 				gb_platform_set_mouse_position(p, x, y);
+			}
 		}
 	}
 
@@ -10567,8 +10888,9 @@ GB_COMPARE_PROC(gb_video_mode_cmp) {
 	gbVideoMode const *y = cast(gbVideoMode const *)b;
 
 	if (x->bits_per_pixel == y->bits_per_pixel) {
-		if (x->width == y->width)
+		if (x->width == y->width) {
 			return x->height < y->height ? -1 : x->height > y->height;
+		}
 		return x->width < y->width ? -1 : x->width > y->width;
 	}
 	return x->bits_per_pixel < y->bits_per_pixel ? -1 : +1;

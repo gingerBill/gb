@@ -1338,7 +1338,9 @@ gb_inline b32 gbgl_make_texture2d_coloured(gbglTexture *t, gbglColour colour) {
 
 
 gb_inline void gbgl_bind_texture2d(gbglTexture const *t, u32 position, u32 sampler) {
-	GB_ASSERT(t->type == gbglgTexture_2D);
+	if (t != NULL) {
+		GB_ASSERT(t->type == gbglgTexture_2D);
+	}
 
 	if (position > 31) {
 		position = 31;
