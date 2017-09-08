@@ -1526,7 +1526,6 @@ void gb_mat4_inverse(gbMat4 *out, gbMat4 *in) {
 	gbFloat4 *m = gb_float44_m(in);
 
 	float ood;
-	float tmp;
 
 	float sf00 = m[2][2] * m[3][3] - m[3][2] * m[2][3];
 	float sf01 = m[2][1] * m[3][3] - m[3][1] * m[2][3];
