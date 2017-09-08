@@ -1731,9 +1731,9 @@ void gb_mat4_look_at(gbMat4 *out, gbVec3 eye, gbVec3 centre, gbVec3 up) {
 	m[1][2] = -f.y;
 	m[2][2] = -f.z;
 
-	m[3][0] = gb_vec3_dot(s, eye);
-	m[3][1] = gb_vec3_dot(u, eye);
-	m[3][2] = gb_vec3_dot(f, eye);
+	m[3][0] = -gb_vec3_dot(s, eye);
+	m[3][1] = -gb_vec3_dot(u, eye);
+	m[3][2] = +gb_vec3_dot(f, eye);
 }
 
 
