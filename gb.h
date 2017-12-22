@@ -1,4 +1,4 @@
-/* gb.h - v0.31  - Ginger Bill's C Helper Library - public domain
+/* gb.h - v0.32  - Ginger Bill's C Helper Library - public domain
                  - no warranty implied; use at your own risk
 
 	This is a single header file with a bunch of useful stuff
@@ -58,6 +58,7 @@ TODOS
 	- More date & time functions
 
 VERSION HISTORY
+	0.32  - Minor fixes
 	0.31  - Add gb_file_remove
 	0.30  - Changes to gbThread (and gbMutex on Windows)
 	0.29  - Add extras for gbString
@@ -1515,6 +1516,7 @@ typedef struct gbStringHeader {
 
 #define GB_STRING_HEADER(str) (cast(gbStringHeader *)(str) - 1)
 
+GB_DEF gbString gb_string_make_reserve   (gbAllocator a, isize capacity);
 GB_DEF gbString gb_string_make           (gbAllocator a, char const *str);
 GB_DEF gbString gb_string_make_length    (gbAllocator a, void const *str, isize num_bytes);
 GB_DEF void     gb_string_free           (gbString str);
@@ -6504,6 +6506,27 @@ gb_inline void gb__set_string_length  (gbString str, isize len) { GB_STRING_HEAD
 gb_inline void gb__set_string_capacity(gbString str, isize cap) { GB_STRING_HEADER(str)->capacity = cap; }
 
 
+gbString gb_string_make_reserve(gbAllocator a, isize capacity) {
+	isize header_size = gb_size_of(gbStringHeader);
+	void *ptr = gb_alloc(a, header_size + capacity + 1);
+
+	gbString str;
+	gbStringHeader *header;
+
+	if (ptr == NULL) return NULL;
+	gb_zero_size(ptr, header_size + capacity + 1);
+
+	str = cast(char *)ptr + header_size;
+	header = GB_STRING_HEADER(str);
+	header->allocator = a;
+	header->length    = 0;
+	header->capacity  = capacity;
+	str[capacity] = '\0';
+
+	return str;
+}
+
+
 gb_inline gbString gb_string_make(gbAllocator a, char const *str) {
 	isize len = str ? gb_strlen(str) : 0;
 	return gb_string_make_length(a, str, len);
@@ -6516,8 +6539,8 @@ gbString gb_string_make_length(gbAllocator a, void const *init_str, isize num_by
 	gbString str;
 	gbStringHeader *header;
 
-	if (!init_str) gb_zero_size(ptr, header_size + num_bytes + 1);
 	if (ptr == NULL) return NULL;
+	if (!init_str) gb_zero_size(ptr, header_size + num_bytes + 1);
 
 	str = cast(char *)ptr + header_size;
 	header = GB_STRING_HEADER(str);
@@ -6592,7 +6615,7 @@ gbString gb_string_append_fmt(gbString str, char const *fmt, ...) {
 	char buf[4096] = {0};
 	va_list va;
 	va_start(va, fmt);
-	res = gb_snprintf_va(str, gb_count_of(buf)-1, fmt, va);
+	res = gb_snprintf_va(buf, gb_count_of(buf)-1, fmt, va)-1;
 	va_end(va);
 	return gb_string_append_length(str, buf, res);
 }
@@ -7954,7 +7977,7 @@ gbFileTime gb_file_last_write_time(char const *filepath) {
 	time_t result = 0;
 	struct stat file_stat;
 
-	if (stat(filepath, &file_stat)) {
+	if (stat(filepath, &file_stat) == 0) {
 		result = file_stat.st_mtime;
 	}
 
