@@ -3798,12 +3798,15 @@ gb_inline void *gb_memcopy(void *dest, void const *source, isize n) {
 			*d++ = *s++; *d++ = *s++; *d++ = *s++; *d++ = *s++;
 			*d++ = *s++; *d++ = *s++; *d++ = *s++; *d++ = *s++;
 		}
-		if (n & 4)
+		if (n & 4) {
 			*d++ = *s++; *d++ = *s++; *d++ = *s++; *d++ = *s++;
-		if (n & 2)
+		}
+		if (n & 2) {
 			*d++ = *s++; *d++ = *s++;
-		if (n & 1)
+		}
+		if (n & 1) {
 			*d = *s;
+		}
 	}
 
 #endif
