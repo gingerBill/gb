@@ -86,6 +86,7 @@ CREDITS
 #ifndef GB_REGEX_INCLUDE_GB_REGEX_H
 #define GB_REGEX_INCLUDE_GB_REGEX_H
 
+#include <stdlib.h>
 #include <stddef.h>
 #include <stdarg.h>
 #include <string.h>
