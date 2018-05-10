@@ -3673,7 +3673,8 @@ gb_inline void *gb_memcopy(void *dest, void const *source, isize n) {
 		return NULL;
 	}
 
-	__asm__ __volatile__("rep movsb" : "+D"(dest), "+S"(source), "+c"(n) : : "memory");
+    void *dest_copy = dest;
+	__asm__ __volatile__("rep movsb" : "+D"(dest_copy), "+S"(source), "+c"(n) : : "memory");
 #else
 	u8 *d = cast(u8 *)dest;
 	u8 const *s = cast(u8 const *)source;
