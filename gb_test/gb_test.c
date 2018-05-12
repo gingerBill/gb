@@ -97,19 +97,19 @@ isize ThreadFun(struct gbThread *thread)
 		printf("%s\n",(char*)thread->user_data);
 		Sleep(300);
 	} while (!thread->user_index);
-	printf("线程退出了\n");
+	printf("Thread exited\n");
 	return 0;
 }
 
 void gbThreadDemo()
 {
-	// 创建线程结构体
+	// Create thread structure
 	gbThread  thread1;
 	gb_thread_init(&thread1);
 	gb_thread_set_name(&thread1, "Thread1");
-	// 启动线程
+	// Start thread
 	gb_thread_start(&thread1, ThreadFun, "Hello,北京");
-	// 等待线程运行完毕
+	// Wait for the thread to finish
 	//gb_thread_join(&thread1);
 
 	bool bRet = gb_thread_is_running(&thread1);
@@ -117,9 +117,9 @@ void gbThreadDemo()
 		printf("Running\n");
 
 	Sleep(1000);
-	// 找个变量作为线程退出的标志
+	// as a sign of thread exit
 	thread1.user_index = 1;
-	// 销毁其它线程结构体
+	// Destroy thread structures
 	gb_thread_destroy(&thread1);
 }
 
@@ -128,7 +128,7 @@ void MemOperaTest()
 	char * buf = (char*)gb_malloc(128);
 	gb_zero_size(buf, 128);
 	gb_memcopy(buf, "Hello,北京！", strlen("Hello,北京！"));
-	// 0 表示相等
+	// 0 means equal
 	int nRet = gb_memcompare(buf, "Hello,北京！", strlen("Hello,北京！"));
 	char* memCh = gb_memchr(buf, "北", strlen("Hello,北京！"));
 	char* memRCh = gb_memrchr(buf, 0x6c6c, strlen("Hello,北京！"));
@@ -143,7 +143,7 @@ void gbAtomicDemo()
 	int nValue = gb_atomic32_load(&atominc32);
 	gb_atomic32_fetch_and(&atominc32, 0x0f0f);
 	gb_atomic32_try_acquire_lock(&atominc32);
-	// spinlock是专为防止多处理器并发而引入的一种锁。
+	// Spinlock is a type of lock introduced to prevent multiprocessor concurrency.
 	gb_atomic32_spin_lock(&atominc32, 3);
 
 	gbAtomic64 atominc64;
@@ -153,9 +153,9 @@ void gbAtomicDemo()
 
 isize ThreadWaiteSem(struct gbThread *thread)
 {
-	printf("步入进程\n");
+	printf("Step into thread function\n");
 	gb_semaphore_wait(thread->user_data);
-	printf("退出进程\n");
+	printf("Exit the thread\n");
 	return 0;
 }
 
@@ -176,7 +176,7 @@ void gbsemaphoreDemo()
 int g_nNum = 100;
 isize ThreadAddNum(gbThread *thread)
 {
-	// 总共加了 5000
+	// A total of 5000 added
 	for(int i=0;i<10000;i++)
 	{	
 		gb_mutex_lock(thread->user_data);
@@ -187,7 +187,7 @@ isize ThreadAddNum(gbThread *thread)
 }
 isize ThreadSebNum(gbThread *thread)
 {
-	// 总共减了 1000
+	// Totally reduced by 1000
 	for (int i = 0; i<10000; i++)
 	{
 		gb_mutex_lock(thread->user_data);
@@ -212,7 +212,7 @@ void gbMutexTest()
 	gb_thread_start(&thread1, ThreadAddNum, &m);
 	gb_thread_start(&thread2, ThreadSebNum, &m);
 
-	// 等待线程结束
+	// Wait for the thread to exit
 	gb_thread_join(&thread1);
 	gb_thread_join(&thread2);
 	if (g_nNum == 40100)
@@ -236,8 +236,7 @@ void gbPoolDemo()
 	gb_pool_init(&gbpool, gb_heap_allocator(), nBlockCount, nBlockSize);
 	gbAllocator gbPoolAllocator = gb_pool_allocator(&gbpool);
 
-	// 内存块的分配大小，每次只能非配内存块的大小
-	// 需要的内存大于内存块的多分配几次
+	// Memory block allocation size, can only match the N size of the memory block
 	char* pData1 = gb_alloc(gbPoolAllocator, nBlockSize);
 	memset(pData1, 0x11, nBlockSize);
 
@@ -253,7 +252,7 @@ void gbFreeListDemo()
 	gbFreeList gbfreeList;
 	int nMemSize = 0xff00;
 	gb_free_list_init_from_allocator(&gbfreeList, gb_heap_allocator(), nMemSize);
-	// 获取FreeList专用的内存分配
+	// Get FreeList-specific memory allocation
 	gbAllocator gbListAllocator = gb_free_list_allocator(&gbfreeList);
 
 	gbString str1 = gb_string_make(gbListAllocator, "Hello,北京！1");
@@ -272,15 +271,13 @@ void gbVirtualMemoryDemo()
 	gb_virtual_memory_page_size(&nAlignSize);
 	int VmSize = nAlignSize * 2;
 
-	// 申请一块虚拟内存，第一个参数为NULL
+	// Apply a piece of virtual memory, the first parameter is NULL
 	gbVirtualMemory gbVirtualMem = gb_vm_alloc(NULL, VmSize);
 	gb_memset(gbVirtualMem.data, 0x11, 20);
-	// 设置为读写
+	// Set as readable and writable
 	gb_vm_purge(gbVirtualMem);
 
-	// 释放掉虚拟内存，重新生成一个虚拟内存
-	// 参数二好像要对其，否则没啥用
-	// 参数三新的虚拟内存大小
+  // Release virtual memory and regenerate a virtual memory
 	gbVirtualMemory vbVmTrim = gb_vm_trim(gbVirtualMem, 10, 100);
 	gb_memset(vbVmTrim.data, 0x22, vbVmTrim.size);
 
@@ -289,18 +286,18 @@ void gbVirtualMemoryDemo()
 
 void dgArenaMemAlloc()
 {
-	// 先申请一块内存作为父亲
+	// Apply for a memory as a father first
 	gbAllocator ArenaAlloc = gb_heap_allocator();
 	gbArena parent_arena = { 0 };
 	gb_arena_init_from_allocator(&parent_arena, ArenaAlloc, 100);
 
-	// 从已经分配的内存中使用指定的内存，大小必须4字节对齐
+	// Use specified memory from allocated memory, size must be 4-byte aligned
 	gbArena usingMem1 = { 0 };
 	gb_arena_init_sub(&usingMem1, &parent_arena, 8 * 5);
-	// 使用内存
+	// Use memory
 	if (usingMem1.physical_start)
 	{
-		// ？？？？　用来做引用计数的
+		// ？？？？
 		gbTempArenaMemory  gbTmpArenaMemory1 = gb_temp_arena_memory_begin(&usingMem1);
 		memset(usingMem1.physical_start, 0x11, usingMem1.total_size);
 		gb_temp_arena_memory_end(gbTmpArenaMemory1);
@@ -318,11 +315,11 @@ void dgArenaMemAlloc()
 	if (usingMem3.physical_start)
 		memset(usingMem3.physical_start, 0x33, usingMem3.total_size);
 
-	// 设置自定义内存的对齐大小，必须是2的幂次方
-	int alignment1 = pow(2, 4); // 2的幂次方
+	// Set the alignment size of custom memory, must be a power of 2
+	int alignment1 = pow(2, 4); 
 	int alignment_offset = gb_arena_alignment_of(&parent_arena, alignment1);
-	// 获取剩余内存大小，需要内存对齐的大小
-	int alignment2 = pow(2, 3); //2的幂次方
+	// Get the remaining memory size, the size of the memory alignment
+	int alignment2 = pow(2, 3); 
 	int nSizeRemain = gb_arena_size_remaining(&parent_arena, alignment2);
 
 	gb_arena_free(&parent_arena);
@@ -330,7 +327,7 @@ void dgArenaMemAlloc()
 
 void gbScratchMemoryTest()
 {
-	// 用来判断已经非配的内存是否已经使用（指针地址比较）
+	// Used to determine whether the allocated memory is already used
 	gbScratchMemory gbScarathcMem;
 	gbAllocator Allocator = gb_scratch_allocator(&gbScarathcMem);
 	char* pData = gb_malloc(1000);
@@ -339,7 +336,6 @@ void gbScratchMemoryTest()
 	gb_mfree(pData);
 }
 
-// 返回0表示相等
 // UnDone
 int MyCmpFun(void const *a, void const *b)
 {
@@ -509,6 +505,7 @@ int main(int argc, char **argv)
 	 gbPrintfDemo();
 
 
+    // ???  How to use it ?
 	//gbSync gbsync;
 	//gb_sync_init(&gbsync);
 
