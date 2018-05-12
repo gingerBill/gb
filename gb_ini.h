@@ -255,6 +255,7 @@ gbini_inline char const *gb_ini_error_string(gbIniError const err) { return GB_E
 
 namespace gb
 {
+
 typedef gbIniError   IniError;
 typedef gbIniHandler IniHandler;
 
@@ -269,6 +270,9 @@ enum {
 
 	/* No need for enum count */
 };
+
+#define  Ini_Error IniError
+#define  Ini_Handler IniHandler
 
 inline Ini_Error ini_parse(char const *filename, Ini_Handler *handler_func, void *data) { return gb_ini_parse(filename, handler_func, data); }
 inline Ini_Error ini_parse(FILE *file, Ini_Handler *handler_func, void *data) { return gb_ini_parse_file(file, handler_func, data); }
