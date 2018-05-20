@@ -8483,9 +8483,9 @@ gb_no_inline isize gb_snprintf_va(char *text, isize max_len, char const *fmt, va
 			int width = va_arg(va, int);
 			if (width < 0) {
 				info.flags |= gbFmt_Minus;
-				info.width = -info.width;
+				info.width = -width;
 			} else {
-				info.width = -info.width;
+				info.width = width;
 			}
 			fmt++;
 		} else {
