@@ -476,7 +476,6 @@ GB_MATH_DEF void gb_vec4_lerp(gbVec4 *d, gbVec4 a, gbVec4 b, float t);
 
 GB_MATH_DEF void gb_quat_lerp (gbQuat *d, gbQuat a, gbQuat b, float t);
 GB_MATH_DEF void gb_quat_nlerp(gbQuat *d, gbQuat a, gbQuat b, float t);
-GB_MATH_DEF void gb_quat_slerp(gbQuat *d, gbQuat a, gbQuat b, float t);
 GB_MATH_DEF void gb_quat_nquad(gbQuat *d, gbQuat p, gbQuat a, gbQuat b, gbQuat q, float t);
 GB_MATH_DEF void gb_quat_squad(gbQuat *d, gbQuat p, gbQuat a, gbQuat b, gbQuat q, float t);
 GB_MATH_DEF void gb_quat_slerp_approx(gbQuat *d, gbQuat a, gbQuat b, float t);
@@ -1978,10 +1977,10 @@ void gb_quat_slerp(gbQuat *d, gbQuat a, gbQuat b, float t) {
 
 	angle = gb_arccos(cos_theta);
 
-	s1 = gb_sin(1.0f - t*angle);
+	s1 = gb_sin((1.0f - t)*angle);
 	s0 = gb_sin(t*angle);
 	is = 1.0f/gb_sin(angle);
-	gb_quat_mulf(&x, z, s1);
+	gb_quat_mulf(&x, a, s1);
 	gb_quat_mulf(&y, z, s0);
 	gb_quat_add(d, x, y);
 	gb_quat_muleqf(d, is);
