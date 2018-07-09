@@ -476,6 +476,7 @@ GB_MATH_DEF void gb_vec4_lerp(gbVec4 *d, gbVec4 a, gbVec4 b, float t);
 
 GB_MATH_DEF void gb_quat_lerp (gbQuat *d, gbQuat a, gbQuat b, float t);
 GB_MATH_DEF void gb_quat_nlerp(gbQuat *d, gbQuat a, gbQuat b, float t);
+GB_MATH_DEF void gb_quat_slerp(gbQuat *d, gbQuat a, gbQuat b, float t);
 GB_MATH_DEF void gb_quat_nquad(gbQuat *d, gbQuat p, gbQuat a, gbQuat b, gbQuat q, float t);
 GB_MATH_DEF void gb_quat_squad(gbQuat *d, gbQuat p, gbQuat a, gbQuat b, gbQuat q, float t);
 GB_MATH_DEF void gb_quat_slerp_approx(gbQuat *d, gbQuat a, gbQuat b, float t);
