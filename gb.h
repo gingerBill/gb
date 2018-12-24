@@ -763,7 +763,7 @@ extern "C++" {
 #ifndef GB_ASSERT_MSG
 #define GB_ASSERT_MSG(cond, msg, ...) do { \
 	if (!(cond)) { \
-		gb_assert_handler(#cond, __FILE__, cast(i64)__LINE__, msg, ##__VA_ARGS__); \
+		gb_assert_handler("Assertion Failure", #cond, __FILE__, cast(i64)__LINE__, msg, ##__VA_ARGS__); \
 		GB_DEBUG_TRAP(); \
 	} \
 } while (0)
@@ -779,10 +779,13 @@ extern "C++" {
 
 // NOTE(bill): Things that shouldn't happen with a message!
 #ifndef GB_PANIC
-#define GB_PANIC(msg, ...) GB_ASSERT_MSG(0, msg, ##__VA_ARGS__)
+#define GB_PANIC(msg, ...) do { \
+	gb_assert_handler("Panic", NULL, __FILE__, cast(i64)__LINE__, msg, ##__VA_ARGS__); \
+	GB_DEBUG_TRAP(); \
+} while (0)
 #endif
 
-GB_DEF void gb_assert_handler(char const *condition, char const *file, i32 line, char const *msg, ...);
+GB_DEF void gb_assert_handler(char const *prefix, char const *condition, char const *file, i32 line, char const *msg, ...);
 
 
 
@@ -937,6 +940,7 @@ typedef struct gbMutex {
 	CRITICAL_SECTION win32_critical_section;
 #else
 	pthread_mutex_t pthread_mutex;
+	pthread_mutexattr_t pthread_mutexattr;
 #endif
 } gbMutex;
 
@@ -978,7 +982,7 @@ typedef struct gbThread {
 
 	gbSemaphore   semaphore;
 	isize         stack_size;
-	b32           is_running;
+	b32 volatile  is_running;
 } gbThread;
 
 GB_DEF void gb_thread_init            (gbThread *t);
@@ -3612,8 +3616,8 @@ extern "C" {
 #pragma warning(disable:4127) // Conditional expression is constant
 #endif
 
-void gb_assert_handler(char const *condition, char const *file, i32 line, char const *msg, ...) {
-	gb_printf_err("%s(%d): Assert Failure: ", file, line);
+void gb_assert_handler(char const *prefix, char const *condition, char const *file, i32 line, char const *msg, ...) {
+	gb_printf_err("%s(%d): %s: ", file, line, prefix);
 	if (condition)
 		gb_printf_err( "`%s` ", condition);
 	if (msg) {
@@ -4609,7 +4613,9 @@ gb_inline void gb_mutex_init(gbMutex *m) {
 #if defined(GB_SYSTEM_WINDOWS)
 	InitializeCriticalSection(&m->win32_critical_section);
 #else
-	pthread_mutex_init(&m->pthread_mutex, NULL);
+	pthread_mutexattr_init(&m->pthread_mutexattr);
+	pthread_mutexattr_settype(&m->pthread_mutexattr, PTHREAD_MUTEX_RECURSIVE);
+	pthread_mutex_init(&m->pthread_mutex, &m->pthread_mutexattr);
 #endif
 }
 
@@ -4696,6 +4702,7 @@ gb_inline void gb_thread_start_with_stack(gbThread *t, gbThreadProc *proc, void 
 	t->proc = proc;
 	t->user_data = user_data;
 	t->stack_size = stack_size;
+	t->is_running = true;
 
 #if defined(GB_SYSTEM_WINDOWS)
 	t->win32_handle = CreateThread(NULL, stack_size, gb__thread_proc, t, 0, NULL);
@@ -4713,7 +4720,6 @@ gb_inline void gb_thread_start_with_stack(gbThread *t, gbThreadProc *proc, void 
 	}
 #endif
 
-	t->is_running = true;
 	gb_semaphore_wait(&t->semaphore);
 }
 
@@ -5019,7 +5025,8 @@ isize gb_affinity_thread_count_for_core(gbAffinity *a, isize core) {
 
 #elif defined(GB_SYSTEM_OSX)
 void gb_affinity_init(gbAffinity *a) {
-	usize count, count_size = gb_size_of(count);
+	usize count = 0;
+	usize count_size = sizeof(count);
 
 	a->is_accurate      = false;
 	a->thread_count     = 1;
