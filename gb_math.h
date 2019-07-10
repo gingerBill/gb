@@ -1399,7 +1399,7 @@ gbMat3 *gb_mat3_f(float m[3][3]) { return (gbMat3 *)m; }
 
 gbFloat3 *gb_float33_m(gbMat3 *m)   { return (gbFloat3 *)m; }
 gbFloat3 *gb_float33_v(gbVec3 m[3]) { return (gbFloat3 *)m; }
-gbFloat3 *gb_float33_16(float m[9]) { return (gbFloat3 *)m; }
+gbFloat3 *gb_float33_9(float m[9]) { return (gbFloat3 *)m; }
 
 void gb_float33_transpose(float (*vec)[3]) {
 	int i, j;
