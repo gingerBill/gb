@@ -1356,8 +1356,8 @@ void gb_float22_mul(float (*out)[2], float (*mat1)[2], float (*mat2)[2]) {
 }
 
 void gb_float22_mul_vec2(gbVec2 *out, float m[2][2], gbVec2 v) {
-	out->x = m[0][0]*v.x + m[0][1]*v.y;
-	out->y = m[1][0]*v.x + m[1][1]*v.y;
+	out->x = m[0][0]*v.x + m[1][0]*v.y;
+	out->y = m[0][1]*v.x + m[1][1]*v.y;
 }
 
 float gb_mat2_determinate(gbMat2 *m) {
@@ -1427,9 +1427,9 @@ void gb_float33_mul(float (*out)[3], float (*mat1)[3], float (*mat2)[3]) {
 }
 
 void gb_float33_mul_vec3(gbVec3 *out, float m[3][3], gbVec3 v) {
-	out->x = m[0][0]*v.x + m[0][1]*v.y + m[0][2]*v.z;
-	out->y = m[1][0]*v.x + m[1][1]*v.y + m[1][2]*v.z;
-	out->z = m[2][0]*v.x + m[2][1]*v.y + m[2][2]*v.z;
+	out->x = m[0][0]*v.x + m[1][0]*v.y + m[2][0]*v.z;
+	out->y = m[0][1]*v.x + m[1][1]*v.y + m[2][1]*v.z;
+	out->z = m[0][2]*v.x + m[1][2]*v.y + m[2][2]*v.z;
 }
 
 
