@@ -39,7 +39,7 @@
 
 	Steps for supporting dynamic reload:
 		You _MUST_ defined you own malloc and free that use whatever
-		permanent memory systen you are using:
+		permanent memory system you are using:
 
 			#define gbgl_malloc
 			#define gbgl_free
